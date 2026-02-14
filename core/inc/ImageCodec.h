@@ -1,7 +1,7 @@
 #ifndef IMAGE_PROCESSOR_H
 #define IMAGE_PROCESSOR_H
 
-#include <opencv2/opencv.hpp>
+#include "Image.h"
 
 /*
 * ImageCodec class encapsulates the functionality for compressing and decompressing images using DCT and quantization.
@@ -12,15 +12,13 @@ public:
     /*
     * Constructs an ImageCodec with the specified quality, quantization, and DCT options.
     * @param quality Quality factor for quantization (1-100). Higher means better quality.
-    * @param enableQuantization Whether to apply quantization to DCT coefficients.
-    * @param useOpenCvDct Whether to use OpenCV's built-in DCT functions or custom implementations.
+    * @param enableQuantization Whether to apply quantization to DCT coefficients.    
     */
     explicit ImageCodec(double quality, 
-                        bool enableQuantization = true, 
-                        bool useOpenCvDct = true);
+                        bool enableQuantization = true);
 
     
-    cv::Mat process(const cv::Mat& bgrImage);
+    Image process(const Image& bgrImage);
 
     double getPSNRY()  const { return m_psnrY; }
     double getPSNRCb() const { return m_psnrCb; }
@@ -29,19 +27,17 @@ public:
 private:
     double m_quality;
     bool   m_enableQuantization;
-    bool   m_useOpenCV_DCT;
 
-
-    cv::Mat m_lumaQuantTable;
-    cv::Mat m_chromaQuantTable;
+    double m_lumaQuantTable[8][8];
+    double m_chromaQuantTable[8][8];
 
     double m_psnrY = 0.0;
     double m_psnrCb = 0.0;
     double m_psnrCr = 0.0;
 
     void generateQuantizationTables();
-    cv::Mat processChannel(const cv::Mat& channel,
-                           const cv::Mat& quantTable);
+    Image processChannel(const Image& channel,
+                         const double quantTable[8][8]);
 };
 
 

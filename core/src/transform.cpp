@@ -18,18 +18,18 @@ static double C(int u) {
 * 2D DCT is computed using the formula:
 * F(u, v) = 1/4 * C(u) * C(v) * sum_{x=0}^{7} sum_{y=0}^{7} f(x, y) * cos((2x+1)uπ/16) * cos((2y+1)vπ/16)
 */
-void dct8x8(const cv::Mat& src, cv::Mat& dst) {
+void dct8x8(const double src[8][8], double dst[8][8]) {
     for (int u = 0; u < 8; ++u) {
         for (int v = 0; v < 8; ++v) {
             double sum = 0.0;
             for (int x = 0; x < 8; ++x) {
                 for (int y = 0; y < 8; ++y) {
-                    sum += src.at<double>(x, y) *
+                    sum += src[x][y] *
                            std::cos(((2 * x + 1) * u * PI) / 16.0) *
                            std::cos(((2 * y + 1) * v * PI) / 16.0);
                 }
             }
-            dst.at<double>(u, v) = 0.25 * C(u) * C(v) * sum;
+            dst[u][v] = 0.25 * C(u) * C(v) * sum;
         }
     }
 }
@@ -38,18 +38,18 @@ void dct8x8(const cv::Mat& src, cv::Mat& dst) {
 * Performs the Inverse Discrete Cosine Transform (IDCT) on an 8x8 block.
 * The input block should be of type CV_64F and the output will also be CV_64F.
 */
-void idct8x8(const cv::Mat& src, cv::Mat& dst) {
+void idct8x8(const double src[8][8], double dst[8][8]) {
     for (int x = 0; x < 8; ++x) {
         for (int y = 0; y < 8; ++y) {
             double sum = 0.0;
             for (int u = 0; u < 8; ++u) {
                 for (int v = 0; v < 8; ++v) {
-                    sum += C(u) * C(v) * src.at<double>(u, v) *
+                    sum += C(u) * C(v) * src[u][v] *
                            std::cos(((2 * x + 1) * u * PI) / 16.0) *
                            std::cos(((2 * y + 1) * v * PI) / 16.0);
                 }
             }
-            dst.at<double>(x, y) = 0.25 * sum;
+            dst[x][y] = 0.25 * sum;
         }
     }
 }

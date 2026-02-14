@@ -1,37 +1,38 @@
 #include "ImageCodec.h"
 #include "transform.h"
 #include "utils.h"
-#include <opencv2/opencv.hpp>
+#include "colorspace.h"
 
 #include <cmath>
+#include <vector>
 
 // Standard JPEG base quantization tables
-static const int BASE_LUMA[8][8] = {
-    {16,11,10,16,24,40,51,61},
-    {12,12,14,19,26,58,60,55},
-    {14,13,16,24,40,57,69,56},
-    {14,17,22,29,51,87,80,62},
-    {18,22,37,56,68,109,103,77},
-    {24,35,55,64,81,104,113,92},
-    {49,64,78,87,103,121,120,101},
-    {72,92,95,98,112,100,103,99}
+const int BASE_LUMA[8][8] = {
+    {16, 11, 10, 16, 24, 40, 51, 61},
+    {12, 12, 14, 19, 26, 58, 60, 55},
+    {14, 13, 16, 24, 40, 57, 69, 56},
+    {14, 17, 22, 29, 51, 87, 80, 62},
+    {18, 22, 37, 56, 68, 109, 103, 77},
+    {24, 35, 55, 64, 81, 104, 113, 92},
+    {49, 64, 78, 87, 103, 121, 120, 101},
+    {72, 92, 95, 98, 112, 100, 103, 99}
 };
 
-static const int BASE_CHROMA[8][8] = {
-    {17,18,24,47,99,99,99,99},
-    {18,21,26,66,99,99,99,99},
-    {24,26,56,99,99,99,99,99},
-    {47,66,99,99,99,99,99,99},
-    {99,99,99,99,99,99,99,99},
-    {99,99,99,99,99,99,99,99},
-    {99,99,99,99,99,99,99,99},
-    {99,99,99,99,99,99,99,99}
+const int BASE_CHROMA[8][8] = {
+    {17, 18, 24, 47, 99, 99, 99, 99},
+    {18, 21, 26, 66, 99, 99, 99, 99},
+    {24, 26, 56, 99, 99, 99, 99, 99},
+    {47, 66, 99, 99, 99, 99, 99, 99},
+    {99, 99, 99, 99, 99, 99, 99, 99},
+    {99, 99, 99, 99, 99, 99, 99, 99},
+    {99, 99, 99, 99, 99, 99, 99, 99},
+    {99, 99, 99, 99, 99, 99, 99, 99}
 };
 
-ImageCodec::ImageCodec(double quality, bool enableQuantization, bool useOpenCvDct)
+
+ImageCodec::ImageCodec(double quality, bool enableQuantization)
     : m_quality(quality),
-      m_enableQuantization(enableQuantization),
-      m_useOpenCV_DCT(useOpenCvDct)
+      m_enableQuantization(enableQuantization)
 {
     if (m_enableQuantization)
         generateQuantizationTables();
@@ -44,11 +45,8 @@ ImageCodec::ImageCodec(double quality, bool enableQuantization, bool useOpenCvDc
 */
 void ImageCodec::generateQuantizationTables()
 {
-    m_lumaQuantTable   = cv::Mat(8,8,CV_64F);
-    m_chromaQuantTable = cv::Mat(8,8,CV_64F);
-
-    // JPEG quality scaling formula
     double scale;
+
     if (m_quality < 50.0)
         scale = 5000.0 / m_quality;
     else
@@ -62,61 +60,65 @@ void ImageCodec::generateQuantizationTables()
             double lq = std::round(BASE_LUMA[i][j] * scale);
             double cq = std::round(BASE_CHROMA[i][j] * scale);
 
-            m_lumaQuantTable.at<double>(i,j)   = std::max(1.0, lq);
-            m_chromaQuantTable.at<double>(i,j) = std::max(1.0, cq);
+            m_lumaQuantTable[i][j]   = std::max(1.0, lq);
+            m_chromaQuantTable[i][j] = std::max(1.0, cq);
         }
     }
 }
 
 /*
 * Processes a single channel (Y, Cr, or Cb) by applying DCT, quantization, and inverse DCT.
-* The input channel should be of type CV_64F and the quantization table should also be CV_64F.
+* The input channel is a custom Image object, and the quantization table is a cv::Mat.
 * The output is the reconstructed channel after compression and decompression.
 */
-cv::Mat ImageCodec::processChannel(const cv::Mat& channel,
-                                   const cv::Mat& quantTable)
+Image ImageCodec::processChannel(const Image& channel,
+                                 const double quantTable[8][8])
 {
-    cv::Mat reconstructed = cv::Mat::zeros(channel.size(), CV_64F);
+    Image reconstructed(channel.width(),
+                        channel.height(),
+                        1);
 
-    for (int i = 0; i < channel.rows; i += 8) {
-        for (int j = 0; j < channel.cols; j += 8) {
+    for (int y = 0; y < channel.height(); y += 8) {
+        for (int x = 0; x < channel.width(); x += 8) {
 
-            if (i + 8 > channel.rows || j + 8 > channel.cols)
+            int blockWidth = std::min(8, channel.width() - x);
+            int blockHeight = std::min(8, channel.height() - y);
+            if (blockWidth < 8 || blockHeight < 8) {
+                // For simplicity, copy boundary blocks without processing.
+                // A more advanced implementation would use padding.
+                for (int i = 0; i < blockHeight; ++i)
+                    for (int j = 0; j < blockWidth; ++j)
+                        reconstructed.at(x + j, y + i, 0) = channel.at(x + j, y + i, 0);
                 continue;
-
-            cv::Mat block = channel(cv::Rect(j,i,8,8)).clone();
-            cv::Mat dctBlock(8,8,CV_64F);
-            cv::Mat reconBlock(8,8,CV_64F);
-
-            block -= 128.0;
-
-            if (m_useOpenCV_DCT) {
-                cv::dct(block, dctBlock);
-            } else {
-                dct8x8(block, dctBlock);
             }
 
+            double block[8][8];
+            double dctBlock[8][8];
+            double reconBlock[8][8];
+
+            // Copy block from Image to cv::Mat and level shift
+            for (int i = 0; i < 8; ++i)
+                for (int j = 0; j < 8; ++j)
+                    block[i][j] = channel.at(x + j, y + i, 0) - 128.0;
+
+            dct8x8(block, dctBlock);
+
             if (m_enableQuantization) {
-                for (int u = 0; u < 8; ++u) {
-                    for (int v = 0; v < 8; ++v) {
-
-                        double coeff = dctBlock.at<double>(u,v);
-                        double q = quantTable.at<double>(u,v);
-
-                        coeff = std::round(coeff / q);
-                        dctBlock.at<double>(u,v) = coeff * q;
+                for (int i = 0; i < 8; ++i) {
+                    for (int j = 0; j < 8; ++j) {
+                        double coeff = dctBlock[i][j] / quantTable[i][j];
+                        dctBlock[i][j] = std::round(coeff) * quantTable[i][j];
                     }
                 }
             }
 
-            if (m_useOpenCV_DCT) {
-                cv::idct(dctBlock, reconBlock);
-            } else {
-                idct8x8(dctBlock, reconBlock);
-            }
+            idct8x8(dctBlock, reconBlock);
 
-            reconBlock += 128.0;
-            reconBlock.copyTo(reconstructed(cv::Rect(j,i,8,8)));
+            // Write back to Image and reverse level shift
+            for (int i = 0; i < 8; ++i)
+                for (int j = 0; j < 8; ++j)
+                    reconstructed.at(x + j, y + i, 0) =
+                        reconBlock[i][j] + 128.0;
         }
     }
 
@@ -126,32 +128,42 @@ cv::Mat ImageCodec::processChannel(const cv::Mat& channel,
 /*
 * Main processing function that takes a BGR image, converts it to YCrCb, processes each channel, and then converts it back to BGR.
 */
-cv::Mat ImageCodec::process(const cv::Mat& bgrImage)
+Image ImageCodec::process(const Image& bgrImage)
 {
-    cv::Mat ycrcb;
-    cv::cvtColor(bgrImage, ycrcb, cv::COLOR_BGR2YCrCb);
-    ycrcb.convertTo(ycrcb, CV_64F);
+    Image ycrcbImage = bgrToYCrCb(bgrImage);
 
-    std::vector<cv::Mat> channels;
-    cv::split(ycrcb, channels);
+    Image Y (bgrImage.width(), bgrImage.height(), 1);
+    Image Cr(bgrImage.width(), bgrImage.height(), 1);
+    Image Cb(bgrImage.width(), bgrImage.height(), 1);
 
-    std::vector<cv::Mat> reconstructed(3);
+    // Split channels
+    for (int y = 0; y < bgrImage.height(); ++y)
+        for (int x = 0; x < bgrImage.width(); ++x) {
+            Y.at(x,y,0)  = ycrcbImage.at(x,y,0);
+            Cr.at(x,y,0) = ycrcbImage.at(x,y,1);
+            Cb.at(x,y,0) = ycrcbImage.at(x,y,2);
+        }
 
-    reconstructed[0] = processChannel(channels[0], m_lumaQuantTable);
-    reconstructed[1] = processChannel(channels[1], m_chromaQuantTable);
-    reconstructed[2] = processChannel(channels[2], m_chromaQuantTable);
+    Image reconY  = processChannel(Y,  m_lumaQuantTable);
+    Image reconCr = processChannel(Cr, m_chromaQuantTable);
+    Image reconCb = processChannel(Cb, m_chromaQuantTable);
 
-    m_psnrY  = computePSNR(channels[0], reconstructed[0]);
-    m_psnrCr = computePSNR(channels[1], reconstructed[1]);
-    m_psnrCb = computePSNR(channels[2], reconstructed[2]);
+    // Compute PSNR (requires converting channels back to cv::Mat for the utility function)
+    m_psnrY  = computePSNR(Y, reconY);
+    m_psnrCr = computePSNR(Cr, reconCr);
+    m_psnrCb = computePSNR(Cb, reconCb);
 
-    cv::Mat merged;
-    cv::merge(reconstructed, merged);
+    // Merge channels
+    Image merged(bgrImage.width(),
+                 bgrImage.height(),
+                 3);
 
-    merged.convertTo(merged, CV_8U);
+    for (int y = 0; y < bgrImage.height(); ++y)
+        for (int x = 0; x < bgrImage.width(); ++x) {
+            merged.at(x,y,0) = reconY.at(x,y,0);  // Y
+            merged.at(x,y,1) = reconCr.at(x,y,0); // Cr
+            merged.at(x,y,2) = reconCb.at(x,y,0); // Cb
+        }
 
-    cv::Mat output;
-    cv::cvtColor(merged, output, cv::COLOR_YCrCb2BGR);
-
-    return output;
+    return ycrcbToBgr(merged);
 }
