@@ -85,21 +85,28 @@ Image ImageCodec::processChannel(const Image& channel,
             int blockHeight = std::min(8, channel.height() - y);
             if (blockWidth < 8 || blockHeight < 8) {
                 // For simplicity, copy boundary blocks without processing.
-                // A more advanced implementation would use padding.
-                for (int i = 0; i < blockHeight; ++i)
-                    for (int j = 0; j < blockWidth; ++j)
-                        reconstructed.at(x + j, y + i, 0) = channel.at(x + j, y + i, 0);
+                // Using std::copy for efficient row-by-row copying.
+                const double* channelData = channel.data();
+                double* reconData = reconstructed.data();
+                const int channelWidth = channel.width();
+                for (int i = 0; i < blockHeight; ++i) {
+                    const double* src_row = &channelData[(y + i) * channelWidth + x];
+                    double* dst_row = &reconData[(y + i) * channelWidth + x];
+                    std::copy(src_row, src_row + blockWidth, dst_row);
+                }
                 continue;
             }
 
             double block[8][8];
             double dctBlock[8][8];
             double reconBlock[8][8];
+            const double* channelData = channel.data();
+            const int channelWidth = channel.width();
 
-            // Copy block from Image to cv::Mat and level shift
+            // Copy block from Image and level shift
             for (int i = 0; i < 8; ++i)
                 for (int j = 0; j < 8; ++j)
-                    block[i][j] = channel.at(x + j, y + i, 0) - 128.0;
+                    block[i][j] = channelData[(y + i) * channelWidth + (x + j)] - 128.0;
 
             dct8x8(block, dctBlock);
 
@@ -114,10 +121,12 @@ Image ImageCodec::processChannel(const Image& channel,
 
             idct8x8(dctBlock, reconBlock);
 
+            double* reconData = reconstructed.data();
+            const int reconWidth = reconstructed.width();
             // Write back to Image and reverse level shift
             for (int i = 0; i < 8; ++i)
                 for (int j = 0; j < 8; ++j)
-                    reconstructed.at(x + j, y + i, 0) =
+                    reconData[(y + i) * reconWidth + (x + j)] =
                         reconBlock[i][j] + 128.0;
         }
     }
@@ -136,13 +145,18 @@ Image ImageCodec::process(const Image& bgrImage)
     Image Cr(bgrImage.width(), bgrImage.height(), 1);
     Image Cb(bgrImage.width(), bgrImage.height(), 1);
 
+    const size_t numPixels = static_cast<size_t>(bgrImage.width()) * bgrImage.height();
+    const double* ycrcbData = ycrcbImage.data();
+    double* yData = Y.data();
+    double* crData = Cr.data();
+    double* cbData = Cb.data();
+
     // Split channels
-    for (int y = 0; y < bgrImage.height(); ++y)
-        for (int x = 0; x < bgrImage.width(); ++x) {
-            Y.at(x,y,0)  = ycrcbImage.at(x,y,0);
-            Cr.at(x,y,0) = ycrcbImage.at(x,y,1);
-            Cb.at(x,y,0) = ycrcbImage.at(x,y,2);
-        }
+    for (size_t i = 0; i < numPixels; ++i) {
+        yData[i]  = *ycrcbData++;
+        crData[i] = *ycrcbData++;
+        cbData[i] = *ycrcbData++;
+    }
 
     Image reconY  = processChannel(Y,  m_lumaQuantTable);
     Image reconCr = processChannel(Cr, m_chromaQuantTable);
@@ -157,13 +171,17 @@ Image ImageCodec::process(const Image& bgrImage)
     Image merged(bgrImage.width(),
                  bgrImage.height(),
                  3);
+    
+    double* mergedData = merged.data();
+    const double* reconYData = reconY.data();
+    const double* reconCrData = reconCr.data();
+    const double* reconCbData = reconCb.data();
 
-    for (int y = 0; y < bgrImage.height(); ++y)
-        for (int x = 0; x < bgrImage.width(); ++x) {
-            merged.at(x,y,0) = reconY.at(x,y,0);  // Y
-            merged.at(x,y,1) = reconCr.at(x,y,0); // Cr
-            merged.at(x,y,2) = reconCb.at(x,y,0); // Cb
-        }
+    for (size_t i = 0; i < numPixels; ++i) {
+        *mergedData++ = reconYData[i];
+        *mergedData++ = reconCrData[i];
+        *mergedData++ = reconCbData[i];
+    }
 
     return ycrcbToBgr(merged);
 }

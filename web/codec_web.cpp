@@ -15,14 +15,10 @@ uint8_t* process_image(
 ) {
     // Create Image from raw input
     Image inputImage(width, height, channels);
-
-    for (int y = 0; y < height; ++y) {
-        for (int x = 0; x < width; ++x) {
-            for (int c = 0; c < channels; ++c) {
-                inputImage.at(x, y, c) =
-                    input[(y * width + x) * channels + c];
-            }
-        }
+    double* inputImageData = inputImage.data();
+    const size_t totalValues = static_cast<size_t>(width) * height * channels;
+    for (size_t i = 0; i < totalValues; ++i) {
+        inputImageData[i] = static_cast<double>(input[i]);
     }
 
     // Create codec
@@ -33,17 +29,12 @@ uint8_t* process_image(
 
     // Allocate output buffer for JS
     uint8_t* output =
-        (uint8_t*)malloc(width * height * channels);
+        (uint8_t*)malloc(totalValues);
 
-    for (int y = 0; y < height; ++y) {
-        for (int x = 0; x < width; ++x) {
-            for (int c = 0; c < channels; ++c) {
-                output[(y * width + x) * channels + c] =
-                    static_cast<uint8_t>(
-                        outputImage.at(x, y, c)
-                    );
-            }
-        }
+    const double* outputImageData = outputImage.data();
+    for (size_t i = 0; i < totalValues; ++i) {
+        // The ycrcbToBgr conversion already clamps to [0, 255]
+        output[i] = static_cast<uint8_t>(outputImageData[i]);
     }
 
     return output;

@@ -9,14 +9,15 @@ double computePSNR(const Image& I1, const Image& I2) {
     }
 
     double mse = 0.0;
-    for (int y = 0; y < I1.height(); ++y) {
-        for (int x = 0; x < I1.width(); ++x) {
-            for (int c = 0; c < I1.channels(); ++c) {
-                mse += std::pow(I1.at(x, y, c) - I2.at(x, y, c), 2);
-            }
-        }
+    const double* p1 = I1.data();
+    const double* p2 = I2.data();
+    const size_t totalSize = I1.size();
+
+    for (size_t i = 0; i < totalSize; ++i) {
+        double diff = p1[i] - p2[i];
+        mse += diff * diff;
     }
-    mse /= (I1.width() * I1.height() * I1.channels());
+    mse /= static_cast<double>(totalSize);
 
     if (mse <= 1e-10) return 100.0;
 
