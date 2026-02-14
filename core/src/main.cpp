@@ -1,34 +1,29 @@
 #include <iostream>
 #include <opencv2/opencv.hpp>
+#include "processing.h"
+#include "utils.h"
 
 int main(int argc, char** argv) {
 
-    std::string imagePath;
-
-    if (argc >= 2) {
-        imagePath = argv[1];
-    } else {
-        imagePath = "../images/0.png";  // default image
-        std::cout << "No image provided. Using default: "
-                  << imagePath << std::endl;
-    }
+    std::string imagePath = (argc >= 2) ? argv[1] : "../images/0.png";
 
     cv::Mat img = cv::imread(imagePath, cv::IMREAD_COLOR);
-
     if (img.empty()) {
-        std::cerr << "Failed to load image: "
-                  << imagePath << std::endl;
+        std::cerr << "Failed to load image: " << imagePath << "\n";
         return -1;
     }
 
-    cv::Mat gray;
-    cv::cvtColor(img, gray, cv::COLOR_BGR2GRAY);
+    double psnrY, psnrCb, psnrCr;
+    cv::Mat reconstructed_bgr = processColorImage(img, psnrY, psnrCb, psnrCr);
 
-    gray.convertTo(gray, CV_64F);
+    std::cout << "PSNR (Y channel): " << psnrY << " dB\n";
+    std::cout << "PSNR (Cb channel): " << psnrCb << " dB\n";
+    std::cout << "PSNR (Cr channel): " << psnrCr << " dB\n";
 
-    std::cout << "Image loaded: "
-              << gray.rows << " x "
-              << gray.cols << std::endl;
+
+    cv::imshow("Original", img);
+    cv::imshow("Reconstructed (No Quantization)", reconstructed_bgr);
+    cv::waitKey(0);
 
     return 0;
 }

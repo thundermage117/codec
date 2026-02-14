@@ -13,9 +13,12 @@ include_directories(
     ${OpenCV_INCLUDE_DIRS}
 )
 
+file(GLOB SRC_FILES
+    src/*.cpp
+)
+
 add_executable(codec_core
-    src/main.cpp
-    src/image.cpp
+    ${SRC_FILES}
 )
 
 target_link_libraries(codec_core

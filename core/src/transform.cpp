@@ -4,10 +4,20 @@
 
 const double PI = 3.14159265358979323846;
 
+
+/*
+* Helper function to compute the normalization factor C(u) used in DCT and IDCT.
+*/
 static double C(int u) {
     return (u == 0) ? (1.0 / std::sqrt(2.0)) : 1.0;
 }
 
+/*
+* Performs the Discrete Cosine Transform (DCT) on an 8x8 block.
+* The input block should be of type CV_64F and the output will also be CV_64F.
+* 2D DCT is computed using the formula:
+* F(u, v) = 1/4 * C(u) * C(v) * sum_{x=0}^{7} sum_{y=0}^{7} f(x, y) * cos((2x+1)uπ/16) * cos((2y+1)vπ/16)
+*/
 void dct8x8(const cv::Mat& src, cv::Mat& dst) {
     for (int u = 0; u < 8; ++u) {
         for (int v = 0; v < 8; ++v) {
@@ -24,6 +34,10 @@ void dct8x8(const cv::Mat& src, cv::Mat& dst) {
     }
 }
 
+/*
+* Performs the Inverse Discrete Cosine Transform (IDCT) on an 8x8 block.
+* The input block should be of type CV_64F and the output will also be CV_64F.
+*/
 void idct8x8(const cv::Mat& src, cv::Mat& dst) {
     for (int x = 0; x < 8; ++x) {
         for (int y = 0; y < 8; ++y) {
