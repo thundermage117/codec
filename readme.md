@@ -1,10 +1,11 @@
 # Codec Explorer
 
-An interactive codec laboratory built in C++ (and later WebAssembly) to visualize how transform-based video compression works.
+An interactive codec laboratory to visualize how transform-based image compression works. The C++ core is compiled to WebAssembly, allowing for real-time, in-browser experimentation.
 
 This project aims to demonstrate:
 
 - 8x8 block splitting
+- Color Space Transformation (RGB -> YCbCr)
 - Discrete Cosine Transform (DCT)
 - Quantization
 - Inverse DCT (reconstruction)
@@ -21,43 +22,78 @@ The long-term goal is to run the codec core in WebAssembly and build a browser-b
   - `inc/`: Header files for the codec core.
   - `src/`: Source files for the codec core.
   - `build/`: Directory for build artifacts (ignored in git).
-- `web/`: Future directory for WebAssembly bindings and browser visualization code.
+- `apps/native/`: A native C++ application for testing the core library.
+- `web/`: The web application front-end.
+  - `public/`: Contains the HTML, CSS, JS, and WASM module for the interactive UI.
 
 
 ## ⚙️ Requirements
 
+### For the Web App
+
+- A modern web browser that supports WebAssembly.
+- A local web server to serve the `web/public` directory (e.g., Python's `http.server`).
+
+### For the Native C++ App (Optional)
+
 - CMake ≥ 3.16
 - C++17-compatible compiler (clang or g++)
+- OpenCV
 - macOS / Linux
 
 ## 🚀 Getting Started
 1. Clone the repository:
    ```bash
-   git clone
+    git clone https://github.com/thundermage117/codec.git
+    cd codec
     ```
-2. Navigate to the core directory and build the codec:
+
+The easiest way to use the Codec Explorer is through the web interface.
+
+### Running the Web App
+
+1.  Navigate to the web directory:
     ```bash
-    cd core
-    mkdir build
-    cd build
-    cmake ..
-    make
+    cd web
     ```
-3. Run the codec to see the output:
+2.  You need a simple local HTTP server to run the application. If you have Python 3, you can run:
     ```bash
-    ./codec_core
+    python3 -m http.server --directory public 8000
+    ```
+3.  Open your web browser and go to `http://localhost:8000`.
+4.  Upload an image and adjust the quality slider to see the effects of compression in real-time.
+
+### Building and Running the Native App
+
+If you want to build the native C++ version for testing:
+
+1.  From the project root, you can compile and run the native application with a default image using a single command:
+
+    ```bash
+    make dev
+    ```
+    This will create a `build` directory, compile the code, and run the `codec_app` executable.
+
+2.  **Running with a custom image:**
+    After the app has been built, the executable is located at `build/codec_app`. You can run it with your own image from the project root:
+    ```bash
+    ./build/codec_app path/to/your/image.png
+    ```
+3. You can run help to see available options:
+    ```bash
+    ./build/codec_app --help
     ```
 
 ## 📈 Roadmap
 
-### Phase 1 
+### ✅ Phase 1: Complete
 
-- Static Image Transform Explorer
-- Grayscale image input
-- 8×8 DCT implementation
-- Quantization control
-- Reconstruction
-- PSNR computation
+- [x] Static Image Transform Explorer (Web UI)
+- [x] Color Image Input (RGB -> YCbCr)
+- [x] 8×8 DCT implementation
+- [x] Quantization control via quality slider
+- [x] Reconstruction (Inverse DCT)
+- [x] PSNR computation for Y, Cb, Cr channels
 
 Phase 2 
 - Block-Level Inspection
@@ -88,6 +124,10 @@ This project aims to:
 - [Quantization in Video Compression](https://en.wikipedia.org/wiki/Quantization_(signal_processing))
 - [PSNR and Video Quality Metrics](https://en.wikipedia.org/wiki/Peak_signal-to-noise_ratio)
 - [WebAssembly for C++ Developers](https://webassembly.org/getting-started/developers-guide/)
+
+## 📜 License
+
+This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
 
 ## 🤝 Contributing
 Contributions are welcome! Please fork the repository and submit a pull request with your improvements or new features.
