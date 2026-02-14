@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>WASM Image Codec Demo</title>
+<style>
+  body { font-family: sans-serif; padding: 20px; }
+  canvas { border: 1px solid #ccc; background: #f0f0f0; }
+  .controls { margin: 15px 0; padding: 10px; background: #eee; border-radius: 4px;}
+  .status { font-weight: bold; color: #666; margin-bottom: 10px; }
+  .status.ready { color: green; }
+</style>
+</head>
+<body>
+
+<h2>WASM Image Codec Demo</h2>
+
+<div id="status" class="status">Loading WASM module...</div>
+
+<input type="file" id="fileInput" accept="image/*" disabled>
+
+<div class="controls">
+  Quality: <input type="range" id="qualitySlider" min="1" max="100" value="50" disabled>
+  <span id="qualityValue">50</span>
+  <span style="margin-left: 20px; font-weight: bold;">PSNR: <span id="psnrValue">--</span> dB</span>
+</div>
+
+<div style="display:flex; gap: 20px; margin-top:20px; flex-wrap: wrap;">
+  <div>
+    <h4>Original</h4>
+    <canvas id="originalCanvas"></canvas>
+  </div>
+  <div>
+    <h4>Processed</h4>
+    <canvas id="processedCanvas"></canvas>
+  </div>
+</div>
+
+<script src="codec.js"></script>
+<script src="main.js"></script>
+
+</body>
+</html>
