@@ -18,6 +18,15 @@
 let originalImageData = null;
 let imgWidth = 0;
 let imgHeight = 0;
+
+const ViewMode = {
+    RGB: 0,
+    Artifacts: 1,
+    Y: 2,
+    Cr: 3,
+    Cb: 4
+};
+let currentViewMode = ViewMode.RGB;
 const maxDim = 1024; // Downscale large images for performance
 let wasmReady = false;
 
@@ -29,8 +38,11 @@ const statusDiv = document.getElementById('status');
 const originalCanvas = document.getElementById('originalCanvas');
 const processedCanvas = document.getElementById('processedCanvas');
 const origCtx = originalCanvas.getContext('2d');
-const procCtx = processedCanvas.getContext('2d');
-const psnrValue = document.getElementById('psnrValue'); // Get the new span
+const procCtx = processedCanvas.getContext('2d', { willReadFrequently: true });
+const psnrY = document.getElementById('psnrY');
+const psnrCr = document.getElementById('psnrCr');
+const psnrCb = document.getElementById('psnrCb');
+const viewModeRadios = document.querySelectorAll('input[name="view_mode"]');
 
 // --- 1. WASM Initialization Handler ---
 Module.onRuntimeInitialized = () => {
@@ -43,6 +55,7 @@ Module.onRuntimeInitialized = () => {
     // Enable controls now that WASM is ready
     if (fileInput) fileInput.disabled = false;
     if (qualitySlider) qualitySlider.disabled = false;
+    viewModeRadios.forEach(radio => radio.disabled = false);
     
     console.log("WASM Runtime Initialized");
 };
@@ -73,40 +86,59 @@ fileInput.addEventListener('change', (e) => {
         origCtx.drawImage(img, 0, 0, imgWidth, imgHeight);
         originalImageData = origCtx.getImageData(0, 0, imgWidth, imgHeight);
 
-        // Process immediately
-        applyCodec();
+        // Initialize a new session in WASM
+        initSession();
     };
     img.src = URL.createObjectURL(file);
 });
 
-// --- 3. Handle Quality Slider ---
+// --- 3. Debounce Helper ---
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+// --- 4. Handle Controls ---
+const debouncedUpdate = debounce(() => updateAndRender(), 150);
+
 qualitySlider.addEventListener('input', () => {
     qualityValue.textContent = qualitySlider.value;
-    
-    // Only re-process if we have an image and WASM is ready
-    if (wasmReady && originalImageData) {
-        applyCodec();
+    if (originalImageData) {
+        debouncedUpdate();
     }
 });
 
-// --- 4. Main Processing Function ---
-function applyCodec() {
-    // Safety Checks
-    if (!wasmReady) {
-        console.warn("WASM not ready yet. Please wait.");
-        return;
-    }
+viewModeRadios.forEach(radio => {
+    radio.addEventListener('change', (e) => {
+        switch (e.target.value) {
+            case 'artifacts': currentViewMode = ViewMode.Artifacts; break;
+            case 'y': currentViewMode = ViewMode.Y; break;
+            case 'cr': currentViewMode = ViewMode.Cr; break;
+            case 'cb': currentViewMode = ViewMode.Cb; break;
+            default: currentViewMode = ViewMode.RGB; break;
+        }
+        // Only re-render, don't re-process
+        if (originalImageData) {
+            render();
+        }
+    });
+});
+
+// --- 5. Core WASM Interaction Functions ---
+
+function initSession() {
     if (!originalImageData) return;
 
-    const quality = parseInt(qualitySlider.value);
-    const pixelCount = imgWidth * imgHeight;
-    const rgbSize = pixelCount * 3; // 3 bytes per pixel (RGB)
-
-    // A. Prepare Input Data (RGBA -> RGB)
-    // We allocate this temporary buffer in JS memory first
+    const rgbSize = imgWidth * imgHeight * 3;
     const rgbData = new Uint8Array(rgbSize);
     const d = originalImageData.data;
-    
     for (let i = 0, j = 0; i < d.length; i += 4, j += 3) {
         rgbData[j]   = d[i];     // R
         rgbData[j+1] = d[i+1];   // G
@@ -115,63 +147,63 @@ function applyCodec() {
     }
 
     let inputPtr = 0;
-    let outputPtr = 0;
-
     try {
-        // B. Allocate Memory on WASM Heap for Input
         inputPtr = Module._malloc(rgbSize);
-        if (!inputPtr) throw new Error("Failed to allocate WASM memory for input");
-
-        // C. Copy data into WASM heap
-        // CRITICAL FIX: Use a fresh view of the buffer to avoid detached buffer errors
         Module.HEAPU8.set(rgbData, inputPtr);
+        Module._init_session(inputPtr, imgWidth, imgHeight);
+    } finally {
+        if (inputPtr) Module._free(inputPtr);
+    }
 
-        // D. Call the C++ function
-        // Arguments: inputPtr, width, height, channels, quality
-        outputPtr = Module._process_image(inputPtr, imgWidth, imgHeight, 3, quality);
+    // Trigger initial processing and rendering
+    updateAndRender();
+}
 
-        const psnr = Module._get_last_psnr();
-        psnrValue.innerText = psnr.toFixed(2);
+function updateAndRender() {
+    if (!wasmReady || !originalImageData) return;
+    
+    const quality = parseInt(qualitySlider.value);
+    Module._update_quality(quality);
 
-        // We can free the input immediately after the C++ function returns
-        // because the C++ code has finished reading it.
-        Module._free(inputPtr);
-        inputPtr = 0; // Prevent double-free in catch block
+    // After updating, render the current view
+    render();
+}
 
-        if (outputPtr === 0) {
-            throw new Error("WASM processing returned null (check console for C++ errors)");
-        }
+function render() {
+    if (!wasmReady || !originalImageData) return;
 
-        // E. Read Output Data (RGB) from WASM Heap
-        // CRITICAL FIX: Create a NEW view because memory might have grown/moved
+    const rgbSize = imgWidth * imgHeight * 3;
+    let inputPtr = 0;
+    let outputPtr = 0;
+    try {
+        // Get the pointer for the current view
+        outputPtr = Module._get_view_ptr(currentViewMode);
+        if (!outputPtr) throw new Error("WASM get_view_ptr returned null");
+
+        // Read the image data from the WASM heap
         const outputView = new Uint8Array(Module.HEAPU8.buffer, outputPtr, rgbSize);
-        
-        // Copy the data out to a JS array so we can free the WASM memory
         const outputData = new Uint8Array(outputView);
 
-        // Free the output pointer (C++ malloc'd it, we must free it)
-        Module._free(outputPtr);
-        outputPtr = 0;
-
-        // F. Convert back to RGBA for Canvas Display
+        // Convert RGB to RGBA for canvas display
         const finalImageData = new ImageData(imgWidth, imgHeight);
         const fd = finalImageData.data;
-        
         for (let i = 0, j = 0; i < outputData.length; i += 3, j += 4) {
             fd[j]   = outputData[i];   // R
             fd[j+1] = outputData[i+1]; // G
             fd[j+2] = outputData[i+2]; // B
             fd[j+3] = 255;             // Alpha (Opaque)
         }
-
-        // G. Draw to canvas
         procCtx.putImageData(finalImageData, 0, 0);
 
+        // Update stats
+        psnrY.textContent = Module._get_psnr_y().toFixed(2);
+        psnrCr.textContent = Module._get_psnr_cr().toFixed(2);
+        psnrCb.textContent = Module._get_psnr_cb().toFixed(2);
+
     } catch (err) {
-        console.error("WASM Processing Error:", err);
+        console.error("WASM render error:", err);
     } finally {
-        // Cleanup in case of error to prevent memory leaks
-        if (inputPtr !== 0) Module._free(inputPtr);
-        if (outputPtr !== 0) Module._free(outputPtr);
+        // The C++ code malloc'd this, so JS must free it.
+        if (outputPtr) Module._free(outputPtr);
     }
 }

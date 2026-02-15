@@ -22,6 +22,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WASM Codec Explorer</title>
     
+    <!-- Prevent the browser from requesting a favicon, which would cause a 404 error -->
+    <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -64,8 +67,30 @@
                 <input type="range" id="qualitySlider" min="1" max="100" value="50" disabled>
             </div>
 
+            <div class="control-group">
+              <label class="group-label">View Mode</label>
+              <div class="toggle-group">
+                  <input type="radio" id="view_rgb" name="view_mode" value="rgb" checked>
+                  <label for="view_rgb">RGB</label>
+
+                  <input type="radio" id="view_artifacts" name="view_mode" value="artifacts">
+                  <label for="view_artifacts">Error</label>
+
+                  <input type="radio" id="view_y" name="view_mode" value="y">
+                  <label for="view_y">Y</label>
+
+                  <input type="radio" id="view_cr" name="view_mode" value="cr">
+                  <label for="view_cr">Cr</label>
+
+                  <input type="radio" id="view_cb" name="view_mode" value="cb">
+                  <label for="view_cb">Cb</label>
+              </div>
+          </div>
+
             <div class="stats">Status: <span id="status">Initializing...</span></div>
-            <div class="stats">PSNR: <span id="psnrValue">-</span> dB</div>
+            <div class="stats">PSNR (Y): <span id="psnrY">-</span> dB</div>
+            <div class="stats">PSNR (Cr): <span id="psnrCr">-</span> dB</div>
+            <div class="stats">PSNR (Cb): <span id="psnrCb">-</span> dB</div>
         </div>
     </div>
 

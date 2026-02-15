@@ -170,3 +170,57 @@ button.primary:active {
         padding: 16px; 
     }
 }
+
+/* --- Segmented Control (Toggle Bar) --- */
+
+.group-label {
+    margin-bottom: 8px;
+    display: block;
+    font-size: 0.9rem;
+    color: var(--text);
+}
+
+.toggle-group {
+    display: flex;
+    background: #e2e8f0; /* Light gray track */
+    padding: 4px;
+    border-radius: 8px;
+    gap: 4px; /* Space between buttons */
+}
+
+/* 1. Hide the actual radio input circle */
+.toggle-group input[type="radio"] {
+    display: none;
+}
+
+/* 2. Style the Labels to look like Buttons */
+.toggle-group label {
+    display: flex;             /* 1. Make the label a container */
+    justify-content: center;   /* 2. Center horizontally */
+    align-items: center;
+    flex: 1; /* Make them all equal width */
+    text-align: center;
+    padding: 8px 4px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    border-radius: 6px;
+    cursor: pointer;
+    color: #64748b; /* Muted text */
+    transition: all 0.2s ease;
+    user-select: none; /* Prevent text highlighting on clicks */
+}
+
+/* 3. Hover Effect */
+.toggle-group label:hover {
+    background: rgba(255, 255, 255, 0.5);
+    color: var(--text);
+}
+
+/* 4. Active (Checked) State */
+/* This magic selector targets the label immediately following a checked input */
+.toggle-group input[type="radio"]:checked + label {
+    background: #ffffff;
+    color: var(--primary); /* Blue text */
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1); /* Subtle shadow pop */
+    font-weight: 600;
+}
