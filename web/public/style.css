@@ -218,6 +218,13 @@ button.primary:active {
     gap: 16px;
 }
 
+.viewer-info {
+    text-align: center;
+    font-size: 0.85rem;
+    color: #94a3b8; /* Muted slate */
+    user-select: none;
+}
+
 .comparison-viewer {
     position: relative;
     width: 100%;
