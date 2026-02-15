@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <emscripten.h>
 #include "ImageCodec.h"
+#include "CodecAnalysis.h"
 #include "Image.h"
 
 // 1. Global variable to store the latest PSNR
@@ -35,9 +36,9 @@ uint8_t* process_image(
     ImageCodec codec(quality, true);
     Image outputImage = codec.process(inputImage);
 
-    // 2. SAVE THE PSNR VALUE HERE
-    // (Assuming your ImageCodec class has the getPSNRY() method like your desktop code)
-    g_last_psnr = codec.getPSNRY(); 
+    // Calculate metrics
+    CodecMetrics metrics = CodecAnalysis::computeMetrics(inputImage, outputImage);
+    g_last_psnr = metrics.psnrY;
 
     uint8_t* output = (uint8_t*)malloc(totalValues);
     if (!output) return nullptr;

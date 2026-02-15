@@ -2,7 +2,7 @@ project(codec_native_app LANGUAGES CXX)
 
 find_package(OpenCV REQUIRED)
 
-add_executable(codec_app main.cpp) # Assuming your code above is in main.cpp
+add_executable(codec_app main.cpp CodecExplorerApp.cpp CvAdapter.cpp)
 
 target_link_libraries(codec_app 
     PRIVATE 
