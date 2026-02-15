@@ -43,6 +43,8 @@ const psnrY = document.getElementById('psnrY');
 const psnrCr = document.getElementById('psnrCr');
 const psnrCb = document.getElementById('psnrCb');
 const viewModeRadios = document.querySelectorAll('input[name="view_mode"]');
+const comparisonSlider = document.getElementById('comparisonSlider');
+const comparisonViewer = document.querySelector('.comparison-viewer');
 
 // --- 1. WASM Initialization Handler ---
 Module.onRuntimeInitialized = () => {
@@ -56,6 +58,7 @@ Module.onRuntimeInitialized = () => {
     if (fileInput) fileInput.disabled = false;
     if (qualitySlider) qualitySlider.disabled = false;
     viewModeRadios.forEach(radio => radio.disabled = false);
+    if (comparisonSlider) comparisonSlider.disabled = false;
     
     console.log("WASM Runtime Initialized");
 };
@@ -85,6 +88,12 @@ fileInput.addEventListener('change', (e) => {
         // Draw original image to canvas to get pixel data
         origCtx.drawImage(img, 0, 0, imgWidth, imgHeight);
         originalImageData = origCtx.getImageData(0, 0, imgWidth, imgHeight);
+
+        // Reset comparison slider to a 50/50 view
+        if (comparisonSlider && processedCanvas) {
+            comparisonSlider.value = 50;
+            processedCanvas.style.clipPath = `polygon(50% 0, 100% 0, 100% 100%, 50% 100%)`;
+        }
 
         // Initialize a new session in WASM
         initSession();
@@ -130,6 +139,66 @@ viewModeRadios.forEach(radio => {
         }
     });
 });
+
+function updateComparisonView(percent) {
+    // Clamp the value between 0 and 100
+    const clampedPercent = Math.max(0, Math.min(100, percent));
+
+    // Update the slider's visual position
+    comparisonSlider.value = clampedPercent;
+
+    // Update the clip-path of the top canvas (processed) to reveal the bottom (original)
+    processedCanvas.style.clipPath = `polygon(${clampedPercent}% 0, 100% 0, 100% 100%, ${clampedPercent}% 100%)`;
+}
+
+comparisonSlider.addEventListener('input', (e) => updateComparisonView(e.target.value));
+
+let isDragging = false;
+
+function handleInteraction(clientX) {
+    if (!comparisonViewer) return;
+    const rect = comparisonViewer.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const percent = (x / rect.width) * 100;
+    updateComparisonView(percent);
+}
+
+// --- Mouse Events for Direct Image Interaction ---
+comparisonViewer.addEventListener('mousedown', (e) => {
+    isDragging = true;
+    comparisonViewer.style.cursor = 'grabbing';
+    handleInteraction(e.clientX);
+});
+
+document.addEventListener('mouseup', () => {
+    isDragging = false;
+    if (comparisonViewer) comparisonViewer.style.cursor = 'col-resize';
+});
+
+document.addEventListener('mouseleave', () => { isDragging = false; });
+
+document.addEventListener('mousemove', (e) => {
+    if (isDragging) {
+        handleInteraction(e.clientX);
+    }
+});
+
+// --- Touch Events for Direct Image Interaction ---
+comparisonViewer.addEventListener('touchstart', (e) => {
+    isDragging = true;
+    handleInteraction(e.touches[0].clientX);
+});
+
+document.addEventListener('touchend', () => { isDragging = false; });
+document.addEventListener('touchcancel', () => { isDragging = false; });
+
+document.addEventListener('touchmove', (e) => {
+    if (isDragging) {
+        // Prevent scrolling while dragging on the image
+        e.preventDefault();
+        handleInteraction(e.touches[0].clientX);
+    }
+}, { passive: false }); // Required to allow preventDefault
 
 // --- 5. Core WASM Interaction Functions ---
 

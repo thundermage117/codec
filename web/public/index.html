@@ -42,17 +42,19 @@
 
     <div class="container">
         <div class="card">
-            <div class="canvas-wrapper">
-                <div>
-                    <h3>Original</h3>
-                    <canvas id="originalCanvas"></canvas>
-                </div>
-                <div>
-                    <h3>Processed</h3>
-                    <canvas id="processedCanvas"></canvas>
-                </div>
+            <div class="canvas-wrapper" id="viewer-container">
+              <div class="comparison-viewer">
+                      <canvas id="originalCanvas"></canvas>
+                      <canvas id="processedCanvas"></canvas>
+                  </div>
+                  
+                  <div class="slider-container">
+                      <span class="slider-label">Original</span>
+                      <input type="range" id="comparisonSlider" class="comparison-slider-input" min="0" max="100" value="100">
+                      <span class="slider-label">Processed</span>
+                  </div>
+              </div>
             </div>
-        </div>
 
         <div class="card controls">
             <div class="control-group">

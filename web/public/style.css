@@ -72,23 +72,6 @@ h1 {
     padding: 12px;
     overflow: hidden;
 }
-
-.canvas-wrapper {
-    display: flex;
-    flex-direction: column; /* Stack canvases vertically */
-    align-items: center;
-    gap: 24px; /* Add space between canvases */
-    background: #0f172a; /* Dark background for image contrast */
-    border-radius: 8px;
-    padding: 16px; /* Add some padding */
-    overflow: hidden;
-}
-
-.canvas-wrapper > div {
-    text-align: center;
-    color: var(--bg); /* Make text visible on dark background */
-}
-
 canvas {
     max-width: 100%;
     height: auto;
@@ -223,4 +206,105 @@ button.primary:active {
     color: var(--primary); /* Blue text */
     box-shadow: 0 1px 3px rgba(0,0,0,0.1); /* Subtle shadow pop */
     font-weight: 600;
+}
+
+/* --- Comparison Viewer (Container) --- */
+.canvas-wrapper {
+    background: #0f172a;
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.comparison-viewer {
+    position: relative;
+    width: 100%;
+    /* Remove fixed height to let canvas define it */
+    line-height: 0; 
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+    cursor: col-resize;
+}
+
+.comparison-viewer canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+/* Bottom Layer: Original */
+#originalCanvas {
+    /* Normal flow */
+}
+
+/* Top Layer: Processed */
+#processedCanvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    /* Default to a 50/50 split view */
+    clip-path: polygon(50% 0, 100% 0, 100% 100%, 50% 100%);
+}
+
+/* --- The Crossfader Slider --- */
+.slider-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 8px;
+}
+
+.slider-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #94a3b8; /* Muted slate */
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    width: 80px; /* Fixed width prevents jitter */
+}
+
+.slider-label:first-child { text-align: right; }
+.slider-label:last-child { text-align: left; color: var(--primary); }
+
+.comparison-slider-input {
+    flex: 1; /* Take up remaining space */
+    -webkit-appearance: none;
+    appearance: none;
+    height: 6px;
+    background: linear-gradient(to right, #64748b 0%, var(--primary) 100%);
+    border-radius: 3px;
+    outline: none;
+    cursor: pointer;
+}
+
+/* Slider Thumb (Chrome/Safari) */
+.comparison-slider-input::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    background: white;
+    border: 2px solid var(--primary);
+    border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    transition: transform 0.1s;
+}
+
+.comparison-slider-input::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+}
+
+/* Slider Thumb (Firefox) */
+.comparison-slider-input::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    background: white;
+    border: 2px solid var(--primary);
+    border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    transition: transform 0.1s;
 }
