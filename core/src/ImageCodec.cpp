@@ -17,8 +17,8 @@
  */
 #include "ImageCodec.h"
 #include "transform.h"
-#include "utils.h"
 #include "colorspace.h"
+#include "CodecAnalysis.h"
 
 #include <cmath>
 #include <vector>
@@ -178,12 +178,6 @@ Image ImageCodec::process(const Image& bgrImage)
     Image reconY  = processChannel(Y,  m_lumaQuantTable);
     Image reconCr = processChannel(Cr, m_chromaQuantTable);
     Image reconCb = processChannel(Cb, m_chromaQuantTable);
-
-    // Compute PSNR (requires converting channels back to cv::Mat for the utility function)
-    m_psnrY  = computePSNR(Y, reconY);
-    m_psnrCr = computePSNR(Cr, reconCr);
-    m_psnrCb = computePSNR(Cb, reconCb);
-
     // Merge channels
     Image merged(bgrImage.width(),
                  bgrImage.height(),

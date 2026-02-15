@@ -37,20 +37,12 @@ public:
     
     Image process(const Image& bgrImage);
 
-    double getPSNRY()  const { return m_psnrY; }
-    double getPSNRCb() const { return m_psnrCb; }
-    double getPSNRCr() const { return m_psnrCr; }
-
 private:
     double m_quality;
     bool   m_enableQuantization;
 
     double m_lumaQuantTable[8][8];
     double m_chromaQuantTable[8][8];
-
-    double m_psnrY = 0.0;
-    double m_psnrCb = 0.0;
-    double m_psnrCr = 0.0;
 
     void generateQuantizationTables();
     Image processChannel(const Image& channel,

@@ -96,6 +96,7 @@ If you want to build the native C++ version for testing:
 - [x] PSNR computation for Y, Cb, Cr channels
 
 Phase 2 
+- [x] Display artifact maps highlighting differences between original and reconstructed images
 - Block-Level Inspection
 - Interactive block selection
 - Coefficient heatmap visualization
