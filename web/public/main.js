@@ -280,6 +280,11 @@ function render() {
         psnrCr.textContent = Module._get_psnr_cr().toFixed(2);
         psnrCb.textContent = Module._get_psnr_cb().toFixed(2);
 
+        // Update SSIM
+        document.getElementById('ssimY').textContent = Module._get_ssim_y().toFixed(4);
+        document.getElementById('ssimCr').textContent = Module._get_ssim_cr().toFixed(4);
+        document.getElementById('ssimCb').textContent = Module._get_ssim_cb().toFixed(4);
+
     } catch (err) {
         console.error("WASM render error:", err);
     } finally {

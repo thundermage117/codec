@@ -61,7 +61,7 @@
                 <div class="slider-container">
                     <span class="slider-label">Original</span>
                     <input type="range" id="comparisonSlider" class="comparison-slider-input" min="0" max="100"
-                        value="100">
+                        value="50">
                     <span class="slider-label">Processed</span>
                 </div>
             </div>
@@ -141,9 +141,33 @@
             </div>
 
             <div class="stats">Status: <span id="status">Initializing...</span></div>
-            <div class="stats">PSNR (Y): <span id="psnrY">-</span> dB</div>
-            <div class="stats">PSNR (Cr): <span id="psnrCr">-</span> dB</div>
-            <div class="stats">PSNR (Cb): <span id="psnrCb">-</span> dB</div>
+
+            <table class="metrics-table">
+                <thead>
+                    <tr>
+                        <th>Channel</th>
+                        <th>PSNR (dB)</th>
+                        <th>SSIM</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Y</td>
+                        <td><span id="psnrY">-</span></td>
+                        <td><span id="ssimY">-</span></td>
+                    </tr>
+                    <tr>
+                        <td>Cr</td>
+                        <td><span id="psnrCr">-</span></td>
+                        <td><span id="ssimCr">-</span></td>
+                    </tr>
+                    <tr>
+                        <td>Cb</td>
+                        <td><span id="psnrCb">-</span></td>
+                        <td><span id="ssimCb">-</span></td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
     </div>
 

@@ -23,6 +23,9 @@ struct CodecMetrics {
     double psnrY = 0.0;
     double psnrCr = 0.0;
     double psnrCb = 0.0;
+    double ssimY = 0.0;
+    double ssimCr = 0.0;
+    double ssimCb = 0.0;
     Image artifactMap;
 };
 
@@ -37,6 +40,12 @@ public:
 
     // Compute PSNR (moved out of utils if you want)
     static double computePSNR(
+        const Image& I1,
+        const Image& I2
+    );
+
+    // Compute SSIM
+    static double computeSSIM(
         const Image& I1,
         const Image& I2
     );

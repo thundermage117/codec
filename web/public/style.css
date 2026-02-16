@@ -440,4 +440,29 @@ button.primary:active {
     border-radius: 50%;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
     transition: transform 0.1s;
+}/* Existing styles... */
+
+/* Add this to your existing css file */
+.metrics-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+    font-size: 0.9rem;
+    color: var(--text-color);
+}
+
+.metrics-table th,
+.metrics-table td {
+    border: 1px solid var(--border-color);
+    padding: 6px;
+    text-align: center;
+}
+
+.metrics-table th {
+    background-color: var(--bg-secondary);
+    font-weight: 600;
+}
+
+.metrics-table td {
+    background-color: var(--bg-primary);
 }

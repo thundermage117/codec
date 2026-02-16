@@ -74,6 +74,113 @@ double CodecAnalysis::computePSNR(const Image& I1, const Image& I2) {
     return 10.0 * log10((255.0 * 255.0) / mse);
 }
 
+// Helper for SSIM
+static double getMean(const double* data, int width, int height, int x, int y, int kernelSize) {
+    double sum = 0.0;
+    int count = 0;
+    int half = kernelSize / 2;
+
+    for (int j = -half; j <= half; ++j) {
+        for (int i = -half; i <= half; ++i) {
+            int cx = x + i;
+            int cy = y + j;
+            if (cx >= 0 && cx < width && cy >= 0 && cy < height) {
+                sum += data[cy * width + cx];
+                count++;
+            }
+        }
+    }
+    return (count > 0) ? (sum / count) : 0.0;
+}
+
+static double getVariance(const double* data, int width, int height, int x, int y, int kernelSize, double mean) {
+    double sum = 0.0;
+    int count = 0;
+    int half = kernelSize / 2;
+
+    for (int j = -half; j <= half; ++j) {
+        for (int i = -half; i <= half; ++i) {
+            int cx = x + i;
+            int cy = y + j;
+            if (cx >= 0 && cx < width && cy >= 0 && cy < height) {
+                double diff = data[cy * width + cx] - mean;
+                sum += diff * diff;
+                count++;
+            }
+        }
+    }
+    return (count > 0) ? (sum / count) : 0.0;
+}
+
+static double getCovariance(const double* d1, const double* d2, int width, int height, int x, int y, int kernelSize, double mean1, double mean2) {
+    double sum = 0.0;
+    int count = 0;
+    int half = kernelSize / 2;
+
+    for (int j = -half; j <= half; ++j) {
+        for (int i = -half; i <= half; ++i) {
+            int cx = x + i;
+            int cy = y + j;
+            if (cx >= 0 && cx < width && cy >= 0 && cy < height) {
+                double diff1 = d1[cy * width + cx] - mean1;
+                double diff2 = d2[cy * width + cx] - mean2;
+                sum += diff1 * diff2;
+                count++;
+            }
+        }
+    }
+    return (count > 0) ? (sum / count) : 0.0;
+}
+
+double CodecAnalysis::computeSSIM(const Image& I1, const Image& I2) {
+    if (I1.width() != I2.width() || I1.height() != I2.height() || I1.channels() != I2.channels()) {
+        return 0.0;
+    }
+
+    const double C1 = 6.5025;  // (0.01 * 255)^2
+    const double C2 = 58.5225; // (0.03 * 255)^2
+    
+    int width = I1.width();
+    int height = I1.height();
+    const double* d1 = I1.data();
+    const double* d2 = I2.data();
+    
+    // Using a simpler block-based approach for performance instead of full sliding window Gaussian
+    // But to be somewhat accurate we'll use a sliding window with stride
+    // For this implementation, let's do a basic sliding window with a small stride for speed
+    // or just checking every Nth pixel.
+    
+    // Let's do a proper sliding window but maybe with skip if needed. 
+    // For now, full sliding window.
+    
+    // NOTE: This is a simplified SSIM. A full Gaussian weighting is standard but slower.
+    // Using an 8x8 uniform window is a common approximation.
+    int kernelSize = 8;
+    int stride = 4; // Speed up calculation
+    
+    double mssim = 0.0;
+    int blocks = 0;
+    
+    for (int y = 0; y < height; y += stride) {
+        for (int x = 0; x < width; x += stride) {
+            double ux = getMean(d1, width, height, x, y, kernelSize);
+            double uy = getMean(d2, width, height, x, y, kernelSize);
+            
+            double sigx2 = getVariance(d1, width, height, x, y, kernelSize, ux);
+            double sigy2 = getVariance(d2, width, height, x, y, kernelSize, uy);
+            double sigxy = getCovariance(d1, d2, width, height, x, y, kernelSize, ux, uy);
+            
+            double num = (2 * ux * uy + C1) * (2 * sigxy + C2);
+            double den = (ux * ux + uy * uy + C1) * (sigx2 + sigy2 + C2);
+            
+            mssim += (num / den);
+            blocks++;
+        }
+    }
+    
+    return (blocks > 0) ? (mssim / blocks) : 0.0;
+}
+
 CodecMetrics CodecAnalysis::computeMetrics(const Image& originalBgr, const Image& reconstructedBgr) {
     CodecMetrics metrics;
 
@@ -118,7 +225,12 @@ CodecMetrics CodecAnalysis::computeMetrics(const Image& originalBgr, const Image
     metrics.psnrCr = computePSNR(originalCr, reconCr);
     metrics.psnrCb = computePSNR(originalCb, reconCb);
 
-    // 6. Compute artifact map on the BGR images
+    // 6. Compute SSIM for each channel
+    metrics.ssimY = computeSSIM(originalY, reconY);
+    metrics.ssimCr = computeSSIM(originalCr, reconCr);
+    metrics.ssimCb = computeSSIM(originalCb, reconCb);
+
+    // 7. Compute artifact map on the BGR images
     metrics.artifactMap = computeArtifactMap(originalBgr, reconstructedBgr);
 
     return metrics;

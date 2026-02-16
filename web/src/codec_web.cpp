@@ -158,4 +158,19 @@ double get_psnr_cb() {
     return g_session.initialized ? g_session.metrics.psnrCb : 0.0;
 }
 
+EMSCRIPTEN_KEEPALIVE
+double get_ssim_y() {
+    return g_session.initialized ? g_session.metrics.ssimY : 0.0;
+}
+
+EMSCRIPTEN_KEEPALIVE
+double get_ssim_cr() {
+    return g_session.initialized ? g_session.metrics.ssimCr : 0.0;
+}
+
+EMSCRIPTEN_KEEPALIVE
+double get_ssim_cb() {
+    return g_session.initialized ? g_session.metrics.ssimCb : 0.0;
+}
+
 } // extern "C"

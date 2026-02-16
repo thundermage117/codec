@@ -22,36 +22,46 @@
 #include <opencv2/opencv.hpp>
 #include <stdexcept>
 #include <algorithm>
+#include <iomanip>
+#include <sstream>
 
 // --- UI Helper Function ---
-void drawOverlay(cv::Mat& display, int quality, const CodecMetrics& metrics, ImageCodec::ChromaSubsampling cs) {
-    std::vector<std::string> lines;
-    lines.push_back("Quality: " + std::to_string(quality));
+static void drawMetricsDashboard(cv::Mat& display, int x, int y, const CodecMetrics& metrics) {
+    auto fmt = [](double val) {
+        std::ostringstream oss;
+        oss << std::fixed << std::setprecision(3) << val;
+        return oss.str();
+    };
 
-    std::string cs_str = "Chroma: ";
-    switch(cs) {
-        case ImageCodec::ChromaSubsampling::CS_444: cs_str += "4:4:4"; break;
-        case ImageCodec::ChromaSubsampling::CS_422: cs_str += "4:2:2"; break;
-        case ImageCodec::ChromaSubsampling::CS_420: cs_str += "4:2:0"; break;
-    }
-    lines.push_back(cs_str);
-
-    lines.push_back(""); // Spacer
+    cv::Scalar headColor(0, 255, 0);
+    cv::Scalar valColor(255, 255, 255);
+    cv::Scalar labelColor(180, 180, 180);
     
-    std::ostringstream oss;
-    oss << std::fixed << std::setprecision(2);
-    
-    oss.str(""); oss << "PSNR (Y):  " << metrics.psnrY << " dB"; lines.push_back(oss.str());
-    oss.str(""); oss << "PSNR (Cr): " << metrics.psnrCr << " dB"; lines.push_back(oss.str());
-    oss.str(""); oss << "PSNR (Cb): " << metrics.psnrCb << " dB"; lines.push_back(oss.str());
+    float fontScale = 0.5;
+    int thickness = 1;
+    int colWidth = 90;
+    int rowHeight = 25;
 
-    // Draw text with a shadow for readability
-    int y = 30;
-    for (const auto& line : lines) {
-        cv::putText(display, line, {21, y + 1}, cv::FONT_HERSHEY_SIMPLEX, 0.7, {0,0,0}, 2); // Shadow
-        cv::putText(display, line, {20, y},     cv::FONT_HERSHEY_SIMPLEX, 0.7, {0,255,0}, 2); // Text
-        y += 30;
-    }
+    // Headers
+    cv::putText(display, "METRIC", {x, y}, cv::FONT_HERSHEY_SIMPLEX, fontScale, labelColor, thickness);
+    cv::putText(display, "Y", {x + 110, y}, cv::FONT_HERSHEY_SIMPLEX, fontScale, headColor, thickness + 1);
+    cv::putText(display, "Cr", {x + 110 + colWidth, y}, cv::FONT_HERSHEY_SIMPLEX, fontScale, headColor, thickness + 1);
+    cv::putText(display, "Cb", {x + 110 + 2*colWidth, y}, cv::FONT_HERSHEY_SIMPLEX, fontScale, headColor, thickness + 1);
+
+    // Divider line
+    cv::line(display, {x, y + 8}, {x + 380, y + 8}, cv::Scalar(60, 60, 60), 1);
+
+    // PSNR Row
+    cv::putText(display, "PSNR (dB)", {x, y + rowHeight}, cv::FONT_HERSHEY_SIMPLEX, fontScale, labelColor, thickness);
+    cv::putText(display, fmt(metrics.psnrY), {x + 110, y + rowHeight}, cv::FONT_HERSHEY_SIMPLEX, fontScale, valColor, thickness);
+    cv::putText(display, fmt(metrics.psnrCr), {x + 110 + colWidth, y + rowHeight}, cv::FONT_HERSHEY_SIMPLEX, fontScale, valColor, thickness);
+    cv::putText(display, fmt(metrics.psnrCb), {x + 110 + 2*colWidth, y + rowHeight}, cv::FONT_HERSHEY_SIMPLEX, fontScale, valColor, thickness);
+
+    // SSIM Row
+    cv::putText(display, "SSIM", {x, y + 2*rowHeight}, cv::FONT_HERSHEY_SIMPLEX, fontScale, labelColor, thickness);
+    cv::putText(display, fmt(metrics.ssimY), {x + 110, y + 2*rowHeight}, cv::FONT_HERSHEY_SIMPLEX, fontScale, valColor, thickness);
+    cv::putText(display, fmt(metrics.ssimCr), {x + 110 + colWidth, y + 2*rowHeight}, cv::FONT_HERSHEY_SIMPLEX, fontScale, valColor, thickness);
+    cv::putText(display, fmt(metrics.ssimCb), {x + 110 + 2*colWidth, y + 2*rowHeight}, cv::FONT_HERSHEY_SIMPLEX, fontScale, valColor, thickness);
 }
 
 CodecExplorerApp::CodecExplorerApp(const std::string& imagePath, ImageCodec::ChromaSubsampling csMode)
@@ -134,7 +144,6 @@ void CodecExplorerApp::render() {
         case AppState::ViewMode::RGB:
             // Convert from cached YCrCb back to BGR for display
             processedCvMat = CvAdapter::imageToCvMat(ycrcbToBgr(m_state.processedYCrCb));
-            drawOverlay(processedCvMat, m_quality, m_state.metrics, m_chromaSubsampling);
             rightLabel = "Processed (RGB)";
             break;
         case AppState::ViewMode::Artifacts:
@@ -184,15 +193,36 @@ void CodecExplorerApp::render() {
     cv::Mat combinedView;
     cv::hconcat(m_state.originalCvMat, processedCvMat, combinedView);
 
-    int footerHeight = 100;
-    cv::Mat viewWithFooter(combinedView.rows + footerHeight, combinedView.cols, combinedView.type(), cv::Scalar(20, 20, 20));
+    int footerHeight = 180;
+    cv::Mat viewWithFooter(combinedView.rows + footerHeight, combinedView.cols, combinedView.type(), cv::Scalar(25, 25, 25));
     combinedView.copyTo(viewWithFooter(cv::Rect(0, 0, combinedView.cols, combinedView.rows)));
 
+    // Footer divider
+    cv::line(viewWithFooter, {0, combinedView.rows}, {viewWithFooter.cols, combinedView.rows}, cv::Scalar(60, 60, 60), 1);
+
     cv::Scalar labelColor(220, 220, 220);
-    cv::putText(viewWithFooter, "Original", {10, combinedView.rows + 28}, cv::FONT_HERSHEY_SIMPLEX, 0.8, labelColor, 2);
-    cv::putText(viewWithFooter, rightLabel, {m_state.originalCvMat.cols + 10, combinedView.rows + 28}, cv::FONT_HERSHEY_SIMPLEX, 0.8, labelColor, 2);
-    cv::putText(viewWithFooter, "View: [P]rocessed | [A]rtifacts | [Y] | C[b] | C[r] | Cb/Cr [T]int", {10, combinedView.rows + 56}, cv::FONT_HERSHEY_SIMPLEX, 0.6, {180, 180, 180}, 1);
-    cv::putText(viewWithFooter, "Chroma: 4:4:[4] | 4:2:[2] | 4:2:[0]", {10, combinedView.rows + 84}, cv::FONT_HERSHEY_SIMPLEX, 0.6, {180, 180, 180}, 1);
+    cv::putText(viewWithFooter, "Original", {10, combinedView.rows + 30}, cv::FONT_HERSHEY_SIMPLEX, 0.8, labelColor, 2);
+    cv::putText(viewWithFooter, rightLabel, {m_state.originalCvMat.cols + 10, combinedView.rows + 30}, cv::FONT_HERSHEY_SIMPLEX, 0.8, labelColor, 2);
+
+    int yBase = combinedView.rows + 70;
+    
+    // Status info
+    std::string cs_str = "Chroma: ";
+    switch(m_chromaSubsampling) {
+        case ImageCodec::ChromaSubsampling::CS_444: cs_str += "4:4:4"; break;
+        case ImageCodec::ChromaSubsampling::CS_422: cs_str += "4:2:2"; break;
+        case ImageCodec::ChromaSubsampling::CS_420: cs_str += "4:2:0"; break;
+    }
+    cv::putText(viewWithFooter, "Quality: " + std::to_string(m_quality), {10, yBase}, cv::FONT_HERSHEY_SIMPLEX, 0.6, {0, 255, 0}, 1);
+    cv::putText(viewWithFooter, cs_str, {10, yBase + 25}, cv::FONT_HERSHEY_SIMPLEX, 0.6, {0, 255, 0}, 1);
+
+    // Controls help
+    cv::putText(viewWithFooter, "View: [P] RGB | [A] Artifacts | [Y] | C[b] | C[r] | [T]int", {10, yBase + 55}, cv::FONT_HERSHEY_SIMPLEX, 0.55, {160, 160, 160}, 1);
+    cv::putText(viewWithFooter, "Mode: 4:4:[4] | 4:2:[2] | 4:2:[0] | [ESC] Exit", {10, yBase + 80}, cv::FONT_HERSHEY_SIMPLEX, 0.55, {160, 160, 160}, 1);
+
+    // Metrics Dashboard
+    int dashboardX = std::max(m_state.originalCvMat.cols + 10, viewWithFooter.cols - 400);
+    drawMetricsDashboard(viewWithFooter, dashboardX, yBase, m_state.metrics);
 
     cv::imshow(m_state.windowName, viewWithFooter);
 }

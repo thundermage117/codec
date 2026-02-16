@@ -3,7 +3,7 @@ WEB_COMPILER = emcc
 WEB_FLAGS = -Icore/inc -O3 \
             -s WASM=1 \
             -s ALLOW_MEMORY_GROWTH=1 \
-            -s EXPORTED_FUNCTIONS='["_init_session", "_process_image", "_get_view_ptr", "_set_view_tint", "_get_psnr_y", "_get_psnr_cr", "_get_psnr_cb", "_malloc", "_free"]' \
+            -s EXPORTED_FUNCTIONS='["_init_session", "_process_image", "_get_view_ptr", "_set_view_tint", "_get_psnr_y", "_get_psnr_cr", "_get_psnr_cb", "_get_ssim_y", "_get_ssim_cr", "_get_ssim_cb", "_malloc", "_free"]' \
             -s EXPORTED_RUNTIME_METHODS='["cwrap", "ccall", "HEAPU8"]'
 
 # Source: Core C++ + Web Glue C++ (in src folder)
