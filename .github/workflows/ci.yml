@@ -45,7 +45,7 @@ jobs:
 
   deploy:
     runs-on: ubuntu-latest
-    needs: [build-native, build-web]
+    needs: build-web
     # Only deploy on pushes to main, not PRs
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
