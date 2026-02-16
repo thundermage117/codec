@@ -47,6 +47,7 @@ const viewModeRadios = document.querySelectorAll('input[name="view_mode"]');
 const csRadios = document.querySelectorAll('input[name="chroma_subsampling"]');
 const comparisonSlider = document.getElementById('comparisonSlider');
 const comparisonViewer = document.querySelector('.comparison-viewer');
+const tintToggle = document.getElementById('tint_toggle');
 
 // --- 1. WASM Initialization Handler ---
 Module.onRuntimeInitialized = () => {
@@ -55,14 +56,15 @@ Module.onRuntimeInitialized = () => {
         statusDiv.innerText = "WASM Module Ready!";
         statusDiv.classList.add('ready');
     }
-    
+
     // Enable controls now that WASM is ready
     if (fileInput) fileInput.disabled = false;
     if (qualitySlider) qualitySlider.disabled = false;
     viewModeRadios.forEach(radio => radio.disabled = false);
     csRadios.forEach(radio => radio.disabled = false);
     if (comparisonSlider) comparisonSlider.disabled = false;
-    
+    if (tintToggle) tintToggle.disabled = false;
+
     console.log("WASM Runtime Initialized");
 };
 
@@ -78,7 +80,7 @@ fileInput.addEventListener('change', (e) => {
         if (img.width > maxDim || img.height > maxDim) {
             scale = Math.min(maxDim / img.width, maxDim / img.height);
         }
-        
+
         imgWidth = Math.floor(img.width * scale);
         imgHeight = Math.floor(img.height * scale);
 
@@ -152,6 +154,17 @@ csRadios.forEach(radio => {
         }
     });
 });
+
+if (tintToggle) {
+    tintToggle.addEventListener('change', (e) => {
+        if (wasmReady) {
+            Module._set_view_tint(e.target.checked ? 1 : 0);
+            if (originalImageData) {
+                render();
+            }
+        }
+    });
+}
 
 function updateComparisonView(percent) {
     // Clamp the value between 0 and 100
@@ -237,7 +250,7 @@ function initSession() {
 
 function updateAndRender() {
     if (!wasmReady || !originalImageData) return;
-    
+
     const quality = parseInt(qualitySlider.value);
     // Call the updated C++ function with quality and chroma subsampling mode.
     Module._process_image(quality, currentCsMode);

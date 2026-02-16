@@ -51,4 +51,5 @@ private:
     AppState m_state;
     int m_quality = 50;
     ImageCodec::ChromaSubsampling m_chromaSubsampling;
+    bool m_useTint = true;
 };

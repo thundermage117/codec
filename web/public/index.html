@@ -17,31 +17,32 @@
  */ -->
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WASM Codec Explorer</title>
-    
+
     <!-- Prevent the browser from requesting a favicon, which would cause a 404 error -->
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
 
     <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
     <header>
         <h1>WASM Codec Explorer</h1>
         <div class="privacy-badge">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round">
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                 <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
             </svg>
             <span>Processed locally on your device</span>
         </div>
         <a href="https://github.com/thundermage117/codec" class="github-link" target="_blank" rel="noopener noreferrer">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
-            </svg>
+            <img src="assets/GitHub_Invertocat_Black.svg" alt="GitHub Logo" width="16" height="16">
             <span>View Source on GitHub</span>
         </a>
     </header>
@@ -52,18 +53,19 @@
                 <div class="viewer-info">
                     💡 Tip: Click and drag on the image to move the slider.
                 </div>
-              <div class="comparison-viewer">
-                      <canvas id="originalCanvas"></canvas>
-                      <canvas id="processedCanvas"></canvas>
-                  </div>
-                  
-                  <div class="slider-container">
-                      <span class="slider-label">Original</span>
-                      <input type="range" id="comparisonSlider" class="comparison-slider-input" min="0" max="100" value="100">
-                      <span class="slider-label">Processed</span>
-                  </div>
-              </div>
+                <div class="comparison-viewer">
+                    <canvas id="originalCanvas"></canvas>
+                    <canvas id="processedCanvas"></canvas>
+                </div>
+
+                <div class="slider-container">
+                    <span class="slider-label">Original</span>
+                    <input type="range" id="comparisonSlider" class="comparison-slider-input" min="0" max="100"
+                        value="100">
+                    <span class="slider-label">Processed</span>
+                </div>
             </div>
+        </div>
 
         <div class="card controls">
             <div class="control-group">
@@ -79,24 +81,50 @@
             </div>
 
             <div class="control-group">
-              <label class="group-label">View Mode</label>
-              <div class="toggle-group">
-                  <input type="radio" id="view_rgb" name="view_mode" value="rgb" checked>
-                  <label for="view_rgb">RGB</label>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                    <label class="group-label" style="margin-bottom: 0;">View Mode</label>
+                    <div class="tint-toggle"
+                        style="display: flex; align-items: center; gap: 4px; font-size: 0.8rem; color: var(--text-muted);">
+                        <input type="checkbox" id="tint_toggle" checked style="margin: 0; cursor: pointer;">
+                        <label for="tint_toggle" style="margin-bottom: 0; cursor: pointer; font-weight: normal;">Cb/Cr
+                            Tint</label>
+                        <div class="tooltip-container">
+                            <span class="info-icon">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <line x1="12" y1="16" x2="12" y2="12"></line>
+                                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                                </svg>
+                            </span>
+                            <div class="tooltip-content">
+                                <strong>Why remove the tint?</strong><br>
+                                The human eye is biologically wired to detect changes in brightness (Luminance) far
+                                better than changes in color (Chrominance). Viewing these channels in grayscale helps
+                                you see fine details and artifacts that get lost in the color tint. This same biological
+                                limitation is the foundation of image compression (like JPEG)—codecs aggressively
+                                compress color data because our eyes rarely notice the difference.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="toggle-group">
+                    <input type="radio" id="view_rgb" name="view_mode" value="rgb" checked>
+                    <label for="view_rgb">RGB</label>
 
-                  <input type="radio" id="view_artifacts" name="view_mode" value="artifacts">
-                  <label for="view_artifacts">Error</label>
+                    <input type="radio" id="view_artifacts" name="view_mode" value="artifacts">
+                    <label for="view_artifacts">Error</label>
 
-                  <input type="radio" id="view_y" name="view_mode" value="y">
-                  <label for="view_y">Y</label>
+                    <input type="radio" id="view_y" name="view_mode" value="y">
+                    <label for="view_y">Y</label>
 
-                  <input type="radio" id="view_cr" name="view_mode" value="cr">
-                  <label for="view_cr">Cr</label>
+                    <input type="radio" id="view_cr" name="view_mode" value="cr">
+                    <label for="view_cr">Cr</label>
 
-                  <input type="radio" id="view_cb" name="view_mode" value="cb">
-                  <label for="view_cb">Cb</label>
-              </div>
-          </div>
+                    <input type="radio" id="view_cb" name="view_mode" value="cb">
+                    <label for="view_cb">Cb</label>
+                </div>
+            </div>
 
             <div class="control-group">
                 <label class="group-label">Chroma Subsampling</label>
@@ -123,4 +151,5 @@
     <script src="main.js"></script>
 
 </body>
+
 </html>

@@ -13,6 +13,7 @@ struct CodecSession {
     Image processedYCrCb;
     CodecMetrics metrics;
     bool initialized = false;
+    bool useTint = true;
 };
 
 static CodecSession g_session;
@@ -102,9 +103,24 @@ uint8_t* get_view_ptr(int mode) {
             Image bgrChannel(width, height, 3);
             double* bgrData = bgrChannel.data();
             for (size_t i = 0; i < numPixels; ++i) {
-                bgrData[i * 3 + 0] = channelData[i];
-                bgrData[i * 3 + 1] = channelData[i];
-                bgrData[i * 3 + 2] = channelData[i];
+                if (mode == Y) {
+                    bgrData[i * 3 + 0] = channelData[i]; // B
+                    bgrData[i * 3 + 1] = channelData[i]; // G
+                    bgrData[i * 3 + 2] = channelData[i]; // R
+                } else if (mode == Cr && g_session.useTint) {
+                    bgrData[i * 3 + 0] = 128.0;          // B
+                    bgrData[i * 3 + 1] = 128.0;          // G
+                    bgrData[i * 3 + 2] = channelData[i]; // R (Tinted Red)
+                } else if (mode == Cb && g_session.useTint) {
+                    bgrData[i * 3 + 0] = channelData[i]; // B (Tinted Blue)
+                    bgrData[i * 3 + 1] = 128.0;          // G
+                    bgrData[i * 3 + 2] = 128.0;          // R
+                } else {
+                    // Grayscale for Cr/Cb if tint is disabled
+                    bgrData[i * 3 + 0] = channelData[i];
+                    bgrData[i * 3 + 1] = channelData[i];
+                    bgrData[i * 3 + 2] = channelData[i];
+                }
             }
             viewImage = bgrChannel;
             break;
@@ -120,6 +136,11 @@ uint8_t* get_view_ptr(int mode) {
         rgba_output[i * 4 + 3] = 255; // Alpha
     }
     return rgba_output;
+}
+
+EMSCRIPTEN_KEEPALIVE
+void set_view_tint(int enable) {
+    g_session.useTint = (enable != 0);
 }
 
 EMSCRIPTEN_KEEPALIVE

@@ -92,6 +92,7 @@ void CodecExplorerApp::handleKey(int key) {
     else if (key == 'y') { m_state.mode = AppState::ViewMode::Y;         viewChanged = true; }
     else if (key == 'r') { m_state.mode = AppState::ViewMode::Cr;        viewChanged = true; }
     else if (key == 'b') { m_state.mode = AppState::ViewMode::Cb;        viewChanged = true; }
+    else if (key == 't') { m_useTint = !m_useTint;                      viewChanged = true; }
     else if (key == '4') { m_chromaSubsampling = ImageCodec::ChromaSubsampling::CS_444; codecChanged = true; }
     else if (key == '2') { m_chromaSubsampling = ImageCodec::ChromaSubsampling::CS_422; codecChanged = true; }
     else if (key == '0') { m_chromaSubsampling = ImageCodec::ChromaSubsampling::CS_420; codecChanged = true; }
@@ -143,20 +144,39 @@ void CodecExplorerApp::render() {
         case AppState::ViewMode::Y:
         case AppState::ViewMode::Cr:
         case AppState::ViewMode::Cb: {
-            Image channel(m_state.originalImage.width(), m_state.originalImage.height(), 1);
+            int width = m_state.originalImage.width();
+            int height = m_state.originalImage.height();
+            Image tinted(width, height, 3);
             const double* ycrcbData = m_state.processedYCrCb.data();
-            double* channelData = channel.data();
+            double* tintedData = tinted.data();
             int channelOffset = (m_state.mode == AppState::ViewMode::Y) ? 0 : (m_state.mode == AppState::ViewMode::Cr ? 1 : 2);
 
             if (m_state.mode == AppState::ViewMode::Y) rightLabel = "Y Channel";
             else if (m_state.mode == AppState::ViewMode::Cr) rightLabel = "Cr Channel";
             else rightLabel = "Cb Channel";
 
-            for (size_t i = 0; i < channel.size(); ++i) {
-                channelData[i] = ycrcbData[i * 3 + channelOffset];
+            for (size_t i = 0; i < (size_t)width * height; ++i) {
+                double val = ycrcbData[i * 3 + channelOffset];
+                if (m_state.mode == AppState::ViewMode::Y) {
+                    tintedData[i * 3 + 0] = val; // B
+                    tintedData[i * 3 + 1] = val; // G
+                    tintedData[i * 3 + 2] = val; // R
+                } else if (m_state.mode == AppState::ViewMode::Cr && m_useTint) {
+                    tintedData[i * 3 + 0] = 128.0; // B
+                    tintedData[i * 3 + 1] = 128.0; // G
+                    tintedData[i * 3 + 2] = val;   // R
+                } else if (m_state.mode == AppState::ViewMode::Cb && m_useTint) {
+                    tintedData[i * 3 + 0] = val;   // B
+                    tintedData[i * 3 + 1] = 128.0; // G
+                    tintedData[i * 3 + 2] = 128.0; // R
+                } else {
+                    // Grayscale for Cr/Cb if tint is disabled
+                    tintedData[i * 3 + 0] = val;
+                    tintedData[i * 3 + 1] = val;
+                    tintedData[i * 3 + 2] = val;
+                }
             }
-            processedCvMat = CvAdapter::imageToCvMat(channel);
-            cv::cvtColor(processedCvMat, processedCvMat, cv::COLOR_GRAY2BGR);
+            processedCvMat = CvAdapter::imageToCvMat(tinted);
             break;
         }
     }
@@ -164,15 +184,15 @@ void CodecExplorerApp::render() {
     cv::Mat combinedView;
     cv::hconcat(m_state.originalCvMat, processedCvMat, combinedView);
 
-    int footerHeight = 70;
+    int footerHeight = 100;
     cv::Mat viewWithFooter(combinedView.rows + footerHeight, combinedView.cols, combinedView.type(), cv::Scalar(20, 20, 20));
     combinedView.copyTo(viewWithFooter(cv::Rect(0, 0, combinedView.cols, combinedView.rows)));
 
     cv::Scalar labelColor(220, 220, 220);
     cv::putText(viewWithFooter, "Original", {10, combinedView.rows + 28}, cv::FONT_HERSHEY_SIMPLEX, 0.8, labelColor, 2);
     cv::putText(viewWithFooter, rightLabel, {m_state.originalCvMat.cols + 10, combinedView.rows + 28}, cv::FONT_HERSHEY_SIMPLEX, 0.8, labelColor, 2);
-    cv::putText(viewWithFooter, "View: [P]rocessed | [A]rtifacts | [Y] | C[r] | C[b]", {10, combinedView.rows + 56}, cv::FONT_HERSHEY_SIMPLEX, 0.6, {180, 180, 180}, 1);
-    cv::putText(viewWithFooter, "Chroma: 4:4:[4] | 4:2:[2] | 4:2:[0]", {m_state.originalCvMat.cols + 10, combinedView.rows + 56}, cv::FONT_HERSHEY_SIMPLEX, 0.6, {180, 180, 180}, 1);
+    cv::putText(viewWithFooter, "View: [P]rocessed | [A]rtifacts | [Y] | C[b] | C[r] | Cb/Cr [T]int", {10, combinedView.rows + 56}, cv::FONT_HERSHEY_SIMPLEX, 0.6, {180, 180, 180}, 1);
+    cv::putText(viewWithFooter, "Chroma: 4:4:[4] | 4:2:[2] | 4:2:[0]", {10, combinedView.rows + 84}, cv::FONT_HERSHEY_SIMPLEX, 0.6, {180, 180, 180}, 1);
 
     cv::imshow(m_state.windowName, viewWithFooter);
 }
