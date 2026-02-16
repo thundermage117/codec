@@ -1,0 +1,74 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-native:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ libopencv-dev
+      - name: Build
+        run: |
+          mkdir -p build && cd build
+          cmake ..
+          make
+
+  build-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@ab889da2abbcbb280f91ec4c215d3bb4f3a8f775
+        with:
+          version: 'latest' # Explicitly set a version
+
+      - name: Build WASM
+        run: |
+
+          make web
+      
+      - name: Upload WASM Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-build
+          path: |
+            web/public/codec.js
+            web/public/codec.wasm
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [build-native, build-web]
+    # Only deploy on pushes to main, not PRs
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Download WASM Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-build
+          path: web/public
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel
+
+      - name: Pull Vercel Environment Information
+        run: vercel pull --yes --environment=production --token=$VERCEL_TOKEN
+
+      - name: Build Project Artifacts
+        run: vercel build --prod --token=$VERCEL_TOKEN
+
+      - name: Deploy Project Artifacts to Vercel
+        run: vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN
+    env:
+      VERCEL_ORG_ID: ${{ secrets.ORGID }}
+      VERCEL_PROJECT_ID: ${{ secrets.PROJECTID }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}

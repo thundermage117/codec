@@ -1,5 +1,7 @@
 # Codec Explorer
 
+[![Build Status](https://github.com/thundermage117/codec/actions/workflows/ci.yml/badge.svg)](https://github.com/thundermage117/codec/actions/workflows/ci.yml) [![License: GPL v3](https://img.shields.io/badge/License-GPL_v3-blue.svg)](LICENSE) [![Quality gate](https://sonarcloud.io/api/project_badges/quality_gate?project=thundermage117_codec)](https://sonarcloud.io/summary/new_code?id=thundermage117_codec)
+
 An interactive codec laboratory to visualize how transform-based image compression works. The C++ core is compiled to WebAssembly, allowing for real-time, in-browser experimentation.
 
 This project aims to demonstrate:
