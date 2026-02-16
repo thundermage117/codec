@@ -26,7 +26,8 @@
 
 class CodecExplorerApp {
 public:
-    CodecExplorerApp(const std::string& imagePath);
+    CodecExplorerApp(const std::string& imagePath, 
+                     ImageCodec::ChromaSubsampling csMode = ImageCodec::ChromaSubsampling::CS_444);
     void run();
 
 private:
@@ -49,4 +50,5 @@ private:
 
     AppState m_state;
     int m_quality = 50;
+    ImageCodec::ChromaSubsampling m_chromaSubsampling;
 };

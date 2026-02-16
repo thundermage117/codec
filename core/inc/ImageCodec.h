@@ -26,15 +26,23 @@
 */
 class ImageCodec {
 public:
+    enum class ChromaSubsampling {
+        CS_444, // No subsampling
+        CS_422, // Horizontal subsampling by 2 for Cr, Cb
+        CS_420  // Horizontal and vertical subsampling by 2 for Cr, Cb
+    };
+
+public:
     /*
     * Constructs an ImageCodec with the specified quality, quantization, and DCT options.
     * @param quality Quality factor for quantization (1-100). Higher means better quality.
-    * @param enableQuantization Whether to apply quantization to DCT coefficients.    
+    * @param enableQuantization Whether to apply quantization to DCT coefficients.
+    * @param cs Chroma subsampling mode (default: 4:4:4).
     */
     explicit ImageCodec(double quality, 
-                        bool enableQuantization = true);
+                        bool enableQuantization = true,
+                        ChromaSubsampling cs = ChromaSubsampling::CS_444);
 
-    
     Image process(const Image& bgrImage);
 
 private:
@@ -44,10 +52,13 @@ private:
     double m_lumaQuantTable[8][8];
     double m_chromaQuantTable[8][8];
 
+    ChromaSubsampling m_chromaSubsampling;
+
     void generateQuantizationTables();
     Image processChannel(const Image& channel,
                          const double quantTable[8][8]);
+    Image downsampleChannel(const Image& channel, ChromaSubsampling cs) const;
+    Image upsampleChannel(const Image& channel, int targetWidth, int targetHeight, ChromaSubsampling cs) const;
 };
-
 
 #endif

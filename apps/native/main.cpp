@@ -34,28 +34,25 @@ int main(int argc, char** argv) {
               << std::endl;
 
     // --- Argument Parsing ---
-    if (argc > 1) {
-        std::string arg1 = argv[1];
-
-        if (arg1 == "help" || arg1 == "--help" || arg1 == "-h") {
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "help" || arg == "--help" || arg == "-h") {
             std::cout << "Usage:\n"
-                      << "  " << argv[0] << " [path_to_image]\n"
-                      << "  " << argv[0] << " show w\n"
-                      << "  " << argv[0] << " show c\n"
-                      << "  " << argv[0] << " help\n\n"
+                      << "  " << argv[0] << " [path_to_image] [--cs <mode>]\n\n"
                       << "An interactive codec laboratory to visualize image compression.\n\n"
                       << "Options:\n"
                       << "  [path_to_image]   Optional. Path to the image file to process.\n"
                       << "                    Defaults to '../images/0.png' if not provided.\n"
                       << "  show w            Display the GPL warranty disclaimer and exit.\n"
                       << "  show c            Display the GPL redistribution conditions and exit.\n"
-                      << "  help, --help, -h  Show this help message and exit.\n" << std::endl;
+                      << "  help, --help, -h  Show this help message and exit.\n" << std::endl
+                      << "  --cs <mode>       Set chroma subsampling. <mode> can be 444, 422, or 420.\n" << std::endl;
             return 0;
         }
 
-        if (arg1 == "show") {
-            if (argc == 3) {
-                std::string arg2 = argv[2];
+        if (arg == "show") {
+            if (i + 1 < argc) {
+                std::string arg2 = argv[i + 1];
                 if (arg2 == "w") {
                     std::cout << "--- Warranty Disclaimer (from GPL v3, Sections 15 & 16) ---\n\n"
                                  "THERE IS NO WARRANTY FOR THE PROGRAM, TO THE EXTENT PERMITTED BY\n"
@@ -95,11 +92,32 @@ int main(int argc, char** argv) {
             return 1;
         }
     }
+    
+    std::string imagePath = "../images/0.png";
+    auto csMode = ImageCodec::ChromaSubsampling::CS_444;
+    bool imagePathSet = false;
 
-    std::string imagePath = (argc >= 2) ? argv[1] : "../images/0.png";
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "--cs") {
+            if (i + 1 < argc) {
+                std::string mode = argv[++i];
+                if (mode == "422") csMode = ImageCodec::ChromaSubsampling::CS_422;
+                else if (mode == "420") csMode = ImageCodec::ChromaSubsampling::CS_420;
+                else if (mode != "444") {
+                    std::cerr << "Warning: Invalid chroma subsampling mode '" << mode << "'. Defaulting to 4:4:4." << std::endl;
+                }
+            } else {
+                std::cerr << "Error: --cs flag requires a value (444, 422, 420)." << std::endl;
+                return 1;
+            }
+        } else if (arg.rfind("-", 0) != 0) { // Does not start with a dash
+            imagePath = arg;
+        }
+    }
 
     try {
-        CodecExplorerApp app(imagePath);
+        CodecExplorerApp app(imagePath, csMode);
         app.run();
     } catch (const std::exception& e) {
         std::cerr << "An error occurred: " << e.what() << std::endl;

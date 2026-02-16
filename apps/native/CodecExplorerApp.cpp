@@ -24,9 +24,19 @@
 #include <algorithm>
 
 // --- UI Helper Function ---
-void drawOverlay(cv::Mat& display, int quality, const CodecMetrics& metrics) {
+void drawOverlay(cv::Mat& display, int quality, const CodecMetrics& metrics, ImageCodec::ChromaSubsampling cs) {
     std::vector<std::string> lines;
     lines.push_back("Quality: " + std::to_string(quality));
+
+    std::string cs_str = "Chroma: ";
+    switch(cs) {
+        case ImageCodec::ChromaSubsampling::CS_444: cs_str += "4:4:4"; break;
+        case ImageCodec::ChromaSubsampling::CS_422: cs_str += "4:2:2"; break;
+        case ImageCodec::ChromaSubsampling::CS_420: cs_str += "4:2:0"; break;
+    }
+    lines.push_back(cs_str);
+
+    lines.push_back(""); // Spacer
     
     std::ostringstream oss;
     oss << std::fixed << std::setprecision(2);
@@ -44,7 +54,8 @@ void drawOverlay(cv::Mat& display, int quality, const CodecMetrics& metrics) {
     }
 }
 
-CodecExplorerApp::CodecExplorerApp(const std::string& imagePath) {
+CodecExplorerApp::CodecExplorerApp(const std::string& imagePath, ImageCodec::ChromaSubsampling csMode)
+    : m_chromaSubsampling(csMode) {
     m_state.windowName = "Codec Explorer";
     m_state.originalCvMat = cv::imread(imagePath, cv::IMREAD_COLOR);
     if (m_state.originalCvMat.empty()) {
@@ -74,13 +85,22 @@ void CodecExplorerApp::run() {
 
 void CodecExplorerApp::handleKey(int key) {
     bool viewChanged = false;
+    bool codecChanged = false;
+
     if (key == 'p')      { m_state.mode = AppState::ViewMode::RGB;       viewChanged = true; }
     else if (key == 'a') { m_state.mode = AppState::ViewMode::Artifacts; viewChanged = true; }
     else if (key == 'y') { m_state.mode = AppState::ViewMode::Y;         viewChanged = true; }
     else if (key == 'r') { m_state.mode = AppState::ViewMode::Cr;        viewChanged = true; }
     else if (key == 'b') { m_state.mode = AppState::ViewMode::Cb;        viewChanged = true; }
+    else if (key == '4') { m_chromaSubsampling = ImageCodec::ChromaSubsampling::CS_444; codecChanged = true; }
+    else if (key == '2') { m_chromaSubsampling = ImageCodec::ChromaSubsampling::CS_422; codecChanged = true; }
+    else if (key == '0') { m_chromaSubsampling = ImageCodec::ChromaSubsampling::CS_420; codecChanged = true; }
 
-    if (viewChanged) {
+
+    if (codecChanged) {
+        updateCodecOutput();
+        render();
+    } else if (viewChanged) {
         render();
     }
 }
@@ -99,7 +119,7 @@ void CodecExplorerApp::onQualityChange(int quality) {
 }
 
 void CodecExplorerApp::updateCodecOutput() {
-    ImageCodec codec(m_quality);
+    ImageCodec codec(m_quality, true, m_chromaSubsampling);
     Image processedImage = codec.process(m_state.originalImage);
     m_state.metrics = CodecAnalysis::computeMetrics(m_state.originalImage, processedImage);
     m_state.processedYCrCb = bgrToYCrCb(processedImage);
@@ -113,7 +133,7 @@ void CodecExplorerApp::render() {
         case AppState::ViewMode::RGB:
             // Convert from cached YCrCb back to BGR for display
             processedCvMat = CvAdapter::imageToCvMat(ycrcbToBgr(m_state.processedYCrCb));
-            drawOverlay(processedCvMat, m_quality, m_state.metrics);
+            drawOverlay(processedCvMat, m_quality, m_state.metrics, m_chromaSubsampling);
             rightLabel = "Processed (RGB)";
             break;
         case AppState::ViewMode::Artifacts:
@@ -151,7 +171,8 @@ void CodecExplorerApp::render() {
     cv::Scalar labelColor(220, 220, 220);
     cv::putText(viewWithFooter, "Original", {10, combinedView.rows + 28}, cv::FONT_HERSHEY_SIMPLEX, 0.8, labelColor, 2);
     cv::putText(viewWithFooter, rightLabel, {m_state.originalCvMat.cols + 10, combinedView.rows + 28}, cv::FONT_HERSHEY_SIMPLEX, 0.8, labelColor, 2);
-    cv::putText(viewWithFooter, "View: [P]rocessed | [A]rtifacts | [Y] | C[r] | C[b]", {10, combinedView.rows + 56}, cv::FONT_HERSHEY_SIMPLEX, 0.6, {150, 150, 150}, 1);
+    cv::putText(viewWithFooter, "View: [P]rocessed | [A]rtifacts | [Y] | C[r] | C[b]", {10, combinedView.rows + 56}, cv::FONT_HERSHEY_SIMPLEX, 0.6, {180, 180, 180}, 1);
+    cv::putText(viewWithFooter, "Chroma: 4:4:[4] | 4:2:[2] | 4:2:[0]", {m_state.originalCvMat.cols + 10, combinedView.rows + 56}, cv::FONT_HERSHEY_SIMPLEX, 0.6, {180, 180, 180}, 1);
 
     cv::imshow(m_state.windowName, viewWithFooter);
 }

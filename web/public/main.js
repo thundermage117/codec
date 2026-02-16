@@ -27,6 +27,7 @@ const ViewMode = {
     Cb: 4
 };
 let currentViewMode = ViewMode.RGB;
+let currentCsMode = 444;
 const maxDim = 1024; // Downscale large images for performance
 let wasmReady = false;
 
@@ -43,6 +44,7 @@ const psnrY = document.getElementById('psnrY');
 const psnrCr = document.getElementById('psnrCr');
 const psnrCb = document.getElementById('psnrCb');
 const viewModeRadios = document.querySelectorAll('input[name="view_mode"]');
+const csRadios = document.querySelectorAll('input[name="chroma_subsampling"]');
 const comparisonSlider = document.getElementById('comparisonSlider');
 const comparisonViewer = document.querySelector('.comparison-viewer');
 
@@ -58,6 +60,7 @@ Module.onRuntimeInitialized = () => {
     if (fileInput) fileInput.disabled = false;
     if (qualitySlider) qualitySlider.disabled = false;
     viewModeRadios.forEach(radio => radio.disabled = false);
+    csRadios.forEach(radio => radio.disabled = false);
     if (comparisonSlider) comparisonSlider.disabled = false;
     
     console.log("WASM Runtime Initialized");
@@ -140,6 +143,16 @@ viewModeRadios.forEach(radio => {
     });
 });
 
+csRadios.forEach(radio => {
+    radio.addEventListener('change', (e) => {
+        currentCsMode = parseInt(e.target.value, 10);
+        // Re-process the image with the new setting
+        if (originalImageData) {
+            updateAndRender();
+        }
+    });
+});
+
 function updateComparisonView(percent) {
     // Clamp the value between 0 and 100
     const clampedPercent = Math.max(0, Math.min(100, percent));
@@ -205,20 +218,14 @@ document.addEventListener('touchmove', (e) => {
 function initSession() {
     if (!originalImageData) return;
 
-    const rgbSize = imgWidth * imgHeight * 3;
-    const rgbData = new Uint8Array(rgbSize);
-    const d = originalImageData.data;
-    for (let i = 0, j = 0; i < d.length; i += 4, j += 3) {
-        rgbData[j]   = d[i];     // R
-        rgbData[j+1] = d[i+1];   // G
-        rgbData[j+2] = d[i+2];   // B
-        // Alpha channel d[i+3] is ignored
-    }
+    // The C++ side now expects a 4-channel RGBA buffer.
+    const rgbaSize = originalImageData.data.length;
 
     let inputPtr = 0;
     try {
-        inputPtr = Module._malloc(rgbSize);
-        Module.HEAPU8.set(rgbData, inputPtr);
+        // Allocate memory in the WASM heap and copy the image data.
+        inputPtr = Module._malloc(rgbaSize);
+        Module.HEAPU8.set(originalImageData.data, inputPtr);
         Module._init_session(inputPtr, imgWidth, imgHeight);
     } finally {
         if (inputPtr) Module._free(inputPtr);
@@ -232,7 +239,8 @@ function updateAndRender() {
     if (!wasmReady || !originalImageData) return;
     
     const quality = parseInt(qualitySlider.value);
-    Module._update_quality(quality);
+    // Call the updated C++ function with quality and chroma subsampling mode.
+    Module._process_image(quality, currentCsMode);
 
     // After updating, render the current view
     render();
@@ -241,28 +249,18 @@ function updateAndRender() {
 function render() {
     if (!wasmReady || !originalImageData) return;
 
-    const rgbSize = imgWidth * imgHeight * 3;
-    let inputPtr = 0;
+    const rgbaSize = imgWidth * imgHeight * 4;
     let outputPtr = 0;
     try {
         // Get the pointer for the current view
         outputPtr = Module._get_view_ptr(currentViewMode);
         if (!outputPtr) throw new Error("WASM get_view_ptr returned null");
 
-        // Read the image data from the WASM heap
-        const outputView = new Uint8Array(Module.HEAPU8.buffer, outputPtr, rgbSize);
-        const outputData = new Uint8Array(outputView);
-
-        // Convert RGB to RGBA for canvas display
-        const finalImageData = new ImageData(imgWidth, imgHeight);
-        const fd = finalImageData.data;
-        for (let i = 0, j = 0; i < outputData.length; i += 3, j += 4) {
-            fd[j]   = outputData[i];   // R
-            fd[j+1] = outputData[i+1]; // G
-            fd[j+2] = outputData[i+2]; // B
-            fd[j+3] = 255;             // Alpha (Opaque)
-        }
-        procCtx.putImageData(finalImageData, 0, 0);
+        // The C++ module now returns a 4-channel RGBA buffer.
+        // We can create an ImageData object directly from this buffer.
+        const imageDataBytes = new Uint8ClampedArray(Module.HEAPU8.buffer, outputPtr, rgbaSize);
+        const imageData = new ImageData(imageDataBytes, imgWidth, imgHeight);
+        procCtx.putImageData(imageData, 0, 0);
 
         // Update stats
         psnrY.textContent = Module._get_psnr_y().toFixed(2);

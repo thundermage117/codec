@@ -47,9 +47,10 @@ const int BASE_CHROMA[8][8] = {
 };
 
 
-ImageCodec::ImageCodec(double quality, bool enableQuantization)
+ImageCodec::ImageCodec(double quality, bool enableQuantization, ChromaSubsampling cs)
     : m_quality(quality),
-      m_enableQuantization(enableQuantization)
+      m_enableQuantization(enableQuantization),
+      m_chromaSubsampling(cs)
 {
     if (m_enableQuantization)
         generateQuantizationTables();
@@ -152,21 +153,108 @@ Image ImageCodec::processChannel(const Image& channel,
 }
 
 /*
+* Downsamples a single channel (Cr or Cb) based on the specified chroma subsampling mode.
+* Uses simple averaging for downsampling.
+*/
+Image ImageCodec::downsampleChannel(const Image& channel, ChromaSubsampling cs) const {
+    if (cs == ChromaSubsampling::CS_444) {
+        return channel; // No subsampling
+    }
+
+    int originalWidth = channel.width();
+    int originalHeight = channel.height();
+    int newWidth = originalWidth;
+    int newHeight = originalHeight;
+
+    if (cs == ChromaSubsampling::CS_422 || cs == ChromaSubsampling::CS_420) {
+        newWidth = (originalWidth + 1) / 2; // Ceiling division
+    }
+    if (cs == ChromaSubsampling::CS_420) {
+        newHeight = (originalHeight + 1) / 2; // Ceiling division
+    }
+
+    Image downsampled(newWidth, newHeight, 1);
+
+    for (int y = 0; y < newHeight; ++y) {
+        for (int x = 0; x < newWidth; ++x) {
+            double sum = 0.0;
+            int count = 0;
+
+            // Calculate the top-left corner of the 2x2 or 2x1 block in the original image
+            int startX = x * (cs == ChromaSubsampling::CS_444 ? 1 : 2);
+            int startY = y * (cs == ChromaSubsampling::CS_420 ? 2 : 1);
+
+            // Calculate the bottom-right corner (exclusive) of the block
+            int endX = startX + (cs == ChromaSubsampling::CS_444 ? 1 : 2);
+            int endY = startY + (cs == ChromaSubsampling::CS_420 ? 2 : 1);
+
+            for (int sy = startY; sy < endY && sy < originalHeight; ++sy) {
+                for (int sx = startX; sx < endX && sx < originalWidth; ++sx) {
+                    sum += channel.at(sx, sy, 0);
+                    count++;
+                }
+            }
+            if (count > 0) {
+                downsampled.at(x, y, 0) = sum / count;
+            } else {
+                // Fallback for edge cases where no pixels are covered (should ideally not happen with correct dimensions)
+                downsampled.at(x, y, 0) = channel.at(std::min(startX, originalWidth - 1), std::min(startY, originalHeight - 1), 0);
+            }
+        }
+    }
+    return downsampled;
+}
+
+/*
+* Upsamples a single channel (Cr or Cb) back to target dimensions using nearest-neighbor interpolation.
+*/
+Image ImageCodec::upsampleChannel(const Image& channel, int targetWidth, int targetHeight, ChromaSubsampling cs) const {
+    if (cs == ChromaSubsampling::CS_444) {
+        return channel; // No upsampling needed
+    }
+
+    Image upsampled(targetWidth, targetHeight, 1);
+    int currentWidth = channel.width();
+    int currentHeight = channel.height();
+
+    for (int y = 0; y < targetHeight; ++y) {
+        for (int x = 0; x < targetWidth; ++x) {
+            int srcX = x;
+            int srcY = y;
+
+            if (cs == ChromaSubsampling::CS_422 || cs == ChromaSubsampling::CS_420) {
+                srcX /= 2;
+            }
+            if (cs == ChromaSubsampling::CS_420) {
+                srcY /= 2;
+            }
+            
+            // Clamp to valid source coordinates
+            srcX = std::min(srcX, currentWidth - 1);
+            srcY = std::min(srcY, currentHeight - 1);
+
+            upsampled.at(x, y, 0) = channel.at(srcX, srcY, 0);
+        }
+    }
+    return upsampled;
+}
+
+/*
 * Main processing function that takes a BGR image, converts it to YCrCb, processes each channel, and then converts it back to BGR.
 */
 Image ImageCodec::process(const Image& bgrImage)
 {
     Image ycrcbImage = bgrToYCrCb(bgrImage);
 
-    Image Y (bgrImage.width(), bgrImage.height(), 1);
-    Image Cr(bgrImage.width(), bgrImage.height(), 1);
-    Image Cb(bgrImage.width(), bgrImage.height(), 1);
+    Image Y_orig (bgrImage.width(), bgrImage.height(), 1);
+    Image Cr_orig(bgrImage.width(), bgrImage.height(), 1);
+    Image Cb_orig(bgrImage.width(), bgrImage.height(), 1);
 
-    const size_t numPixels = static_cast<size_t>(bgrImage.width()) * bgrImage.height();
+    const size_t numPixels = static_cast<size_t>(bgrImage.width()) * bgrImage.height(); // Total pixels in original image
     const double* ycrcbData = ycrcbImage.data();
-    double* yData = Y.data();
-    double* crData = Cr.data();
-    double* cbData = Cb.data();
+    double* yData = Y_orig.data();
+    double* crData = Cr_orig.data();
+    double* cbData = Cb_orig.data();
 
     // Split channels
     for (size_t i = 0; i < numPixels; ++i) {
@@ -175,9 +263,29 @@ Image ImageCodec::process(const Image& bgrImage)
         cbData[i] = *ycrcbData++;
     }
 
-    Image reconY  = processChannel(Y,  m_lumaQuantTable);
-    Image reconCr = processChannel(Cr, m_chromaQuantTable);
-    Image reconCb = processChannel(Cb, m_chromaQuantTable);
+    // Process Y channel (always at full resolution)
+    Image reconY = processChannel(Y_orig, m_lumaQuantTable);
+
+    Image reconCr_final;
+    Image reconCb_final;
+
+    if (m_chromaSubsampling == ChromaSubsampling::CS_444) {
+        reconCr_final = processChannel(Cr_orig, m_chromaQuantTable);
+        reconCb_final = processChannel(Cb_orig, m_chromaQuantTable);
+    } else {
+        // Downsample Cr and Cb
+        Image downsampledCr = downsampleChannel(Cr_orig, m_chromaSubsampling);
+        Image downsampledCb = downsampleChannel(Cb_orig, m_chromaSubsampling);
+
+        // Process subsampled Cr and Cb
+        Image reconCr_sub = processChannel(downsampledCr, m_chromaQuantTable);
+        Image reconCb_sub = processChannel(downsampledCb, m_chromaQuantTable);
+
+        // Upsample Cr and Cb back to original dimensions
+        reconCr_final = upsampleChannel(reconCr_sub, bgrImage.width(), bgrImage.height(), m_chromaSubsampling);
+        reconCb_final = upsampleChannel(reconCb_sub, bgrImage.width(), bgrImage.height(), m_chromaSubsampling);
+    }
+
     // Merge channels
     Image merged(bgrImage.width(),
                  bgrImage.height(),
@@ -185,9 +293,9 @@ Image ImageCodec::process(const Image& bgrImage)
     
     double* mergedData = merged.data();
     const double* reconYData = reconY.data();
-    const double* reconCrData = reconCr.data();
-    const double* reconCbData = reconCb.data();
-
+    const double* reconCrData = reconCr_final.data();
+    const double* reconCbData = reconCb_final.data();
+    
     for (size_t i = 0; i < numPixels; ++i) {
         *mergedData++ = reconYData[i];
         *mergedData++ = reconCrData[i];

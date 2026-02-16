@@ -1,11 +1,14 @@
 /* web/public/style.css */
 
 :root {
-    --primary: #2563eb;       /* Royal Blue */
+    --primary: #2563eb;
+    /* Royal Blue */
     --primary-hover: #1d4ed8;
-    --bg: #f8fafc;           /* Light Slate Background */
+    --bg: #f8fafc;
+    /* Light Slate Background */
     --card-bg: #ffffff;
-    --text: #1e293b;         /* Slate 800 */
+    --text: #1e293b;
+    /* Slate 800 */
     --text-muted: #64748b;
     --border: #e2e8f0;
     --success-bg: #dcfce7;
@@ -50,7 +53,33 @@ h1 {
     border-radius: 99px;
     font-size: 0.85rem;
     font-weight: 600;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.github-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background-color: #f1f5f9;
+    /* Slate 100 */
+    color: #475569;
+    /* Slate 600 */
+    padding: 6px 12px;
+    border-radius: 99px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-decoration: none;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    transition: all 0.2s ease;
+    margin-left: 8px;
+}
+
+.github-link:hover {
+    background-color: #e2e8f0;
+    /* Slate 200 */
+    color: #1e293b;
+    /* Slate 800 */
+    transform: translateY(-1px);
 }
 
 /* --- Layout --- */
@@ -58,7 +87,8 @@ h1 {
     width: 100%;
     max-width: 1280px;
     display: grid;
-    grid-template-columns: 1fr 320px; /* Sidebar layout */
+    grid-template-columns: 1fr 320px;
+    /* Sidebar layout */
     gap: 24px;
     align-items: start;
 }
@@ -72,6 +102,7 @@ h1 {
     padding: 12px;
     overflow: hidden;
 }
+
 canvas {
     max-width: 100%;
     height: auto;
@@ -137,9 +168,10 @@ button.primary:active {
 /* --- Mobile Responsiveness --- */
 @media (max-width: 768px) {
     .container {
-        grid-template-columns: 1fr; /* Stack vertically */
+        grid-template-columns: 1fr;
+        /* Stack vertically */
     }
-    
+
     body {
         padding: 16px;
     }
@@ -148,9 +180,9 @@ button.primary:active {
     input[type="range"] {
         height: 40px;
     }
-    
+
     button.primary {
-        padding: 16px; 
+        padding: 16px;
     }
 }
 
@@ -165,10 +197,12 @@ button.primary:active {
 
 .toggle-group {
     display: flex;
-    background: #e2e8f0; /* Light gray track */
+    background: #e2e8f0;
+    /* Light gray track */
     padding: 4px;
     border-radius: 8px;
-    gap: 4px; /* Space between buttons */
+    gap: 4px;
+    /* Space between buttons */
 }
 
 /* 1. Hide the actual radio input circle */
@@ -178,19 +212,24 @@ button.primary:active {
 
 /* 2. Style the Labels to look like Buttons */
 .toggle-group label {
-    display: flex;             /* 1. Make the label a container */
-    justify-content: center;   /* 2. Center horizontally */
+    display: flex;
+    /* 1. Make the label a container */
+    justify-content: center;
+    /* 2. Center horizontally */
     align-items: center;
-    flex: 1; /* Make them all equal width */
+    flex: 1;
+    /* Make them all equal width */
     text-align: center;
     padding: 8px 4px;
     font-size: 0.85rem;
     font-weight: 500;
     border-radius: 6px;
     cursor: pointer;
-    color: #64748b; /* Muted text */
+    color: #64748b;
+    /* Muted text */
     transition: all 0.2s ease;
-    user-select: none; /* Prevent text highlighting on clicks */
+    user-select: none;
+    /* Prevent text highlighting on clicks */
 }
 
 /* 3. Hover Effect */
@@ -201,10 +240,12 @@ button.primary:active {
 
 /* 4. Active (Checked) State */
 /* This magic selector targets the label immediately following a checked input */
-.toggle-group input[type="radio"]:checked + label {
+.toggle-group input[type="radio"]:checked+label {
     background: #ffffff;
-    color: var(--primary); /* Blue text */
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1); /* Subtle shadow pop */
+    color: var(--primary);
+    /* Blue text */
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    /* Subtle shadow pop */
     font-weight: 600;
 }
 
@@ -221,7 +262,8 @@ button.primary:active {
 .viewer-info {
     text-align: center;
     font-size: 0.85rem;
-    color: #94a3b8; /* Muted slate */
+    color: #94a3b8;
+    /* Muted slate */
     user-select: none;
 }
 
@@ -229,7 +271,7 @@ button.primary:active {
     position: relative;
     width: 100%;
     /* Remove fixed height to let canvas define it */
-    line-height: 0; 
+    line-height: 0;
     border-radius: 8px;
     overflow: hidden;
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
@@ -240,11 +282,6 @@ button.primary:active {
     display: block;
     width: 100%;
     height: auto;
-}
-
-/* Bottom Layer: Original */
-#originalCanvas {
-    /* Normal flow */
 }
 
 /* Top Layer: Processed */
@@ -269,17 +306,26 @@ button.primary:active {
 .slider-label {
     font-size: 0.8rem;
     font-weight: 600;
-    color: #94a3b8; /* Muted slate */
+    color: #94a3b8;
+    /* Muted slate */
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    width: 80px; /* Fixed width prevents jitter */
+    width: 80px;
+    /* Fixed width prevents jitter */
 }
 
-.slider-label:first-child { text-align: right; }
-.slider-label:last-child { text-align: left; color: var(--primary); }
+.slider-label:first-child {
+    text-align: right;
+}
+
+.slider-label:last-child {
+    text-align: left;
+    color: var(--primary);
+}
 
 .comparison-slider-input {
-    flex: 1; /* Take up remaining space */
+    flex: 1;
+    /* Take up remaining space */
     -webkit-appearance: none;
     appearance: none;
     height: 6px;
@@ -297,7 +343,7 @@ button.primary:active {
     background: white;
     border: 2px solid var(--primary);
     border-radius: 50%;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
     transition: transform 0.1s;
 }
 
@@ -312,6 +358,6 @@ button.primary:active {
     background: white;
     border: 2px solid var(--primary);
     border-radius: 50%;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
     transition: transform 0.1s;
 }

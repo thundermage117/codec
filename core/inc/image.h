@@ -73,6 +73,7 @@ public:
     int height() const { return m_height; }
     int channels() const { return m_channels; }
     size_t size() const { return m_data.size(); }
+    bool empty() const { return m_data.empty(); }
 
     // --- Pixel Access ---
     // Note: Version 1 uses .at() in loops. For maximum speed, 
