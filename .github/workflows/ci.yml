@@ -36,7 +36,7 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
           args: >
-            -Dsonar.cfamily.build-wrapper-output=bw-output
+            -Dsonar.cfamily.compile-commands=bw-output/compile_commands.json
             -Dsonar.coverageReportPaths=coverage.xml
 
   build-web:
@@ -78,6 +78,12 @@ jobs:
     needs: build-web
     # Only deploy on pushes to main, not PRs
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      deployments: write
+      contents: read
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.deployment_url }}
     steps:
       - uses: actions/checkout@v4
       
@@ -97,7 +103,10 @@ jobs:
         run: vercel build --prod --token=$VERCEL_TOKEN
 
       - name: Deploy Project Artifacts to Vercel
-        run: vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN
+        id: deploy
+        run: |
+          DEPLOY_URL=$(vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN --yes)
+          echo "deployment_url=$DEPLOY_URL" >> $GITHUB_OUTPUT
     env:
       VERCEL_ORG_ID: ${{ secrets.ORGID }}
       VERCEL_PROJECT_ID: ${{ secrets.PROJECTID }}
