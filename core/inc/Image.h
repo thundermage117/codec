@@ -29,11 +29,12 @@ public:
     Image(int width, int height, int channels)
         : m_width(width),
           m_height(height),
-          m_channels(channels),
-          m_data(static_cast<size_t>(width) * height * channels, 0.0)
+          m_channels(channels)
     {
         if (width <= 0 || height <= 0 || channels <= 0)
             throw std::invalid_argument("Invalid image dimensions");
+        
+        m_data.resize(static_cast<size_t>(width) * height * channels, 0.0);
     }
 
     // --- Copy Semantics ---

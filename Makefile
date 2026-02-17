@@ -18,7 +18,7 @@ NATIVE_APP_NAME = codec_app
 NPROCS = $(shell sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
 
 # --- PHONY TARGETS ---
-.PHONY: all web web-dev native dev clean
+.PHONY: all web web-dev native dev clean test
 
 # Default: Build & Run Native
 all: dev
@@ -52,6 +52,13 @@ dev:
 	@echo "🚀 Running Native App..."
 	@cd build && ./$(NATIVE_APP_NAME)
 
+# 4. Run Tests
+test:
+	@echo "🧪 Running Tests..."
+	@mkdir -p build
+	@cd build && cmake .. && make -j$(NPROCS)
+	@cd build && ctest --output-on-failure
+
 # ------------------------------------
 # 🧹 CLEANUP
 # ------------------------------------
@@ -59,5 +66,8 @@ dev:
 clean:
 	@echo "🧹 Cleaning..."
 	rm -f web/public/codec.js web/public/codec.wasm
-	rm -rf build
+	# Delete everything in build EXCEPT for the _deps folder (to keep GTest)
+	@if [ -d build ]; then \
+		find build -mindepth 1 -maxdepth 1 ! -name '_deps' -exec rm -rf {} +; \
+	fi
 	@echo "✨ Done."
