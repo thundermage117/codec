@@ -70,6 +70,14 @@ coverage:
 	# In gcovr 8.6, we use the search path at the end instead of --build-root
 	gcovr --sonarqube -o coverage.xml -r . --filter core/src/ -e build/ --gcov-ignore-parse-errors=all build
 
+# 6. Sanitize (ASan + UBSan)
+sanitize:
+	@echo "🛡️ Running with Sanitizers..."
+	@mkdir -p build
+	@if [ -d build/CMakeCache.txt ]; then rm build/CMakeCache.txt; fi
+	@cd build && cmake .. -DENABLE_SANITIZERS=ON && make -j$(NPROCS)
+	@cd build && ctest --output-on-failure
+
 # ------------------------------------
 # 🧹 CLEANUP
 # ------------------------------------

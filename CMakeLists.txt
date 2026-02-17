@@ -23,6 +23,16 @@ if(ENABLE_COVERAGE)
     endif()
 endif()
 
+# --- Sanitizers ---
+option(ENABLE_SANITIZERS "Enable ASan and UBSan" OFF)
+if(ENABLE_SANITIZERS)
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+        message(STATUS "Enabling AddressSanitizer and UndefinedBehaviorSanitizer")
+        add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
+        add_link_options(-fsanitize=address,undefined)
+    endif()
+endif()
+
 # --- Subdirectories ---
 add_subdirectory(core)
 add_subdirectory(apps/native)
