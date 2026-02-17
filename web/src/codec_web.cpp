@@ -173,4 +173,38 @@ double get_ssim_cb() {
     return g_session.initialized ? g_session.metrics.ssimCb : 0.0;
 }
 
+
+// Re-declaring to match the plan's arguments
+EMSCRIPTEN_KEEPALIVE
+double* inspect_block_data(int blockX, int blockY, int channelIndex, int quality) {
+    if (!g_session.initialized) return nullptr;
+
+    Image ycrcb = bgrToYCrCb(g_session.originalImage);
+    Image channel(ycrcb.width(), ycrcb.height(), 1);
+    const double* src = ycrcb.data();
+    double* dst = channel.data();
+    int offset = (channelIndex == 0) ? 0 : (channelIndex == 1 ? 1 : 2); // Y=0, Cr=1, Cb=2
+
+    const size_t numPixels = static_cast<size_t>(ycrcb.width()) * ycrcb.height();
+    for(size_t i=0; i < numPixels; ++i) {
+        dst[i] = src[i*3 + offset];
+    }
+
+    bool isChroma = (channelIndex != 0);
+    
+    // Create temp codec
+    // Note: CS mode doesn't affect the *inspection* of a single 8x8 block of the *source* image 
+    // vis-a-vis the quantization tables. Subsampling logic happens before this in the pipeline typically,
+    // but `inspectBlock` treats the input image as the plane to be blocked.
+    // If we want to inspect the *subsampled* block, we would need to pass the subsampled image.
+    // For simplicity, let's inspect the Full Resolution block using the appropriate Quant Table.
+    ImageCodec codec(quality, true, ImageCodec::ChromaSubsampling::CS_444);
+    
+    static ImageCodec::BlockDebugData debugData; // Static to persist return pointer
+    debugData = codec.inspectBlock(channel, blockX, blockY, isChroma);
+
+    // Return pointer to the start of the struct (which is just a sequence of double[8][8])
+    return (double*)&debugData;
+}
+
 } // extern "C"

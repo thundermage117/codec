@@ -1,0 +1,70 @@
+:root {
+    --primary: #2563eb;
+    --primary-hover: #1d4ed8;
+    --primary-subtle: rgba(37, 99, 235, 0.06);
+
+    --bg: #f8fafc;
+    --bg-secondary: #f1f5f9;
+    --bg-tertiary: #e2e8f0;
+
+    --card-bg: #ffffff;
+    --text: #1e293b;
+    --text-muted: #64748b;
+    --border: #e2e8f0;
+
+    --success-bg: #dcfce7;
+    --success-text: #166534;
+    --success-color: #16a34a;
+
+    --toggle-bg: #e2e8f0;
+    --toggle-active-bg: #ffffff;
+    --toggle-label: #64748b;
+
+    --tooltip-bg: #1e293b;
+    --tooltip-text: #ffffff;
+
+    --viewer-bg: #0f172a;
+    --shadow-color: rgba(0, 0, 0, 0.1);
+
+    /* Inspector cell colors */
+    --cell-positive: #ef4444;
+    --cell-negative: #3b82f6;
+    --cell-zero: #94a3b8;
+
+    /* Fonts */
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: 'JetBrains Mono', 'SF Mono', 'Menlo', 'Monaco', monospace;
+}
+
+[data-theme="dark"] {
+    --primary: #3b82f6;
+    --primary-hover: #60a5fa;
+    --primary-subtle: rgba(59, 130, 246, 0.1);
+
+    --bg: #0f172a;
+    --bg-secondary: #1e293b;
+    --bg-tertiary: #334155;
+
+    --card-bg: #1e293b;
+    --text: #e2e8f0;
+    --text-muted: #94a3b8;
+    --border: #334155;
+
+    --success-bg: rgba(22, 163, 74, 0.15);
+    --success-text: #4ade80;
+    --success-color: #4ade80;
+
+    --toggle-bg: #334155;
+    --toggle-active-bg: #475569;
+    --toggle-label: #94a3b8;
+
+    --tooltip-bg: #334155;
+    --tooltip-text: #e2e8f0;
+
+    --viewer-bg: #020617;
+    --shadow-color: rgba(0, 0, 0, 0.4);
+
+    --cell-positive: #f87171;
+    --cell-negative: #60a5fa;
+    --cell-zero: #64748b;
+}

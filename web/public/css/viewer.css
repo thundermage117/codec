@@ -1,0 +1,115 @@
+canvas {
+    max-width: 100%;
+    height: auto;
+    display: block;
+}
+
+.canvas-wrapper {
+    background: var(--viewer-bg);
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    transition: background-color 0.3s ease;
+}
+
+.viewer-info {
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    user-select: none;
+}
+
+.comparison-viewer {
+    position: relative;
+    width: 100%;
+    line-height: 0;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+    cursor: col-resize;
+}
+
+.comparison-viewer canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+#processedCanvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    clip-path: polygon(50% 0, 100% 0, 100% 100%, 50% 100%);
+}
+
+/* Slider */
+.slider-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 8px;
+}
+
+.slider-container.disabled {
+    opacity: 0.5;
+    pointer-events: none;
+    filter: grayscale(100%);
+}
+
+.slider-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    width: 80px;
+}
+
+.slider-label:first-child {
+    text-align: right;
+}
+
+.slider-label:last-child {
+    text-align: left;
+    color: var(--primary);
+}
+
+.comparison-slider-input {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 6px;
+    background: linear-gradient(to right, var(--text-muted) 0%, var(--primary) 100%);
+    border-radius: 3px;
+    outline: none;
+    cursor: pointer;
+}
+
+.comparison-slider-input::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    background: white;
+    border: 2px solid var(--primary);
+    border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    transition: transform 0.1s;
+}
+
+.comparison-slider-input::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+}
+
+.comparison-slider-input::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    background: white;
+    border: 2px solid var(--primary);
+    border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    transition: transform 0.1s;
+}

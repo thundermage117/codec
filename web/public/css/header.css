@@ -1,0 +1,84 @@
+header {
+    text-align: center;
+    margin-bottom: 32px;
+}
+
+h1 {
+    margin: 0 0 12px 0;
+    font-size: 1.8rem;
+    letter-spacing: -0.025em;
+}
+
+.header-badges {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.privacy-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background-color: var(--success-bg);
+    color: var(--success-text);
+    padding: 6px 12px;
+    border-radius: 99px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    box-shadow: 0 1px 2px var(--shadow-color);
+}
+
+.github-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background-color: var(--bg-secondary);
+    color: var(--text-muted);
+    padding: 6px 12px;
+    border-radius: 99px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-decoration: none;
+    box-shadow: 0 1px 2px var(--shadow-color);
+    transition: all 0.2s ease;
+}
+
+.github-link:hover {
+    background-color: var(--bg-tertiary);
+    color: var(--text);
+    transform: translateY(-1px);
+}
+
+/* Dark Mode Toggle */
+.theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--border);
+    border-radius: 99px;
+    background: var(--bg-secondary);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 2px var(--shadow-color);
+}
+
+.theme-toggle:hover {
+    background: var(--bg-tertiary);
+    color: var(--text);
+    transform: translateY(-1px);
+}
+
+.theme-toggle svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* GitHub logo invert in dark mode */
+[data-theme="dark"] .github-link img {
+    filter: invert(1);
+}

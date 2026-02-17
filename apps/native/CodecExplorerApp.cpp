@@ -78,6 +78,7 @@ CodecExplorerApp::CodecExplorerApp(const std::string& imagePath, ImageCodec::Chr
     // Per OpenCV warning, use nullptr for the value pointer and set the position manually.
     cv::createTrackbar("Quality", m_state.windowName, nullptr, 100, onQualityChangeStatic, this);
     cv::setTrackbarPos("Quality", m_state.windowName, m_quality);
+    cv::setMouseCallback(m_state.windowName, onMouseStatic, this);
 }
 
 void CodecExplorerApp::run() {
@@ -105,7 +106,9 @@ void CodecExplorerApp::handleKey(int key) {
     else if (key == 't') { m_useTint = !m_useTint;                      viewChanged = true; }
     else if (key == '4') { m_chromaSubsampling = ImageCodec::ChromaSubsampling::CS_444; codecChanged = true; }
     else if (key == '2') { m_chromaSubsampling = ImageCodec::ChromaSubsampling::CS_422; codecChanged = true; }
+    else if (key == '2') { m_chromaSubsampling = ImageCodec::ChromaSubsampling::CS_422; codecChanged = true; }
     else if (key == '0') { m_chromaSubsampling = ImageCodec::ChromaSubsampling::CS_420; codecChanged = true; }
+    else if (key == 'c') { m_showInspection = false; viewChanged = true; }
 
 
     if (codecChanged) {
@@ -126,6 +129,72 @@ void CodecExplorerApp::onQualityChangeStatic(int quality, void* userdata) {
 void CodecExplorerApp::onQualityChange(int quality) {
     m_quality = std::max(1, quality);
     updateCodecOutput();
+    updateCodecOutput();
+    render();
+}
+
+void CodecExplorerApp::onMouseStatic(int event, int x, int y, int flags, void* userdata) {
+    auto* app = static_cast<CodecExplorerApp*>(userdata);
+    if (app) {
+        app->onMouse(event, x, y, flags);
+    }
+}
+
+void CodecExplorerApp::onMouse(int event, int x, int y, int flags) {
+    if (event == cv::EVENT_LBUTTONDOWN) {
+        // Check if click is within the original image area (top-left)
+        if (x < m_state.originalImage.width() && y < m_state.originalImage.height()) {
+            inspectBlockAt(x, y);
+        } else {
+            // Hide inspection if clicked elsewhere
+            m_showInspection = false;
+            render();
+        }
+    }
+}
+
+void CodecExplorerApp::inspectBlockAt(int x, int y) {
+    m_selectedBlockX = x / 8;
+    m_selectedBlockY = y / 8;
+    m_showInspection = true;
+
+    ImageCodec codec(m_quality, true, m_chromaSubsampling);
+    
+    // Determine which channel we are inspecting based on view mode
+    if (m_state.mode == AppState::ViewMode::Cr) {
+        // Need to pass the Cr channel. BUT wait, inspectBlock expects the input channel.
+        // We need to extract the channel from the ORIGINAL image first, as per logic
+        // But `inspectBlock` does internally convert if we passed the whole image? No.
+        // `inspectBlock` takes a channel Image.
+        
+        // We need the original YCrCb image to pass the correct channel
+        Image ycrcb = bgrToYCrCb(m_state.originalImage);
+        Image cr(ycrcb.width(), ycrcb.height(), 1);
+        const double* src = ycrcb.data();
+        double* dst = cr.data();
+        for(size_t i=0; i<ycrcb.width()*ycrcb.height(); ++i) dst[i] = src[i*3 + 1];
+
+        m_inspectionData = codec.inspectBlock(cr, m_selectedBlockX, m_selectedBlockY, true);
+
+    } else if (m_state.mode == AppState::ViewMode::Cb) {
+        Image ycrcb = bgrToYCrCb(m_state.originalImage);
+        Image cb(ycrcb.width(), ycrcb.height(), 1);
+        const double* src = ycrcb.data();
+        double* dst = cb.data();
+        for(size_t i=0; i<ycrcb.width()*ycrcb.height(); ++i) dst[i] = src[i*3 + 2];
+
+        m_inspectionData = codec.inspectBlock(cb, m_selectedBlockX, m_selectedBlockY, true);
+    } else {
+        // Default to Y for RGB, Artifacts, or Y mode
+        Image ycrcb = bgrToYCrCb(m_state.originalImage);
+        Image y(ycrcb.width(), ycrcb.height(), 1);
+        const double* src = ycrcb.data();
+        double* dst = y.data();
+        for(size_t i=0; i<ycrcb.width()*ycrcb.height(); ++i) dst[i] = src[i*3 + 0];
+
+        m_inspectionData = codec.inspectBlock(y, m_selectedBlockX, m_selectedBlockY, false);
+    }
+
     render();
 }
 
@@ -225,4 +294,49 @@ void CodecExplorerApp::render() {
     drawMetricsDashboard(viewWithFooter, dashboardX, yBase, m_state.metrics);
 
     cv::imshow(m_state.windowName, viewWithFooter);
+
+    if (m_showInspection) {
+        // Create an overlay or a separate window for block details
+        // Increased size to prevent overlap
+        cv::Mat inspectionView(600, 800, CV_8UC3, cv::Scalar(30,30,30));
+        
+        // Add footer instruction
+        cv::putText(inspectionView, "Press 'c' to close", {10, 580}, cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(150,150,150), 1);
+
+        auto drawGrid = [&](int offsetX, int offsetY, const char* title, double data[8][8], bool isInt) {
+            cv::putText(inspectionView, title, {offsetX, offsetY - 10}, cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(200,200,200), 1);
+            for(int i=0; i<8; ++i) {
+                for(int j=0; j<8; ++j) {
+                    std::string valStr;
+                    if (isInt) {
+                        valStr = std::to_string((int)std::round(data[i][j]));
+                    } else {
+                        std::ostringstream oss;
+                        oss << std::fixed << std::setprecision(1) << data[i][j];
+                        valStr = oss.str();
+                    }
+                    
+                    cv::Scalar color(255,255,255);
+                    if (data[i][j] == 0) color = cv::Scalar(100,100,100);
+
+                    // Increased spacing: 40 -> 50 for X, 20 -> 25 for Y
+                    int px = offsetX + j * 45;
+                    int py = offsetY + i * 25;
+                    cv::putText(inspectionView, valStr, {px, py}, cv::FONT_HERSHEY_SIMPLEX, 0.35, color, 1);
+                }
+            }
+        };
+
+        // Adjusted positions
+        drawGrid(20, 50, "Original", m_inspectionData.original, true);
+        drawGrid(420, 50, "DCT", m_inspectionData.dct, false);
+        drawGrid(20, 300, "Quantized", m_inspectionData.quantized, true);
+        drawGrid(420, 300, "Reconstructed", m_inspectionData.reconstructed, true);
+
+        cv::imshow("Block Inspection", inspectionView);
+    } else {
+        try {
+            cv::destroyWindow("Block Inspection");
+        } catch(...) {}
+    }
 }
