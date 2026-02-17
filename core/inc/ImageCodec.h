@@ -59,6 +59,17 @@ private:
                          const double quantTable[8][8]);
     Image downsampleChannel(const Image& channel, ChromaSubsampling cs) const;
     Image upsampleChannel(const Image& channel, int targetWidth, int targetHeight, ChromaSubsampling cs) const;
+
+public:
+    struct BlockDebugData {
+        double original[8][8];
+        double dct[8][8];
+        double quantTable[8][8];
+        double quantized[8][8];
+        double reconstructed[8][8];
+    };
+
+    BlockDebugData inspectBlock(const Image& channel, int blockX, int blockY, bool isChroma = false);
 };
 
 #endif

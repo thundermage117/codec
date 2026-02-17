@@ -304,3 +304,85 @@ Image ImageCodec::process(const Image& bgrImage)
 
     return ycrcbToBgr(merged);
 }
+
+ImageCodec::BlockDebugData ImageCodec::inspectBlock(const Image& channel, int blockX, int blockY, bool isChroma) {
+    BlockDebugData data;
+    const double (*quantTable)[8] = isChroma ? m_chromaQuantTable : m_lumaQuantTable;
+
+    // 1. Copy Quantization Table
+    for(int i=0; i<8; ++i) {
+        for(int j=0; j<8; ++j) {
+            data.quantTable[i][j] = quantTable[i][j];
+        }
+    }
+
+    // 2. Extract Original Block
+    // Ensure we don't go out of bounds
+    int startX = blockX * 8;
+    int startY = blockY * 8;
+    
+    // Fill with zeros first
+    for(int i=0; i<8; ++i) 
+        for(int j=0; j<8; ++j) 
+            data.original[i][j] = 0.0;
+
+    const double* channelData = channel.data();
+    int width = channel.width();
+    int height = channel.height();
+
+    for(int i=0; i<8; ++i) {
+        for(int j=0; j<8; ++j) {
+            int y = startY + i;
+            int x = startX + j;
+            if (x < width && y < height) {
+                data.original[i][j] = channelData[y * width + x];
+            }
+        }
+    }
+
+    // 3. DCT
+    double blockCentered[8][8];
+    for(int i=0; i<8; ++i)
+        for(int j=0; j<8; ++j)
+            blockCentered[i][j] = data.original[i][j] - 128.0;
+    
+    dct8x8(blockCentered, data.dct);
+
+    // 4. Quantization
+    if (m_enableQuantization) {
+        for(int i=0; i<8; ++i) {
+            for(int j=0; j<8; ++j) {
+                double coeff = data.dct[i][j] / quantTable[i][j];
+                data.quantized[i][j] = std::round(coeff); // Store integer index
+                // But for display in "Quantized" view, we might want the actual integer value
+                // In processChannel we do: dctBlock[i][j] = std::round(coeff) * quantTable[i][j];
+                // effectively dequantizing immediately.
+                // Let's store the quantized integer index in `quantized`
+            }
+        }
+    } else {
+         for(int i=0; i<8; ++i)
+            for(int j=0; j<8; ++j)
+                data.quantized[i][j] = data.dct[i][j];
+    }
+
+    // 5. Dequantization & IDCT (Reconstruction)
+    double dequantized[8][8];
+    for(int i=0; i<8; ++i) {
+        for(int j=0; j<8; ++j) {
+            if (m_enableQuantization)
+                dequantized[i][j] = data.quantized[i][j] * quantTable[i][j];
+            else
+                dequantized[i][j] = data.quantized[i][j];
+        }
+    }
+
+    double reconBlock[8][8];
+    idct8x8(dequantized, reconBlock);
+
+    for(int i=0; i<8; ++i)
+        for(int j=0; j<8; ++j)
+            data.reconstructed[i][j] = reconBlock[i][j] + 128.0;
+
+    return data;
+}

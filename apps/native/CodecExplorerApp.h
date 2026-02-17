@@ -48,8 +48,19 @@ private:
     static void onQualityChangeStatic(int quality, void* userdata);
     void onQualityChange(int quality);
 
+    // Mouse Handling
+    static void onMouseStatic(int event, int x, int y, int flags, void* userdata);
+    void onMouse(int event, int x, int y, int flags);
+    void inspectBlockAt(int x, int y);
+
     AppState m_state;
     int m_quality = 50;
     ImageCodec::ChromaSubsampling m_chromaSubsampling;
     bool m_useTint = true;
+
+    // Inspection State
+    bool m_showInspection = false;
+    int m_selectedBlockX = 0;
+    int m_selectedBlockY = 0;
+    ImageCodec::BlockDebugData m_inspectionData;
 };
