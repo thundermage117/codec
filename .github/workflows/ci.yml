@@ -11,32 +11,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Essential for SonarCloud to see history/blame
 
       - name: Install Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake g++ libopencv-dev
+          pip install gcovr==8.6
 
-      - name: Cache GoogleTest
-        id: cache-gtest
-        uses: actions/cache@v4
+      # Use a dedicated directory for build wrapper output
+      # This replaces the old 'build-wrapper-action'
+      - name: Install Build Wrapper
+        uses: SonarSource/sonarqube-scan-action/install-build-wrapper@a31c9398be7ace6bbfaf30c0bd5d415f843d45e9
+
+      - name: Run Build Wrapper
+        run: |
+          build-wrapper-linux-x86-64 --out-dir bw-output make coverage
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarqube-scan-action@a31c9398be7ace6bbfaf30c0bd5d415f843d45e9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
-          path: build/_deps
-          # If you change the GTest version, the hash changes and the cache clears
-          key: ${{ runner.os }}-gtest-${{ hashFiles('core/tests/CMakeLists.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-gtest-
-
-      - name: Configure and Build
-        run: |
-          # -B creates the build folder if it doesn't exist
-          cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
-          cmake --build build --config Release -j $(nproc)
-
-      - name: Run Tests
-        run: |
-          cd build
-          ctest --output-on-failure
+          args: >
+            -Dsonar.cfamily.build-wrapper-output=bw-output
+            -Dsonar.coverageReportPaths=coverage.xml
 
   build-web:
     runs-on: ubuntu-latest

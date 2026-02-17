@@ -59,6 +59,17 @@ test:
 	@cd build && cmake .. && make -j$(NPROCS)
 	@cd build && ctest --output-on-failure
 
+# 5. Coverage
+coverage:
+	@echo "📊 Generating Coverage..."
+	@mkdir -p build
+	@find build -name "*.gcda" -delete 
+	@cd build && cmake .. -DENABLE_COVERAGE=ON && make -j$(NPROCS)
+	@cd build && ctest --output-on-failure
+	@echo "📈 Generating Sonar-compatible XML report..."
+	# In gcovr 8.6, we use the search path at the end instead of --build-root
+	gcovr --sonarqube -o coverage.xml -r . --filter core/src/ -e build/ --gcov-ignore-parse-errors=all build
+
 # ------------------------------------
 # 🧹 CLEANUP
 # ------------------------------------
