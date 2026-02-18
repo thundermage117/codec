@@ -31,6 +31,12 @@
     --cell-negative: #3b82f6;
     --cell-zero: #94a3b8;
 
+    /* Glass / Inspector accents */
+    --card-bg-glass: rgba(255, 255, 255, 0.8);
+    --border-subtle: rgba(0, 0, 0, 0.06);
+    --bg-hover: rgba(0, 0, 0, 0.04);
+    --primary-light: #eff6ff;
+
     /* Fonts */
     --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     --font-mono: 'JetBrains Mono', 'SF Mono', 'Menlo', 'Monaco', monospace;
@@ -67,4 +73,10 @@
     --cell-positive: #f87171;
     --cell-negative: #60a5fa;
     --cell-zero: #64748b;
+
+    /* Glass / Inspector accents */
+    --card-bg-glass: rgba(15, 23, 42, 0.8);
+    --border-subtle: rgba(255, 255, 255, 0.06);
+    --bg-hover: rgba(255, 255, 255, 0.06);
+    --primary-light: rgba(59, 130, 246, 0.15);
 }

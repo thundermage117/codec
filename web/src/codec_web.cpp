@@ -175,10 +175,44 @@ double get_ssim_cb() {
 
 
 // Re-declaring to match the plan's arguments
+// Helper to downsample a channel (simple averaging)
+Image downsample_channel(const Image& src, ImageCodec::ChromaSubsampling cs) {
+    if (cs == ImageCodec::ChromaSubsampling::CS_444) return src;
+
+    int w = src.width();
+    int h = src.height();
+    int scaleX = (cs == ImageCodec::ChromaSubsampling::CS_444) ? 1 : 2;
+    int scaleY = (cs == ImageCodec::ChromaSubsampling::CS_420) ? 2 : 1;
+
+    int newW = (w + scaleX - 1) / scaleX;
+    int newH = (h + scaleY - 1) / scaleY;
+
+    Image dst(newW, newH, 1);
+    
+    for (int y = 0; y < newH; ++y) {
+        for (int x = 0; x < newW; ++x) {
+            double sum = 0.0;
+            int count = 0;
+            int startX = x * scaleX;
+            int startY = y * scaleY;
+            
+            for (int dy = 0; dy < scaleY && (startY + dy) < h; ++dy) {
+                for (int dx = 0; dx < scaleX && (startX + dx) < w; ++dx) {
+                    sum += src.at(startX + dx, startY + dy, 0);
+                    count++;
+                }
+            }
+            dst.at(x, y, 0) = count > 0 ? sum / count : 0.0;
+        }
+    }
+    return dst;
+}
+
 EMSCRIPTEN_KEEPALIVE
-double* inspect_block_data(int blockX, int blockY, int channelIndex, int quality) {
+double* inspect_block_data(int blockX, int blockY, int channelIndex, int quality, int cs_mode) {
     if (!g_session.initialized) return nullptr;
 
+    // 1. Extract the specific channel from original image
     Image ycrcb = bgrToYCrCb(g_session.originalImage);
     Image channel(ycrcb.width(), ycrcb.height(), 1);
     const double* src = ycrcb.data();
@@ -191,19 +225,32 @@ double* inspect_block_data(int blockX, int blockY, int channelIndex, int quality
     }
 
     bool isChroma = (channelIndex != 0);
+    auto cs = map_cs_mode(cs_mode);
     
-    // Create temp codec
-    // Note: CS mode doesn't affect the *inspection* of a single 8x8 block of the *source* image 
-    // vis-a-vis the quantization tables. Subsampling logic happens before this in the pipeline typically,
-    // but `inspectBlock` treats the input image as the plane to be blocked.
-    // If we want to inspect the *subsampled* block, we would need to pass the subsampled image.
-    // For simplicity, let's inspect the Full Resolution block using the appropriate Quant Table.
-    ImageCodec codec(quality, true, ImageCodec::ChromaSubsampling::CS_444);
-    
-    static ImageCodec::BlockDebugData debugData; // Static to persist return pointer
-    debugData = codec.inspectBlock(channel, blockX, blockY, isChroma);
+    // 2. Handle Chroma Subsampling
+    // If we are looking at Chroma and we are in 4:2:0/4:2:2, the "block" 
+    // corresponds to a downsampled area.
+    Image blockSource = channel;
+    int targetBx = blockX;
+    int targetBy = blockY;
 
-    // Return pointer to the start of the struct (which is just a sequence of double[8][8])
+    if (isChroma && cs != ImageCodec::ChromaSubsampling::CS_444) {
+        blockSource = downsample_channel(channel, cs);
+        
+        // Map 8x8 block coords in original space to 8x8 block coords in downsampled space
+        // 4:2:0 -> 2x2 original blocks = 1 chroma block
+        int scaleX = 2; // 4:2:2 and 4:2:0 both halve width
+        int scaleY = (cs == ImageCodec::ChromaSubsampling::CS_420) ? 2 : 1;
+        
+        targetBx = blockX / scaleX;
+        targetBy = blockY / scaleY;
+    }
+
+    // 3. Inspect the block
+    ImageCodec codec(quality, true, cs);
+    static ImageCodec::BlockDebugData debugData;
+    debugData = codec.inspectBlock(blockSource, targetBx, targetBy, isChroma);
+
     return (double*)&debugData;
 }
 

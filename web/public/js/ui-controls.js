@@ -3,7 +3,7 @@ import { processImage, setViewTint, inspectBlockData } from './wasm-bridge.js';
 import { inspectBlock } from './inspection.js';
 import { getOriginalContext } from './image-manager.js';
 
-export function setupControls(renderCallback) {
+export function setupControls(renderCallback, enterInspectorMode) {
     const qualitySlider = document.getElementById('qualitySlider');
     const qualityValue = document.getElementById('qualityValue');
     const viewModeRadios = document.querySelectorAll('input[name="view_mode"]');
@@ -13,9 +13,13 @@ export function setupControls(renderCallback) {
     const comparisonViewer = document.querySelector('.comparison-viewer');
     const inspectToggle = document.getElementById('inspect_mode');
     const sliderContainer = document.querySelector('.slider-container');
-    const inspectionPanel = document.getElementById('inspectionPanel');
-    const inspectorContent = document.getElementById('inspectorContent');
-    const inspectorPlaceholder = document.getElementById('inspectorPlaceholder');
+
+    // Inspector sidebar controls
+    const inspQualitySlider = document.getElementById('inspQualitySlider');
+    const inspQualityValue = document.getElementById('inspQualityValue');
+    const inspViewModeRadios = document.querySelectorAll('input[name="insp_view_mode"]');
+    const inspCSRadios = document.querySelectorAll('input[name="insp_chroma_subsampling"]');
+    const inspPresetBtns = document.querySelectorAll('.insp-preset-btn');
 
     // Debounce helper
     function debounce(func, wait) {
@@ -32,7 +36,7 @@ export function setupControls(renderCallback) {
 
     // Re-inspect the current block after settings change
     function reinspectIfNeeded() {
-        if (state.isInspectMode && state.inspectedBlock && state.wasmReady) {
+        if (state.inspectedBlock && state.wasmReady) {
             inspectBlock(state.inspectedBlock.x, state.inspectedBlock.y);
         }
     }
@@ -40,6 +44,16 @@ export function setupControls(renderCallback) {
     const debouncedUpdate = debounce(() => {
         if (!state.wasmReady || !state.originalImageData) return;
         processImage(parseInt(qualitySlider.value), state.currentCsMode);
+        renderCallback();
+        reinspectIfNeeded();
+        updateFileSizeEstimate();
+    }, 150);
+
+    // Inspector sidebar debounced update — processes with inspector slider
+    const debouncedInspUpdate = debounce(() => {
+        if (!state.wasmReady || !state.originalImageData) return;
+        const quality = inspQualitySlider ? parseInt(inspQualitySlider.value) : 50;
+        processImage(quality, state.currentCsMode);
         renderCallback();
         reinspectIfNeeded();
         updateFileSizeEstimate();
@@ -53,8 +67,8 @@ export function setupControls(renderCallback) {
         });
     }
 
-    // Quality Presets
-    const presetBtns = document.querySelectorAll('.preset-btn');
+    // Quality Presets (viewer)
+    const presetBtns = document.querySelectorAll('.preset-btn:not(.insp-preset-btn)');
     presetBtns.forEach(btn => {
         btn.addEventListener('click', () => {
             const q = parseInt(btn.dataset.quality);
@@ -109,51 +123,46 @@ export function setupControls(renderCallback) {
         });
     }
 
+    // ===== Inspect Toggle → triggers full-page inspector mode =====
     if (inspectToggle) {
         inspectToggle.addEventListener('change', (e) => {
-            state.isInspectMode = e.target.checked;
-            if (comparisonViewer) {
-                comparisonViewer.style.cursor = state.isInspectMode ? 'crosshair' : 'col-resize';
-            }
+            if (e.target.checked) {
+                state.isInspectMode = true;
 
-            if (sliderContainer) {
-                if (state.isInspectMode) {
+                if (comparisonViewer) {
+                    comparisonViewer.style.cursor = 'crosshair';
+                }
+                if (sliderContainer) {
                     sliderContainer.classList.add('disabled');
                     if (comparisonSlider) comparisonSlider.disabled = true;
-                } else {
+                }
+
+                // Enter full-page inspector mode
+                if (enterInspectorMode) enterInspectorMode();
+            } else {
+                state.isInspectMode = false;
+                state.highlightBlock = null;
+                state.inspectedBlock = null;
+
+                if (comparisonViewer) {
+                    comparisonViewer.style.cursor = 'col-resize';
+                }
+                if (sliderContainer) {
                     sliderContainer.classList.remove('disabled');
                     if (comparisonSlider) comparisonSlider.disabled = false;
                 }
-            }
 
-            // Show/hide inline inspector panel
-            if (inspectionPanel) {
-                if (state.isInspectMode) {
-                    inspectionPanel.style.display = 'block';
-                    // Reset to placeholder until a block is clicked
-                    if (inspectorContent) inspectorContent.style.display = 'none';
-                    if (inspectorPlaceholder) inspectorPlaceholder.style.display = 'flex';
-                } else {
-                    inspectionPanel.style.display = 'none';
-                }
+                renderCallback();
             }
-
-            if (!state.isInspectMode) {
-                state.highlightBlock = null;
-                state.inspectedBlock = null;
-            }
-            renderCallback();
         });
     }
 
     // Comparison Viewer Interaction
     if (comparisonViewer && comparisonSlider) {
-        // Slider update
         comparisonSlider.addEventListener('input', (e) => {
             updateComparisonView(e.target.value);
         });
 
-        // Mouse/Touch interaction
         const handleInteraction = (clientX) => {
             const rect = comparisonViewer.getBoundingClientRect();
             const x = clientX - rect.left;
@@ -184,8 +193,6 @@ export function setupControls(renderCallback) {
                 const x = e.clientX - rect.left;
                 const y = e.clientY - rect.top;
 
-                // Scale to image coords
-                const originalCanvas = document.getElementById('originalCanvas'); // use dimensions from here
                 const scaleX = state.imgWidth / rect.width;
                 const scaleY = state.imgHeight / rect.height;
 
@@ -199,7 +206,7 @@ export function setupControls(renderCallback) {
                     const blockY = Math.floor(imgY / 8);
                     state.highlightBlock = { x: blockX, y: blockY };
                 }
-                renderCallback(); // Re-render to show highlight
+                renderCallback();
             }
         });
 
@@ -210,12 +217,78 @@ export function setupControls(renderCallback) {
 
         comparisonViewer.addEventListener('click', (e) => {
             if (state.isInspectMode && state.highlightBlock && state.wasmReady) {
-                inspectBlock(state.highlightBlock.x, state.highlightBlock.y);
+                // Click on viewer: inspect block and enter inspector mode
+                state.inspectedBlock = { x: state.highlightBlock.x, y: state.highlightBlock.y };
+                if (enterInspectorMode) enterInspectorMode();
             }
         });
     }
 
-    // No close button needed for inline inspector
+    // ===== Inspector Sidebar Controls =====
+
+    // Inspector Quality Slider
+    if (inspQualitySlider) {
+        inspQualitySlider.addEventListener('input', () => {
+            if (inspQualityValue) inspQualityValue.textContent = inspQualitySlider.value;
+            updateInspPresetHighlight(parseInt(inspQualitySlider.value));
+            if (state.originalImageData) debouncedInspUpdate();
+        });
+    }
+
+    // Inspector Quality Presets
+    inspPresetBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const q = parseInt(btn.dataset.quality);
+            if (inspQualitySlider) {
+                inspQualitySlider.value = q;
+                if (inspQualityValue) inspQualityValue.textContent = q;
+            }
+            updateInspPresetHighlight(q);
+            if (state.originalImageData) debouncedInspUpdate();
+        });
+    });
+
+    function updateInspPresetHighlight(quality) {
+        inspPresetBtns.forEach(btn => {
+            const bq = parseInt(btn.dataset.quality);
+            btn.classList.toggle('active', bq === quality);
+        });
+    }
+
+    // Inspector View Mode
+    inspViewModeRadios.forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            switch (e.target.value) {
+                case 'y': state.currentViewMode = ViewMode.Y; break;
+                case 'cr': state.currentViewMode = ViewMode.Cr; break;
+                case 'cb': state.currentViewMode = ViewMode.Cb; break;
+            }
+            updateChromaControls();
+
+            if (state.originalImageData) {
+                renderCallback();
+                reinspectIfNeeded();
+            }
+        });
+    });
+
+    // Inspector Chroma Subsampling
+    inspCSRadios.forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            state.currentCsMode = parseInt(e.target.value, 10);
+
+            if (state.originalImageData) debouncedInspUpdate();
+        });
+    });
+
+    // Helper to disable chroma controls when in Y mode
+    function updateChromaControls() {
+        const isYMode = state.currentViewMode === ViewMode.Y;
+        inspCSRadios.forEach(radio => { radio.disabled = isYMode; });
+    }
+
+    // Initialize state
+    updateChromaControls();
 }
 
 export function updateComparisonView(percent) {
@@ -242,10 +315,8 @@ export function updateFileSizeEstimate() {
     const h = state.imgHeight;
     const totalPixels = w * h;
 
-    // Original: uncompressed RGB bytes
     const originalBytes = totalPixels * 3;
 
-    // Sample random blocks to estimate zero ratio
     const blocksX = Math.floor(w / 8);
     const blocksY = Math.floor(h / 8);
     const totalBlocks = blocksX * blocksY;
@@ -253,14 +324,15 @@ export function updateFileSizeEstimate() {
     if (totalBlocks === 0) return;
 
     const qualitySlider = document.getElementById('qualitySlider');
-    const quality = qualitySlider ? parseInt(qualitySlider.value) : 50;
+    const inspQualitySlider = document.getElementById('inspQualitySlider');
+    const quality = (state.appMode === 'inspector' && inspQualitySlider)
+        ? parseInt(inspQualitySlider.value)
+        : (qualitySlider ? parseInt(qualitySlider.value) : 50);
 
-    // Sample up to 16 blocks
     const sampleCount = Math.min(16, totalBlocks);
     let totalZeros = 0;
     const sampledIndices = new Set();
 
-    // Use deterministic sampling (evenly spaced) for consistency
     for (let i = 0; i < sampleCount; i++) {
         const idx = Math.floor((i / sampleCount) * totalBlocks);
         if (sampledIndices.has(idx)) continue;
@@ -270,10 +342,9 @@ export function updateFileSizeEstimate() {
         const by = Math.floor(idx / blocksX);
 
         try {
-            const ptr = inspectBlockData(bx, by, 0, quality); // Y channel
+            const ptr = inspectBlockData(bx, by, 0, quality);
             if (!ptr) continue;
 
-            // Read quantized data (offset index 3 = quantized coefficients)
             const blockSize = 64;
             const startBytes = ptr + (3 * blockSize * 8);
             const dataView = new DataView(Module.HEAPU8.buffer);
@@ -294,26 +365,21 @@ export function updateFileSizeEstimate() {
 
     const avgZeroRatio = totalZeros / (actualSampled * 64);
 
-    // Estimate: JPEG uses ~0.5-2 bits per non-zero coefficient, plus overhead
-    // With Huffman + RLE, zeros are nearly free
-    const bitsPerNonZero = 4.5;  // average bits per non-zero DCT coefficient
+    const bitsPerNonZero = 4.5;
     const nonZeroRatio = 1 - avgZeroRatio;
-    const totalCoefficients = totalBlocks * 64 * 3; // Y + Cr + Cb channels
+    const totalCoefficients = totalBlocks * 64 * 3;
     const estimatedBits = totalCoefficients * nonZeroRatio * bitsPerNonZero;
-    const headerOverhead = 600; // JPEG header bytes
+    const headerOverhead = 600;
     let estimatedBytes = Math.round(estimatedBits / 8) + headerOverhead;
 
-    // Apply chroma subsampling factor
     if (state.currentCsMode === 422) {
         estimatedBytes = Math.round(estimatedBytes * 0.75);
     } else if (state.currentCsMode === 420) {
         estimatedBytes = Math.round(estimatedBytes * 0.6);
     }
 
-    // Clamp minimum
     estimatedBytes = Math.max(estimatedBytes, headerOverhead + 100);
 
-    // Format sizes
     const formatSize = (bytes) => {
         if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
         if (bytes >= 1024) return (bytes / 1024).toFixed(1) + ' KB';
@@ -323,7 +389,6 @@ export function updateFileSizeEstimate() {
     const reduction = Math.max(0, Math.round((1 - estimatedBytes / originalBytes) * 100));
     const ratio = (originalBytes / estimatedBytes).toFixed(1);
 
-    // Update DOM
     const values = document.getElementById('fileSizeValues');
     const fill = document.getElementById('fileSizeFill');
     const origLabel = document.getElementById('fileSizeOrigLabel');

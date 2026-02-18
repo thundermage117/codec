@@ -17,5 +17,7 @@ export const state = {
     isInspectMode: false,
     highlightBlock: null,
     inspectedBlock: null, // { x, y } of currently inspected block
-    isDragging: false
+    isDragging: false,
+    appMode: 'viewer', // 'viewer' or 'inspector'
+    suggestedBlocks: [] // [{ x, y, label, icon, score, category }]
 };

@@ -21,6 +21,70 @@ label {
 input[type="range"] {
     width: 100%;
     cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    height: 18px;
+}
+
+/* Track styling */
+input[type="range"]::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: 3px;
+    background: linear-gradient(90deg,
+            #ef4444 0%,
+            #f59e0b 30%,
+            #10b981 70%,
+            #059669 100%);
+    border: none;
+}
+
+input[type="range"]::-moz-range-track {
+    height: 6px;
+    border-radius: 3px;
+    background: linear-gradient(90deg,
+            #ef4444 0%,
+            #f59e0b 30%,
+            #10b981 70%,
+            #059669 100%);
+    border: none;
+}
+
+/* Thumb styling */
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--card-bg, #fff);
+    border: 2px solid var(--primary);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+    margin-top: -5px;
+    cursor: pointer;
+    transition: box-shadow 0.2s, transform 0.15s;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15), 0 1px 4px rgba(0, 0, 0, 0.15);
+    transform: scale(1.15);
+}
+
+input[type="range"]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--card-bg, #fff);
+    border: 2px solid var(--primary);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+    cursor: pointer;
+}
+
+input[type="range"]:focus {
+    outline: none;
+}
+
+input[type="range"]:focus::-webkit-slider-thumb {
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2), 0 1px 4px rgba(0, 0, 0, 0.15);
 }
 
 @media (max-width: 768px) {
@@ -109,6 +173,12 @@ input[type="checkbox"] {
 .toggle-group label:hover {
     background: var(--primary-subtle);
     color: var(--text);
+}
+
+.toggle-group input[type="radio"]:disabled+label {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
 }
 
 .toggle-group input[type="radio"]:checked+label,
