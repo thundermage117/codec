@@ -18,7 +18,7 @@ NATIVE_APP_NAME = codec_app
 NPROCS = $(shell sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
 
 # --- PHONY TARGETS ---
-.PHONY: all web web-dev native dev clean test
+.PHONY: all web web-dev native dev clean test test-web test-web-unit test-web-browser
 
 # Default: Build & Run Native
 all: dev
@@ -77,6 +77,25 @@ sanitize:
 	@if [ -d build/CMakeCache.txt ]; then rm build/CMakeCache.txt; fi
 	@cd build && cmake .. -DENABLE_SANITIZERS=ON && make -j$(NPROCS)
 	@cd build && ctest --output-on-failure
+
+# ------------------------------------
+# 🌐 JS / WEB TESTS (Vitest)
+# ------------------------------------
+
+# 7. Run all JS tests (unit + browser)
+test-web:
+	@echo "Running JS unit tests..."
+	@cd web && npm run test
+	@echo "Running JS browser integration tests..."
+	@cd web && npm run test:browser
+
+# 8. Unit tests only (fast, no browser)
+test-web-unit:
+	@cd web && npm run test
+
+# 9. Browser integration tests only
+test-web-browser:
+	@cd web && npm run test:browser
 
 # ------------------------------------
 # 🧹 CLEANUP

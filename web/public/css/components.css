@@ -329,3 +329,13 @@ input[type="checkbox"] {
     font-weight: 600;
     color: var(--success-color);
 }
+
+#tint_toggle+label {
+    font-weight: normal;
+    transition: color 0.1s ease;
+}
+
+#tint_toggle:checked+label {
+    color: var(--primary);
+    font-weight: 600;
+}

@@ -1,0 +1,19 @@
+{
+  "name": "codec-explorer-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run --config vitest.config.js",
+    "test:watch": "vitest --config vitest.config.js",
+    "test:browser": "vitest run --config vitest.browser.config.js",
+    "test:all": "npm run test && npm run test:browser",
+    "test:coverage": "vitest run --config vitest.config.js --coverage"
+  },
+  "devDependencies": {
+    "@vitest/browser": "^2.1.0",
+    "@vitest/coverage-v8": "^2.1.0",
+    "jsdom": "^25.0.0",
+    "playwright": "^1.48.0",
+    "vitest": "^2.1.0"
+  }
+}

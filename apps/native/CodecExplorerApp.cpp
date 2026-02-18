@@ -106,7 +106,6 @@ void CodecExplorerApp::handleKey(int key) {
     else if (key == 't') { m_useTint = !m_useTint;                      viewChanged = true; }
     else if (key == '4') { m_chromaSubsampling = ImageCodec::ChromaSubsampling::CS_444; codecChanged = true; }
     else if (key == '2') { m_chromaSubsampling = ImageCodec::ChromaSubsampling::CS_422; codecChanged = true; }
-    else if (key == '2') { m_chromaSubsampling = ImageCodec::ChromaSubsampling::CS_422; codecChanged = true; }
     else if (key == '0') { m_chromaSubsampling = ImageCodec::ChromaSubsampling::CS_420; codecChanged = true; }
     else if (key == 'c') { m_showInspection = false; viewChanged = true; }
 
