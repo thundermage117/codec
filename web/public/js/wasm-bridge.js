@@ -52,7 +52,14 @@ export function setViewTint(enabled) {
 }
 
 export function inspectBlockData(blockX, blockY, channelIndex, quality) {
-    return Module._inspect_block_data(blockX, blockY, channelIndex, quality);
+    // Current CS mode must be passed from state or argument.
+    // We'll trust the caller (inspection.js) to have access to state, but wait, 
+    // verify where this is called. inspection.js imports it.
+    // Let's rely on state.currentCsMode if not passed, but better to update signature?
+    // The previous signature was (bx, by, ch, q).
+    // Let's modify it to take 5 args OR use state inside (but we want to allow querying any quality).
+    // Let's assume we import state here (we do).
+    return Module._inspect_block_data(blockX, blockY, channelIndex, quality, state.currentCsMode);
 }
 
 export function getHeapU8() {
