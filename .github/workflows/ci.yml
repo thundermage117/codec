@@ -111,9 +111,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: wasm-build
-          path: |
-            web/public/codec.js
-            web/public/codec.wasm
+          path: web/public/
+          if-no-files-found: error
 
   deploy:
     runs-on: ubuntu-latest
@@ -134,6 +133,9 @@ jobs:
         with:
           name: wasm-build
           path: web/public
+
+      - name: Debug - List public files
+        run: ls -R web/public
 
       - name: Install Vercel CLI
         run: npm install --global vercel
