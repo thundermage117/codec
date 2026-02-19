@@ -1,6 +1,5 @@
 {
-    "version": 2,
-    "buildCommand": "cd web && npm ci && npm run build",
-    "outputDirectory": "web/dist",
-    "cleanUrls": true
+    "git": {
+        "deploymentEnabled": false
+    }
 }
