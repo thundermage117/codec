@@ -119,6 +119,9 @@ jobs:
     needs: build-web
     # Only deploy on pushes to main, not PRs
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    defaults:
+      run:
+        working-directory: web
     permissions:
       deployments: write
       contents: read
@@ -135,7 +138,7 @@ jobs:
           path: web/public
 
       - name: Debug - List public files
-        run: ls -R web/public
+        run: ls -R public
 
       - name: Install Vercel CLI
         run: npm install --global vercel
