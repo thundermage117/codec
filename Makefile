@@ -7,7 +7,7 @@ WEB_FLAGS = -Icore/inc -O3 \
             -s EXPORTED_RUNTIME_METHODS='["cwrap", "ccall", "HEAPU8"]'
 
 # Source: Core C++ + Web Glue C++ (in src folder)
-WEB_SOURCES = core/src/*.cpp web/src/codec_web.cpp
+WEB_SOURCES = core/src/*.cpp web/cpp/codec_web.cpp
 
 # Output: Goes directly into the public folder
 WEB_OUTPUT  = web/public/codec.js
@@ -35,10 +35,10 @@ web:
 	$(WEB_COMPILER) $(WEB_SOURCES) $(WEB_FLAGS) -o $(WEB_OUTPUT)
 	@echo "✅ Web build complete: $(WEB_OUTPUT)"
 
-# 2. Run Web Server (Serves only the public folder!)
+# 2. Run Web Dev Server (Vite + HMR)
 web-dev: web
-	@echo "🚀 Starting server at http://localhost:8000"
-	@cd web/public && python3 -m http.server 8000
+	@echo "🚀 Starting Vite dev server..."
+	@cd web && npm run dev
 
 # ------------------------------------
 # 🖥️ NATIVE WORKFLOW

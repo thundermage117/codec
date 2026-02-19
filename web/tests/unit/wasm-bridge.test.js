@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { state } from '../../public/js/state.js';
+import { appState } from '../../src/lib/state.svelte.js';
 import {
     setupWasm,
     initSession,
@@ -10,7 +10,7 @@ import {
     inspectBlockData,
     getHeapU8,
     free,
-} from '../../public/js/wasm-bridge.js';
+} from '../../src/lib/wasm-bridge.js';
 
 const INITIAL_STATE = {
     originalImageData: null,
@@ -29,8 +29,8 @@ const INITIAL_STATE = {
 };
 
 beforeEach(() => {
-    Object.assign(state, INITIAL_STATE);
-    state.suggestedBlocks = [];
+    Object.assign(appState, INITIAL_STATE);
+    appState.suggestedBlocks = [];
 });
 
 describe('setupWasm', () => {
@@ -52,17 +52,17 @@ describe('setupWasm', () => {
 });
 
 describe('initSession', () => {
-    it('does nothing when state.originalImageData is null', () => {
-        state.originalImageData = null;
+    it('does nothing when appState.originalImageData is null', () => {
+        appState.originalImageData = null;
         initSession();
         expect(globalThis.Module._malloc).not.toHaveBeenCalled();
     });
 
     it('allocates memory and calls _init_session with correct args', () => {
         const fakeData = new Uint8ClampedArray(4 * 4 * 4); // 4×4 image
-        state.originalImageData = { data: fakeData, width: 4, height: 4 };
-        state.imgWidth = 4;
-        state.imgHeight = 4;
+        appState.originalImageData = { data: fakeData, width: 4, height: 4 };
+        appState.imgWidth = 4;
+        appState.imgHeight = 4;
 
         initSession();
 
@@ -72,9 +72,9 @@ describe('initSession', () => {
 
     it('always calls _free after _init_session, even on success', () => {
         const fakeData = new Uint8ClampedArray(4);
-        state.originalImageData = { data: fakeData, width: 1, height: 1 };
-        state.imgWidth = 1;
-        state.imgHeight = 1;
+        appState.originalImageData = { data: fakeData, width: 1, height: 1 };
+        appState.imgWidth = 1;
+        appState.imgHeight = 1;
 
         initSession();
 
@@ -83,9 +83,9 @@ describe('initSession', () => {
 
     it('calls _free even when _init_session throws', () => {
         const fakeData = new Uint8ClampedArray(4);
-        state.originalImageData = { data: fakeData, width: 1, height: 1 };
-        state.imgWidth = 1;
-        state.imgHeight = 1;
+        appState.originalImageData = { data: fakeData, width: 1, height: 1 };
+        appState.imgWidth = 1;
+        appState.imgHeight = 1;
         globalThis.Module._init_session.mockImplementationOnce(() => {
             throw new Error('WASM error');
         });
@@ -152,26 +152,26 @@ describe('getStats', () => {
 });
 
 describe('setViewTint', () => {
-    it('passes 1 when enabled is true', () => {
-        setViewTint(true);
+    it('passes 1 to Module._set_view_tint', () => {
+        setViewTint(1);
         expect(globalThis.Module._set_view_tint).toHaveBeenCalledWith(1);
     });
 
-    it('passes 0 when enabled is false', () => {
-        setViewTint(false);
+    it('passes 0 to Module._set_view_tint', () => {
+        setViewTint(0);
         expect(globalThis.Module._set_view_tint).toHaveBeenCalledWith(0);
     });
 });
 
 describe('inspectBlockData', () => {
-    it('calls _inspect_block_data with blockX, blockY, channelIndex, quality, and state.currentCsMode', () => {
-        state.currentCsMode = 420;
+    it('calls _inspect_block_data with blockX, blockY, channelIndex, quality, and appState.currentCsMode', () => {
+        appState.currentCsMode = 420;
         inspectBlockData(3, 5, 0, 75);
         expect(globalThis.Module._inspect_block_data).toHaveBeenCalledWith(3, 5, 0, 75, 420);
     });
 
-    it('uses state.currentCsMode=444 by default', () => {
-        state.currentCsMode = 444;
+    it('uses appState.currentCsMode=444 by default', () => {
+        appState.currentCsMode = 444;
         inspectBlockData(0, 0, 1, 50);
         expect(globalThis.Module._inspect_block_data).toHaveBeenCalledWith(0, 0, 1, 50, 444);
     });

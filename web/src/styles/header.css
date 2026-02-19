@@ -24,10 +24,10 @@ h1 {
     background-color: var(--success-bg);
     color: var(--success-text);
     padding: 6px 12px;
-    border-radius: 99px;
-    font-size: 0.85rem;
+    border-radius: var(--radius-full);
+    font-size: var(--text-base);
     font-weight: 600;
-    box-shadow: 0 1px 2px var(--shadow-color);
+    box-shadow: var(--shadow-sm);
 }
 
 .github-link {
@@ -37,11 +37,11 @@ h1 {
     background-color: var(--bg-secondary);
     color: var(--text-muted);
     padding: 6px 12px;
-    border-radius: 99px;
-    font-size: 0.85rem;
+    border-radius: var(--radius-full);
+    font-size: var(--text-base);
     font-weight: 600;
     text-decoration: none;
-    box-shadow: 0 1px 2px var(--shadow-color);
+    box-shadow: var(--shadow-sm);
     transition: all 0.2s ease;
 }
 
@@ -59,12 +59,12 @@ h1 {
     width: 36px;
     height: 36px;
     border: 1px solid var(--border);
-    border-radius: 99px;
+    border-radius: var(--radius-full);
     background: var(--bg-secondary);
     color: var(--text-muted);
     cursor: pointer;
     transition: all 0.2s ease;
-    box-shadow: 0 1px 2px var(--shadow-color);
+    box-shadow: var(--shadow-sm);
 }
 
 .theme-toggle:hover {

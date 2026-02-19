@@ -37,6 +37,37 @@
     --bg-hover: rgba(0, 0, 0, 0.04);
     --primary-light: #eff6ff;
 
+    /* Status indicator colors */
+    --color-good: #059669;
+    --color-good-bg: rgba(5, 150, 105, 0.08);
+    --color-good-border: rgba(5, 150, 105, 0.2);
+    --color-moderate: #d97706;
+    --color-moderate-bg: rgba(217, 119, 6, 0.08);
+    --color-moderate-border: rgba(217, 119, 6, 0.2);
+    --color-poor: #dc2626;
+    --color-poor-bg: rgba(220, 38, 38, 0.08);
+    --color-poor-border: rgba(220, 38, 38, 0.2);
+
+    /* Border radius scale */
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 8px;
+    --radius-xl: 12px;
+    --radius-full: 99px;
+
+    /* Shadow scale */
+    --shadow-sm: 0 1px 2px var(--shadow-color);
+    --shadow-md: 0 2px 8px var(--shadow-color);
+    --shadow-lg: 0 8px 24px var(--shadow-color);
+
+    /* Font size scale */
+    --text-2xs: 0.55rem;
+    --text-xs: 0.6rem;
+    --text-sm: 0.7rem;
+    --text-base-sm: 0.8rem;
+    --text-base: 0.85rem;
+    --text-md: 0.9rem;
+
     /* Fonts */
     --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     --font-mono: 'JetBrains Mono', 'SF Mono', 'Menlo', 'Monaco', monospace;
@@ -79,4 +110,15 @@
     --border-subtle: rgba(255, 255, 255, 0.06);
     --bg-hover: rgba(255, 255, 255, 0.06);
     --primary-light: rgba(59, 130, 246, 0.15);
+
+    /* Status indicator colors (dark mode) */
+    --color-good: #34d399;
+    --color-good-bg: rgba(52, 211, 153, 0.1);
+    --color-good-border: rgba(52, 211, 153, 0.2);
+    --color-moderate: #fbbf24;
+    --color-moderate-bg: rgba(251, 191, 36, 0.1);
+    --color-moderate-border: rgba(251, 191, 36, 0.2);
+    --color-poor: #f87171;
+    --color-poor-bg: rgba(248, 113, 113, 0.1);
+    --color-poor-border: rgba(248, 113, 113, 0.2);
 }

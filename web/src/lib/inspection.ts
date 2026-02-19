@@ -1,8 +1,16 @@
-import { state, ViewMode } from './state.js';
+import { appState, ViewMode } from './state.svelte.js';
 import { inspectBlockData } from './wasm-bridge.js';
 
 // Store grid data globally for cross-grid highlighting and basis viewer
-let cachedGridData = {};
+
+// Store grid data globally for cross-grid highlighting and basis viewer
+let cachedGridData: {
+    dctData?: Float64Array;
+    qtData?: Float64Array;
+    quantData?: Float64Array;
+    dequantizedData?: Float64Array;
+} = {};
+
 const ALL_GRID_IDS = [
     'gridOriginal', 'gridDCT', 'gridQuantized', 'gridQuantized2',
     'gridDequantized', 'gridReconstructed',
@@ -10,9 +18,9 @@ const ALL_GRID_IDS = [
 ];
 
 // Custom tooltip element
-let tooltipEl = null;
+let tooltipEl: HTMLDivElement | null = null;
 
-function ensureTooltip() {
+function ensureTooltip(): HTMLDivElement {
     if (!tooltipEl) {
         tooltipEl = document.createElement('div');
         tooltipEl.className = 'grid-cell-tooltip';
@@ -21,13 +29,12 @@ function ensureTooltip() {
     return tooltipEl;
 }
 
-function showTooltip(e, value, row, col, desc) {
+function showTooltip(e: MouseEvent, value: number | string, row: number | string, col: number | string, desc: string): void {
     const tip = ensureTooltip();
     let coordText = '';
     if (row !== '-' && col !== '-') {
         coordText = `<div class="tooltip-pos">(${row}, ${col})</div>`;
     }
-
     tip.innerHTML = `
         ${coordText}
         <div class="tooltip-value">${typeof value === 'number' ? value.toFixed(2) : value}</div>
@@ -41,21 +48,19 @@ function showTooltip(e, value, row, col, desc) {
     tip.style.top = `${Math.max(4, y - tip.offsetHeight)}px`;
 }
 
-function hideTooltip() {
-    if (tooltipEl) {
-        tooltipEl.classList.remove('visible');
-    }
+function hideTooltip(): void {
+    if (tooltipEl) tooltipEl.classList.remove('visible');
 }
 
-export function inspectBlock(blockX, blockY) {
-    state.inspectedBlock = { x: blockX, y: blockY };
+export function inspectBlock(blockX: number, blockY: number): void {
+    // appState.inspectedBlock is already set by the caller (UI event or effect),
+    // so we don't set it here to avoid infinite loops.
 
     const content = document.getElementById('inspectorContent');
     const placeholder = document.getElementById('inspectorPlaceholder');
     if (content) content.style.display = 'block';
     if (placeholder) placeholder.style.display = 'none';
 
-    // Hide basis popover
     hideBasisPopover();
 
     const coordsSpan = document.getElementById('blockCoords');
@@ -65,48 +70,30 @@ export function inspectBlock(blockX, blockY) {
     if (coordsSpan) coordsSpan.innerText = `${blockX * 8}, ${blockY * 8} (Block ${blockX},${blockY})`;
 
     let channelIndex = 0;
-    if (state.currentViewMode === ViewMode.Cr) channelIndex = 1;
-    if (state.currentViewMode === ViewMode.Cb) channelIndex = 2;
+    if (appState.currentViewMode === ViewMode.Cr) channelIndex = 1;
+    if (appState.currentViewMode === ViewMode.Cb) channelIndex = 2;
 
-    const tableLabel = (channelIndex === 0) ? "Luma" : "Chroma";
+    const tableLabel = (channelIndex === 0) ? 'Luma' : 'Chroma';
     if (qTableType) qTableType.innerText = tableLabel;
     if (qTableType2) qTableType2.innerText = tableLabel;
 
-    const inspQualitySlider = document.getElementById('inspQualitySlider');
-    const qualitySlider = document.getElementById('qualitySlider');
+    const inspQualitySlider = document.getElementById('inspQualitySlider') as HTMLInputElement | null;
+    const qualitySlider = document.getElementById('qualitySlider') as HTMLInputElement | null;
 
-    // Sync initial value if entering inspector for the first time or if desynced
-    if (state.appMode === 'inspector' && inspQualitySlider && qualitySlider) {
-        // If we want to force the inspector to match the main slider when we suspect it wasn't set by user
-        // For now, let's just trust inspQualitySlider, but maybe unrelatedly, the user's "mostly 0" 
-        // implies high compression (low quality). If quality is 0, that explains it.
-    }
-
-    const quality = (state.appMode === 'inspector' && inspQualitySlider)
+    const quality = (appState.appMode === 'inspector' && inspQualitySlider)
         ? parseInt(inspQualitySlider.value)
-        : (qualitySlider ? parseInt(qualitySlider.value) : 50);
+        : (qualitySlider ? parseInt(qualitySlider.value) : appState.quality);
 
     const ptr = inspectBlockData(blockX, blockY, channelIndex, quality);
     if (!ptr) {
-        console.error("Failed to inspect block: Ptr is null");
+        console.error('Failed to inspect block: Ptr is null');
         return;
     }
 
     const blockSize = 64;
-    const readGrid = (offsetIdx) => {
+    const readGrid = (offsetIdx: number): Float64Array => {
         const startBytes = ptr + (offsetIdx * blockSize * 8);
-        const data = [];
-        const dataView = new DataView(Module.HEAPU8.buffer);
-
-        try {
-            for (let i = 0; i < blockSize; ++i) {
-                const val = dataView.getFloat64(startBytes + (i * 8), true);
-                data.push(val);
-            }
-        } catch (e) {
-            console.error("Error reading grid data:", e);
-        }
-        return data;
+        return new Float64Array(Module.HEAPU8.buffer, startBytes, blockSize);
     };
 
     const originalData = readGrid(0);
@@ -120,28 +107,28 @@ export function inspectBlock(blockX, blockY) {
         errorData[i] = originalData[i] - reconData[i];
     }
 
-    const dequantizedData = [];
+    const dequantizedData = new Float64Array(64);
     for (let i = 0; i < 64; i++) {
-        dequantizedData.push(quantData[i] * qtData[i]);
+        dequantizedData[i] = quantData[i] * qtData[i];
     }
 
     cachedGridData = { dctData, qtData, quantData, dequantizedData };
 
-    // Fetch RGB data for Original and Reconstructed if in RGB mode
-    let originalRGB = null;
-    let reconstructedRGB = null;
+    let originalRGB: Uint8ClampedArray | null = null;
+    let reconstructedRGB: Uint8ClampedArray | null = null;
 
-    if (state.currentViewMode === ViewMode.RGB) {
-        originalRGB = getBlockRGB(state.originalImageData, blockX, blockY);
-        const processedCanvas = document.getElementById('processedCanvas');
+    if (appState.currentViewMode === ViewMode.RGB) {
+        originalRGB = getBlockRGB(appState.originalImageData!, blockX, blockY);
+        const processedCanvas = document.getElementById('processedCanvas') as HTMLCanvasElement | null;
         if (processedCanvas) {
             try {
                 const ctx = processedCanvas.getContext('2d', { willReadFrequently: true });
-                // Optimize: only fetch the 8x8 block region
-                const reconImgData = ctx.getImageData(blockX * 8, blockY * 8, 8, 8);
-                reconstructedRGB = getBlockRGB(reconImgData, 0, 0); // Already cropped to 8x8
-            } catch (e) {
-                console.warn("Could not read processedCanvas for RGB block view");
+                if (ctx) {
+                    const reconImgData = ctx.getImageData(blockX * 8, blockY * 8, 8, 8);
+                    reconstructedRGB = getBlockRGB(reconImgData, 0, 0);
+                }
+            } catch {
+                console.warn('Could not read processedCanvas for RGB block view');
             }
         }
     }
@@ -162,7 +149,7 @@ export function inspectBlock(blockX, blockY) {
     const zeroPercent = Math.round((zeroCount / 64) * 100);
     const compClass = zeroPercent > 70 ? 'good' : zeroPercent > 40 ? 'moderate' : 'poor';
 
-    const setStatEl = (id, text, colorClass, parentBgClass) => {
+    const setStatEl = (id: string, text: string, colorClass: string | null, parentBgClass: string | null) => {
         const el = document.getElementById(id);
         if (!el) return;
         el.innerText = text;
@@ -175,33 +162,28 @@ export function inspectBlock(blockX, blockY) {
         }
     };
 
-    const mseTxt = mse >= 100 ? mse.toFixed(0) : mse.toFixed(2);
-    setStatEl('statMSE', mseTxt, mseClass, mseClass);
-    const peakTxt = peakError >= 100 ? peakError.toFixed(0) : peakError.toFixed(1);
-    setStatEl('statPeakError', peakTxt, peakClass, peakClass);
+    setStatEl('statMSE', mse >= 100 ? mse.toFixed(0) : mse.toFixed(2), mseClass, mseClass);
+    setStatEl('statPeakError', peakError >= 100 ? peakError.toFixed(0) : peakError.toFixed(1), peakClass, peakClass);
     setStatEl('statZeros', `${zeroCount}/64`, null, null);
     setStatEl('statCompression', `${zeroPercent}%`, compClass, compClass);
 
-    renderGrid('gridOriginal', originalRGB || originalData, 'intensity', 'original', state.currentViewMode === ViewMode.RGB);
+    renderGrid('gridOriginal', originalRGB ?? originalData, 'intensity', 'original', appState.currentViewMode === ViewMode.RGB);
     renderGrid('gridDCT', dctData, 'frequency', 'dct');
     renderGrid('gridQuantized', quantData, 'frequency', 'quantized');
     renderGrid('gridQuantized2', quantData, 'frequency', 'quantized');
     renderGrid('gridDequantized', dequantizedData, 'frequency', 'dequantized');
-    renderGrid('gridReconstructed', reconstructedRGB || reconData, 'intensity', 'reconstructed', state.currentViewMode === ViewMode.RGB);
-
+    renderGrid('gridReconstructed', reconstructedRGB ?? reconData, 'intensity', 'reconstructed', appState.currentViewMode === ViewMode.RGB);
     renderGrid('gridQuantTable', qtData, 'qtable', 'qtable');
-    renderGrid('gridError', errorData, 'error', 'error');
-
-
+    renderGrid('gridError', Array.from(errorData), 'error', 'error');
 
     renderLossMeter(mse, peakError);
 }
 
-function renderLossMeter(mse, peakError) {
+function renderLossMeter(mse: number, _peakError: number): void {
     const container = document.getElementById('lossMeterContainer');
     if (!container) return;
 
-    let meter = container.querySelector('.loss-meter');
+    let meter = container.querySelector('.loss-meter') as HTMLDivElement | null;
 
     if (!meter) {
         meter = document.createElement('div');
@@ -223,18 +205,10 @@ function renderLossMeter(mse, peakError) {
         container.appendChild(meter);
     }
 
-    // PSNR-based quality: maps the perceptually relevant 20–50 dB range to 0–100%.
-    // This gives a more linear spread across typical JPEG quality levels:
-    //   MSE=0  → PSNR=∞  → 100%  (lossless)
-    //   MSE=1  → PSNR≈48 → ~93%  (excellent)
-    //   MSE=5  → PSNR≈41 → ~70%  (good, aligns with 'good' stat threshold)
-    //   MSE=20 → PSNR≈35 → ~50%  (moderate, aligns with 'moderate' threshold)
-    //   MSE=100→ PSNR≈28 → ~27%  (poor)
-    //   MSE≥500→ PSNR≤21 → 0%    (floor)
     const psnr = mse > 0 ? 10 * Math.log10(255 * 255 / mse) : 60;
-    let qualityPct = Math.max(0, Math.min(100, Math.round((psnr - 20) / 30 * 100)));
-    const fill = meter.querySelector('.loss-meter-fill');
-    const value = meter.querySelector('.loss-meter-value');
+    const qualityPct = Math.max(0, Math.min(100, Math.round((psnr - 20) / 30 * 100)));
+    const fill = meter.querySelector('.loss-meter-fill') as HTMLElement | null;
+    const value = meter.querySelector('.loss-meter-value') as HTMLElement | null;
 
     if (fill) {
         fill.style.width = `${qualityPct}%`;
@@ -246,12 +220,10 @@ function renderLossMeter(mse, peakError) {
             fill.style.background = 'linear-gradient(90deg, #ef4444, #f87171)';
         }
     }
-    if (value) {
-        value.textContent = `${qualityPct}%`;
-    }
+    if (value) value.textContent = `${qualityPct}%`;
 }
 
-function getCellDescription(row, col, gridType) {
+function getCellDescription(row: number, col: number, gridType: string): string {
     if (gridType === 'dct' || gridType === 'dequantized' || gridType === 'quantized') {
         if (row === 0 && col === 0) return 'DC coefficient (average brightness)';
         const freqLevel = row + col;
@@ -259,19 +231,13 @@ function getCellDescription(row, col, gridType) {
         if (freqLevel <= 5) return 'Mid frequency';
         return 'High frequency';
     }
-    if (gridType === 'original' || gridType === 'reconstructed') {
-        return 'Pixel intensity';
-    }
-    if (gridType === 'error') {
-        return 'Error value';
-    }
-    if (gridType === 'qtable') {
-        return 'Divisor';
-    }
+    if (gridType === 'original' || gridType === 'reconstructed') return 'Pixel intensity';
+    if (gridType === 'error') return 'Error value';
+    if (gridType === 'qtable') return 'Divisor';
     return '';
 }
 
-function getFreqLabel(row, col) {
+function getFreqLabel(row: number, col: number): string {
     if (row === 0 && col === 0) return 'DC';
     const level = row + col;
     if (level <= 2) return 'Low';
@@ -279,26 +245,28 @@ function getFreqLabel(row, col) {
     return 'High';
 }
 
-// ===== Cross-Grid Highlighting =====
-function clearAllHighlights() {
+
+let lastHighlightedKey: string | null = null;
+
+function clearAllHighlights(): void {
+    lastHighlightedKey = null;
     document.querySelectorAll('.grid-cell.cell-highlight').forEach(c => {
         c.classList.remove('cell-highlight');
     });
 }
 
-function highlightAcrossGrids(row, col) {
+function highlightAcrossGrids(row: number, col: number): void {
     clearAllHighlights();
     ALL_GRID_IDS.forEach(gridId => {
         const grid = document.getElementById(gridId);
         if (!grid) return;
         const idx = row * 8 + col;
-        const cell = grid.children[idx];
+        const cell = grid.children[idx] as HTMLElement | undefined;
         if (cell) cell.classList.add('cell-highlight');
     });
 }
 
-// ===== DCT Basis Pattern Computation =====
-function computeBasisPattern(u, v) {
+function computeBasisPattern(u: number, v: number): Float64Array {
     const N = 8;
     const pattern = new Float64Array(64);
     const cu = (u === 0) ? 1 / Math.sqrt(2) : 1;
@@ -314,10 +282,11 @@ function computeBasisPattern(u, v) {
     return pattern;
 }
 
-function drawPatternOnCanvas(canvasId, data, mode) {
-    const canvas = document.getElementById(canvasId);
+function drawPatternOnCanvas(canvasId: string, data: Float64Array | number[], mode: string): void {
+    const canvas = document.getElementById(canvasId) as HTMLCanvasElement | null;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
+    if (!ctx) return;
     const size = canvas.width;
     const cellSize = size / 8;
 
@@ -338,20 +307,15 @@ function drawPatternOnCanvas(canvasId, data, mode) {
                 const t = val / range;
                 let r, g, b;
                 if (t >= 0) {
-                    r = 255;
-                    g = Math.round(255 * (1 - t));
-                    b = Math.round(255 * (1 - t));
+                    r = 255; g = Math.round(255 * (1 - t)); b = Math.round(255 * (1 - t));
                 } else {
-                    r = Math.round(255 * (1 + t));
-                    g = Math.round(255 * (1 + t));
-                    b = 255;
+                    r = Math.round(255 * (1 + t)); g = Math.round(255 * (1 + t)); b = 255;
                 }
                 ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
             } else {
                 const norm = Math.round(((val - min) / (max - min || 1)) * 255);
                 ctx.fillStyle = `rgb(${norm}, ${norm}, ${norm})`;
             }
-
             ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
         }
     }
@@ -359,35 +323,24 @@ function drawPatternOnCanvas(canvasId, data, mode) {
     ctx.strokeStyle = 'rgba(0,0,0,0.08)';
     ctx.lineWidth = 0.5;
     for (let i = 1; i < 8; i++) {
-        ctx.beginPath();
-        ctx.moveTo(i * cellSize, 0);
-        ctx.lineTo(i * cellSize, size);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(0, i * cellSize);
-        ctx.lineTo(size, i * cellSize);
-        ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(i * cellSize, 0); ctx.lineTo(i * cellSize, size); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, i * cellSize); ctx.lineTo(size, i * cellSize); ctx.stroke();
     }
 }
 
-// ===== Floating Basis Popover =====
 let basisPopoverVisible = false;
-let lastMouseEvent = null;
 
-function showBasisPopover(e, row, col) {
-    // Hide cell tooltip to prevent overlap
+function showBasisPopover(e: MouseEvent, row: number, col: number): void {
     hideTooltip();
-
     const popover = document.getElementById('basisPopover');
     if (!popover || !cachedGridData.dctData) return;
 
     const idx = row * 8 + col;
     const dctVal = cachedGridData.dctData[idx];
-    const quantVal = cachedGridData.quantData[idx];
-    const qtVal = cachedGridData.qtData[idx];
+    const quantVal = cachedGridData.quantData![idx];
+    const qtVal = cachedGridData.qtData![idx];
 
-    // Update content
-    const setEl = (id, text) => {
+    const setEl = (id: string, text: string) => {
         const el = document.getElementById(id);
         if (el) el.innerText = text;
     };
@@ -398,7 +351,6 @@ function showBasisPopover(e, row, col) {
     setEl('basisQuantized', Math.round(quantVal).toString());
     setEl('basisDivisor', Math.round(qtVal).toString());
 
-    // Compute and draw basis pattern
     const basisPattern = computeBasisPattern(col, row);
     const contribution = new Float64Array(64);
     for (let i = 0; i < 64; i++) {
@@ -408,19 +360,13 @@ function showBasisPopover(e, row, col) {
     drawPatternOnCanvas('basisCanvas', Array.from(basisPattern), 'diverging');
     drawPatternOnCanvas('contributionCanvas', Array.from(contribution), 'diverging');
 
-    // Position near the cursor
     positionPopover(popover, e);
-
-    // Show with animation
     popover.style.display = 'block';
-    requestAnimationFrame(() => {
-        popover.classList.add('visible');
-    });
+    requestAnimationFrame(() => popover.classList.add('visible'));
     basisPopoverVisible = true;
-    lastMouseEvent = e;
 }
 
-function positionPopover(popover, e) {
+function positionPopover(popover: HTMLElement, e: MouseEvent): void {
     const margin = 16;
     const popW = 260;
     const popH = 240;
@@ -428,126 +374,160 @@ function positionPopover(popover, e) {
     let x = e.clientX + margin;
     let y = e.clientY - popH / 2;
 
-    // Keep within viewport
+    // Clamp horizontally
     if (x + popW > window.innerWidth - margin) {
+        // Try positioning to the left if right side overflows
         x = e.clientX - popW - margin;
     }
-    if (y < margin) {
-        y = margin;
-    }
-    if (y + popH > window.innerHeight - margin) {
-        y = window.innerHeight - popH - margin;
-    }
+    // If still off-screen (left), just clamp to margin
+    if (x < margin) x = margin;
+    // If extending past right edge, clamp to right edge
+    if (x + popW > window.innerWidth - margin) x = window.innerWidth - popW - margin;
+
+    // Clamp vertically
+    if (y < margin) y = margin;
+    if (y + popH > window.innerHeight - margin) y = window.innerHeight - popH - margin;
 
     popover.style.left = `${x}px`;
     popover.style.top = `${y}px`;
 }
 
-function hideBasisPopover() {
+function hideBasisPopover(): void {
     const popover = document.getElementById('basisPopover');
     if (popover) {
         popover.classList.remove('visible');
-        // Allow transition to finish before hiding
         setTimeout(() => {
-            if (!basisPopoverVisible) {
-                popover.style.display = 'none';
-            }
+            if (!basisPopoverVisible) popover.style.display = 'none';
         }, 150);
     }
     basisPopoverVisible = false;
 }
 
-function renderGrid(elementId, data, type = 'number', gridType = '', isRGB = false) {
+
+function renderGrid(
+    elementId: string,
+    data: Float64Array | Uint8ClampedArray | number[],
+    type: string = 'number',
+    gridType: string = '',
+    isRGB: boolean = false
+): void {
     const el = document.getElementById(elementId);
     if (!el) return;
-    el.innerHTML = '';
 
+    // Event Delegation (One-time setup per grid container)
+    if (!el.hasAttribute('data-events-attached')) {
+        el.setAttribute('data-events-attached', 'true');
+
+        // Mouse Move (Handles enter/move for cells)
+        el.addEventListener('mousemove', (e) => {
+            const target = e.target as HTMLElement;
+            // Use closest in case we have inner elements, though grid-cell is usually a leaf
+            const cell = target.closest('.grid-cell') as HTMLElement;
+            if (!cell) return;
+
+            const row = parseInt(cell.dataset.row || '0');
+            const col = parseInt(cell.dataset.col || '0');
+            const valStr = cell.dataset.val || '';
+            const desc = cell.dataset.desc || '';
+            const cellGridType = cell.dataset.gridType || '';
+            const isBasis = cell.dataset.isBasis === 'true';
+
+            // 1. Highlight (Only if changed)
+            const key = `${row},${col}`;
+            if (lastHighlightedKey !== key) {
+                highlightAcrossGrids(row, col);
+                lastHighlightedKey = key;
+            }
+
+            // 2. Tooltip
+            // Basis grids (DCT/Quant) have their own popover, so no text tooltip for them usually,
+            // but the legacy code showed popover AND no tooltip.
+            if (!isBasis) {
+                showTooltip(e, valStr, row, col, desc);
+            }
+
+            // 3. Basis Popover
+            if (isBasis) {
+                showBasisPopover(e, row, col);
+                // Also update popover position if it's already visible?
+                // showBasisPopover handles positioning.
+            }
+        });
+
+        // Mouse Leave (Grid container level)
+        el.addEventListener('mouseleave', () => {
+            hideTooltip();
+            hideBasisPopover();
+            clearAllHighlights();
+        });
+    }
+
+    const hasChildren = el.children.length === 64;
     let nonZeroCount = 0;
 
     for (let i = 0; i < 64; ++i) {
-        let val;
-        let r, g, b;
+        let val: number;
+        let r = 0, g = 0, b = 0;
 
         if (isRGB && type === 'intensity') {
-            [r, g, b] = data[i];
-            val = (r + g + b) / 3; // For tooltip/desc if needed
+            const idx = i * 3;
+            r = data[idx];
+            g = data[idx + 1];
+            b = data[idx + 2];
+            val = (r + g + b) / 3;
         } else {
-            val = data[i];
+            val = (data as Float64Array)[i];
         }
 
         const row = Math.floor(i / 8);
         const col = i % 8;
-        const cell = document.createElement('div');
-        cell.className = 'grid-cell';
-        cell.dataset.row = row;
-        cell.dataset.col = col;
 
-        let displayVal = val;
+        // Reuse or Create Cell
+        let cell: HTMLElement;
+        if (hasChildren) {
+            cell = el.children[i] as HTMLElement;
+        } else {
+            cell = document.createElement('div');
+            cell.className = 'grid-cell';
+            el.appendChild(cell);
+        }
+
+        // Update Data Attributes for Delegation
+        cell.dataset.row = String(row);
+        cell.dataset.col = String(col);
+        cell.dataset.gridType = gridType;
+
+        const isBasis = (gridType === 'dct' || gridType === 'quantized' || gridType === 'dequantized');
+        cell.dataset.isBasis = String(isBasis);
+        if (isBasis) cell.style.cursor = 'help';
+        else cell.style.cursor = 'default';
+
+        // Display Value & Text
+        let displayVal: string;
+        let tooltipVal: string;
+
         if (type === 'intensity' || type === 'qtable') {
-            displayVal = Math.round(val);
+            displayVal = String(Math.round(val));
+            tooltipVal = isRGB && type === 'intensity' ? `RGB(${r},${g},${b})` : displayVal;
         } else {
             displayVal = val.toFixed(1);
-            if (val === 0) displayVal = "0";
-            if (displayVal === "-0.0") displayVal = "0";
+            if (val === 0) displayVal = '0';
+            if (displayVal === '-0.0') displayVal = '0';
+            tooltipVal = displayVal;
         }
 
-        // Hide values in intensity blocks to keep it clean if it's RGB
-        if (isRGB && type === 'intensity') {
-            cell.innerText = '';
-        } else {
-            cell.innerText = displayVal;
-        }
+        cell.innerText = (isRGB && type === 'intensity') ? '' : displayVal;
+        cell.dataset.val = tooltipVal;
+        cell.dataset.desc = getCellDescription(row, col, gridType);
 
-        if ((type === 'frequency') && Math.abs(val) >= 0.5) nonZeroCount++;
+        if (type === 'frequency' && Math.abs(val) >= 0.5) nonZeroCount++;
 
-        const desc = getCellDescription(row, col, gridType);
+        // Styles
+        cell.className = 'grid-cell'; // Reset classes (removes cell-zero, cell-highlight)
 
-        cell.addEventListener('mouseenter', (e) => {
-            highlightAcrossGrids(row, col);
-            // Don't show cell tooltip for frequency cells — the basis popover covers it
-            if (!(gridType === 'dct' || gridType === 'quantized' || gridType === 'dequantized')) {
-                const tipVal = isRGB && type === 'intensity' ? `RGB(${r},${g},${b})` : val;
-                showTooltip(e, tipVal, row, col, desc);
-            }
-        });
-
-        cell.addEventListener('mousemove', (e) => {
-            if (!(gridType === 'dct' || gridType === 'quantized' || gridType === 'dequantized')) {
-                const tipVal = isRGB && type === 'intensity' ? `RGB(${r},${g},${b})` : val;
-                showTooltip(e, tipVal, row, col, desc);
-            }
-        });
-
-        cell.addEventListener('mouseleave', () => {
-            hideTooltip();
-        });
-
-        // Frequency-domain cells: show floating basis popover on hover
-        if (gridType === 'dct' || gridType === 'quantized' || gridType === 'dequantized') {
-            cell.style.cursor = 'help';
-
-            cell.addEventListener('mouseenter', (e) => {
-                showBasisPopover(e, row, col);
-            });
-
-            cell.addEventListener('mousemove', (e) => {
-                // Reposition popover as mouse moves
-                const popover = document.getElementById('basisPopover');
-                if (popover && basisPopoverVisible) {
-                    positionPopover(popover, e);
-                }
-            });
-
-            cell.addEventListener('mouseleave', () => {
-                hideBasisPopover();
-            });
-        }
-
-        // Apply cell coloring
         if (type === 'intensity') {
             if (isRGB) {
                 cell.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
-                // No text so color doesn't matter much
             } else {
                 const norm = Math.max(0, Math.min(255, val));
                 cell.style.backgroundColor = `rgb(${norm}, ${norm}, ${norm})`;
@@ -556,66 +536,48 @@ function renderGrid(elementId, data, type = 'number', gridType = '', isRGB = fal
         } else if (type === 'qtable') {
             const maxQt = 200;
             const t = Math.min(1, val / maxQt);
-            const r = Math.round(255);
-            const g = Math.round(255 - t * 110);
-            const b = Math.round(255 - t * 200);
-            cell.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+            cell.style.backgroundColor = `rgb(255, ${Math.round(255 - t * 110)}, ${Math.round(255 - t * 200)})`;
             cell.style.color = t > 0.5 ? '#7c2d12' : '#78350f';
         } else if (type === 'frequency' || type === 'error') {
             if (Math.abs(val) < 0.5) {
                 cell.classList.add('cell-zero');
+                cell.style.backgroundColor = ''; // Clear inline if needed or handled by CSS
+                cell.style.color = '';
             } else {
                 const isPos = val > 0;
                 const visualMax = (type === 'error') ? 30 : 100;
-                let opacity = Math.min(1, Math.abs(val) / visualMax);
-                opacity = Math.max(0.1, opacity);
-
-                if (isPos) {
-                    cell.style.backgroundColor = `rgba(239, 68, 68, ${opacity})`;
-                    cell.style.color = opacity > 0.5 ? '#fff' : 'var(--text)';
-                } else {
-                    cell.style.backgroundColor = `rgba(59, 130, 246, ${opacity})`;
-                    cell.style.color = opacity > 0.5 ? '#fff' : 'var(--text)';
-                }
+                const opacity = Math.max(0.1, Math.min(1, Math.abs(val) / visualMax));
+                cell.style.backgroundColor = isPos
+                    ? `rgba(239, 68, 68, ${opacity})`
+                    : `rgba(59, 130, 246, ${opacity})`;
+                cell.style.color = opacity > 0.5 ? '#fff' : 'var(--text)';
             }
         }
-        el.appendChild(cell);
     }
 
-    // Non-zero badge for frequency grids
     if (type === 'frequency') {
-        const stage = el.closest('.pipeline-block') || el.closest('.analysis-card');
+        const stage = el.closest('.pipeline-block') ?? el.closest('.analysis-card');
         if (stage) {
-            const header = stage.querySelector('.pipeline-block-header') || stage.querySelector('.analysis-header');
+            const header = stage.querySelector('.pipeline-block-header') ?? stage.querySelector('.analysis-header');
             if (header) {
-                const existing = header.querySelector('.nonzero-badge');
-                if (existing) existing.remove();
-
-                const badge = document.createElement('span');
-                badge.className = 'nonzero-badge';
+                let badge = header.querySelector('.nonzero-badge') as HTMLElement;
+                if (!badge) {
+                    badge = document.createElement('span');
+                    badge.className = 'nonzero-badge';
+                    // header.appendChild(badge); // Don't append yet, set up listener first
+                    badge.addEventListener('mouseenter', (e) => showTooltip(e, nonZeroCount, '-', '-', 'Non-Zero Coefficients'));
+                    badge.addEventListener('mouseleave', () => hideTooltip());
+                    header.appendChild(badge);
+                }
+                // Just update text, don't recreate listeners if it exists
                 badge.textContent = `${nonZeroCount}`;
-
-                badge.addEventListener('mouseenter', (e) => {
-                    showTooltip(e, nonZeroCount, '-', '-', 'Non-Zero Coefficients');
-                });
-                badge.addEventListener('mouseleave', () => {
-                    hideTooltip();
-                });
-
-                header.appendChild(badge);
             }
         }
     }
-
-    el.addEventListener('mouseleave', () => {
-        clearAllHighlights();
-    });
 }
 
-
-
-function getBlockRGB(imageData, bx, by) {
-    const data = [];
+function getBlockRGB(imageData: ImageData, bx: number, by: number): Uint8ClampedArray {
+    const data = new Uint8ClampedArray(64 * 3);
     const pixels = imageData.data;
     const w = imageData.width;
 
@@ -624,7 +586,10 @@ function getBlockRGB(imageData, bx, by) {
             const x = bx * 8 + dx;
             const y = by * 8 + dy;
             const idx = (y * w + x) * 4;
-            data.push([pixels[idx], pixels[idx + 1], pixels[idx + 2]]);
+            const i = dy * 8 + dx;
+            data[i * 3] = pixels[idx];
+            data[i * 3 + 1] = pixels[idx + 1];
+            data[i * 3 + 2] = pixels[idx + 2];
         }
     }
     return data;

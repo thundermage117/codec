@@ -13,7 +13,7 @@
 
 label {
     font-weight: 600;
-    font-size: 0.9rem;
+    font-size: var(--text-md);
     display: flex;
     justify-content: space-between;
 }
@@ -127,7 +127,7 @@ button.primary:active {
     background: var(--bg-secondary);
     border-radius: 6px;
     font-family: var(--font-mono);
-    font-size: 0.85rem;
+    font-size: var(--text-base);
     white-space: pre-wrap;
     border: 1px solid var(--border);
 }
@@ -136,7 +136,7 @@ button.primary:active {
 .group-label {
     margin-bottom: 8px;
     display: block;
-    font-size: 0.9rem;
+    font-size: var(--text-md);
     color: var(--text);
 }
 
@@ -161,7 +161,7 @@ input[type="checkbox"] {
     flex: 1;
     text-align: center;
     padding: 8px 4px;
-    font-size: 0.85rem;
+    font-size: var(--text-base);
     font-weight: 500;
     border-radius: 6px;
     cursor: pointer;
@@ -194,7 +194,7 @@ input[type="checkbox"] {
     width: 100%;
     border-collapse: collapse;
     margin-top: 10px;
-    font-size: 0.9rem;
+    font-size: var(--text-md);
     color: var(--text);
 }
 
@@ -208,6 +208,12 @@ input[type="checkbox"] {
 .metrics-table th {
     background-color: var(--bg-secondary);
     font-weight: 600;
+}
+
+.metrics-table th .tooltip-container {
+    display: inline-flex;
+    justify-content: center;
+    gap: 4px;
 }
 
 .metrics-table td {
@@ -257,13 +263,13 @@ input[type="checkbox"] {
 }
 
 .preset-label {
-    font-size: 0.8rem;
+    font-size: var(--text-base-sm);
     font-weight: 700;
     color: var(--text);
 }
 
 .preset-desc {
-    font-size: 0.6rem;
+    font-size: var(--text-xs);
     color: var(--text-muted);
     letter-spacing: 0.02em;
 }
@@ -330,12 +336,55 @@ input[type="checkbox"] {
     color: var(--success-color);
 }
 
-#tint_toggle+label {
-    font-weight: normal;
-    transition: color 0.1s ease;
+.tint-toggle-group {
+    margin-top: 6px;
 }
 
-#tint_toggle:checked+label {
-    color: var(--primary);
+.tint-toggle-group label {
+    padding: 5px 4px;
+    font-size: var(--text-base-sm);
+}
+
+/* Tool Button */
+.tool-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 10px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
     font-weight: 600;
+    font-size: var(--text-md);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.tool-btn:hover {
+    border-color: var(--primary);
+    background: var(--primary-subtle);
+    color: var(--primary);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.tool-btn:active {
+    transform: translateY(0);
+}
+
+.tool-btn.active {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+}
+
+.tool-btn.active:hover {
+    background: var(--primary-hover);
+}
+
+.tool-btn svg {
+    stroke-width: 2.5;
 }

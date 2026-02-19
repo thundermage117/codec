@@ -1,0 +1,46 @@
+<!-- /*
+ * Codec Explorer: An interactive codec laboratory.
+ * Copyright (C) 2026 Abhinav Tanniru
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */ -->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WASM Codec Explorer</title>
+
+    <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+
+    <!-- Google Fonts: Inter + JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap"
+        rel="stylesheet">
+
+    <!-- Theme init: apply saved/system theme before first paint to prevent flash -->
+    <script>
+        (function () {
+            const saved = localStorage.getItem('theme');
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            if (saved === 'dark' || (!saved && prefersDark)) {
+                document.documentElement.setAttribute('data-theme', 'dark');
+            }
+        })();
+    </script>
+</head>
+
+<body>
+    <!-- WASM runtime (sets Module global before app scripts run) -->
+    <script src="/codec.js"></script>
+    <!-- Svelte app entry point -->
+    <script type="module" src="/src/main.ts"></script>
+</body>
+
+</html>

@@ -1,0 +1,96 @@
+/* ===== Color Legend (used in InspectorMode.svelte) ===== */
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+}
+
+.dot-positive {
+    background: var(--cell-positive);
+}
+
+.dot-negative {
+    background: var(--cell-negative);
+}
+
+.dot-zero {
+    background: var(--cell-zero);
+    opacity: 0.5;
+}
+
+.dot-intensity {
+    background: linear-gradient(135deg, #000, #fff);
+    border: 1px solid var(--border);
+}
+
+/* ===== Inspector Badges ===== */
+.inspector-badge {
+    font-size: 0.68rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: var(--radius-full);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.badge-coords {
+    background: rgba(37, 99, 235, 0.08);
+    color: var(--primary);
+    border: 1px solid rgba(37, 99, 235, 0.15);
+}
+
+.badge-qtable {
+    background: rgba(217, 119, 6, 0.08);
+    color: #b45309;
+    border: 1px solid rgba(217, 119, 6, 0.15);
+}
+
+/* ===== Tooltips ===== */
+.tooltip-content-small {
+    display: none;
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 0.72rem;
+    font-weight: normal;
+    color: var(--text);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+    width: 220px;
+    z-index: 100;
+    line-height: 1.5;
+    margin-bottom: 6px;
+}
+
+.tooltip-content-small.tooltip-wide {
+    width: 300px;
+}
+
+.tooltip-container:hover .tooltip-content-small {
+    display: block;
+}
+
+/* ===== Color-coded stat values ===== */
+.stat-value.stat-good {
+    color: var(--color-good);
+}
+
+.stat-value.stat-moderate {
+    color: var(--color-moderate);
+}
+
+.stat-value.stat-poor {
+    color: var(--color-poor);
+}
+

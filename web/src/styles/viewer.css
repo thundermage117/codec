@@ -75,7 +75,6 @@ canvas {
 
 .slider-label:last-child {
     text-align: left;
-    color: var(--primary);
 }
 
 .comparison-slider-input {
@@ -83,10 +82,28 @@ canvas {
     -webkit-appearance: none;
     appearance: none;
     height: 6px;
-    background: linear-gradient(to right, var(--text-muted) 0%, var(--primary) 100%);
+    background: var(--toggle-bg);
     border-radius: 3px;
     outline: none;
     cursor: pointer;
+}
+
+.comparison-slider-input::-webkit-slider-runnable-track {
+    background: var(--toggle-bg);
+    border-radius: 3px;
+    height: 6px;
+}
+
+.comparison-slider-input::-moz-range-track {
+    background: var(--toggle-bg);
+    border-radius: 3px;
+    height: 6px;
+}
+
+.comparison-slider-input::-moz-range-progress {
+    background: var(--toggle-bg);
+    border-radius: 3px;
+    height: 6px;
 }
 
 .comparison-slider-input::-webkit-slider-thumb {
@@ -94,7 +111,7 @@ canvas {
     width: 20px;
     height: 20px;
     background: white;
-    border: 2px solid var(--primary);
+    border: 2px solid var(--border);
     border-radius: 50%;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
     transition: transform 0.1s;
@@ -108,7 +125,7 @@ canvas {
     width: 20px;
     height: 20px;
     background: white;
-    border: 2px solid var(--primary);
+    border: 2px solid var(--border);
     border-radius: 50%;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
     transition: transform 0.1s;

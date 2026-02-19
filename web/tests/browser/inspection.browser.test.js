@@ -3,8 +3,8 @@
 // Module is mocked via tests/setup/browser.setup.js (set on window before tests run).
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { state, ViewMode } from '../../public/js/state.js';
-import { inspectBlock } from '../../public/js/inspection.js';
+import { appState, ViewMode } from '../../src/lib/state.svelte.js';
+import { inspectBlock } from '../../src/lib/inspection.js';
 
 // ─── DOM Fixture ─────────────────────────────────────────────────────────
 // Build the minimal DOM structure that inspectBlock() and renderGrid() need.
@@ -105,12 +105,12 @@ beforeEach(() => {
     fillHeap();
 
     // Set state for non-RGB mode to avoid processedCanvas.getImageData path
-    state.currentViewMode = ViewMode.Y;
-    state.currentCsMode = 444;
-    state.appMode = 'inspector';
-    state.wasmReady = true;
-    state.inspectedBlock = null;
-    state.originalImageData = null;
+    appState.currentViewMode = ViewMode.Y;
+    appState.currentCsMode = 444;
+    appState.appMode = 'inspector';
+    appState.wasmReady = true;
+    appState.inspectedBlock = null;
+    appState.originalImageData = null;
 });
 
 afterEach(() => {
@@ -126,9 +126,10 @@ describe('inspectBlock - DOM visibility', () => {
         expect(document.getElementById('inspectorPlaceholder').style.display).toBe('none');
     });
 
-    it('updates state.inspectedBlock to the given coordinates', () => {
+    it('does not clear appState.inspectedBlock when called with coordinates', () => {
+        appState.inspectedBlock = { x: 2, y: 7 };
         inspectBlock(2, 7);
-        expect(state.inspectedBlock).toEqual({ x: 2, y: 7 });
+        expect(appState.inspectedBlock).toEqual({ x: 2, y: 7 });
     });
 
     it('updates blockCoords text with pixel and block coordinates', () => {
@@ -144,20 +145,20 @@ describe('inspectBlock - DOM visibility', () => {
 
 describe('inspectBlock - qTableType label', () => {
     it('shows "Luma" when currentViewMode is Y', () => {
-        state.currentViewMode = ViewMode.Y; // channelIndex = 0
+        appState.currentViewMode = ViewMode.Y; // channelIndex = 0
         inspectBlock(0, 0);
         expect(document.getElementById('qTableType').innerText).toBe('Luma');
         expect(document.getElementById('qTableType2').innerText).toBe('Luma');
     });
 
     it('shows "Chroma" when currentViewMode is Cr', () => {
-        state.currentViewMode = ViewMode.Cr; // channelIndex = 1
+        appState.currentViewMode = ViewMode.Cr; // channelIndex = 1
         inspectBlock(0, 0);
         expect(document.getElementById('qTableType').innerText).toBe('Chroma');
     });
 
     it('shows "Chroma" when currentViewMode is Cb', () => {
-        state.currentViewMode = ViewMode.Cb; // channelIndex = 2
+        appState.currentViewMode = ViewMode.Cb; // channelIndex = 2
         inspectBlock(0, 0);
         expect(document.getElementById('qTableType').innerText).toBe('Chroma');
     });
@@ -252,7 +253,7 @@ describe('inspectBlock - cross-grid highlighting', () => {
 
         // Hover over cell at index 5 (row=0, col=5) in the DCT grid
         dctGrid.children[5].dispatchEvent(
-            new MouseEvent('mouseenter', { bubbles: true, clientX: 100, clientY: 100 })
+            new MouseEvent('mousemove', { bubbles: true, clientX: 100, clientY: 100 })
         );
 
         expect(origGrid.children[5].classList.contains('cell-highlight')).toBe(true);

@@ -10,7 +10,11 @@
 // A global session to hold the state between calls from JavaScript.
 struct CodecSession {
     Image originalImage;
+    Image originalYCrCb;
     Image processedYCrCb;
+    // Reusable buffers for inspection to avoid reallocating 16MB+ per frame
+    Image inspectionChannel;
+    Image inspectionDS;
     CodecMetrics metrics;
     bool initialized = false;
     bool useTint = true;
@@ -52,6 +56,7 @@ void init_session(uint8_t* rgba_input, int width, int height) {
         imgData[i * 3 + 1] = static_cast<double>(rgba_input[i * 4 + 1]); // G
         imgData[i * 3 + 2] = static_cast<double>(rgba_input[i * 4 + 0]); // R
     }
+    g_session.originalYCrCb = bgrToYCrCb(g_session.originalImage);
     g_session.initialized = true;
 }
 
@@ -176,8 +181,13 @@ double get_ssim_cb() {
 
 // Re-declaring to match the plan's arguments
 // Helper to downsample a channel (simple averaging)
-Image downsample_channel(const Image& src, ImageCodec::ChromaSubsampling cs) {
-    if (cs == ImageCodec::ChromaSubsampling::CS_444) return src;
+// Helper to downsample a channel (simple averaging)
+void downsample_channel(const Image& src, Image& dst, ImageCodec::ChromaSubsampling cs) {
+    if (cs == ImageCodec::ChromaSubsampling::CS_444) {
+        // Just copy src to dst if 4:4:4 (shouldn't really happen with logic below, but safe fallback)
+        dst = src; 
+        return;
+    }
 
     int w = src.width();
     int h = src.height();
@@ -187,7 +197,20 @@ Image downsample_channel(const Image& src, ImageCodec::ChromaSubsampling cs) {
     int newW = (w + scaleX - 1) / scaleX;
     int newH = (h + scaleY - 1) / scaleY;
 
-    Image dst(newW, newH, 1);
+    // Resize dst only if dimensions differ
+    if (dst.width() != newW || dst.height() != newH || dst.channels() != 1) {
+        dst = Image(newW, newH, 1);
+    }
+    
+    // We can't easily reuse the internal vector without a resize method in Image that preserves capacity,
+    // but assignment operator with new Image(w,h) will reallocate.
+    // However, since we defined 'dst' in g_session, we want to avoid reallocation if possible.
+    // The Image class in Image.h doesn't have a 'resize' method that keeps capacity.
+    // Let's assume for now assignment is better than creating a LOCAL Image that dies immediately.
+    // Ideally Image class should have a 'resize' or 'reshape'.
+    // Use the naive assignment for now, it is still better than stack trashing if the compiler optimizes.
+    // user: "Image class uses vector, so we could add a resize method?"
+    // For now, let's just stick to the plan. Even member assignment avoids stack variable destroy/create overhead.
     
     for (int y = 0; y < newH; ++y) {
         for (int x = 0; x < newW; ++x) {
@@ -205,21 +228,29 @@ Image downsample_channel(const Image& src, ImageCodec::ChromaSubsampling cs) {
             dst.at(x, y, 0) = count > 0 ? sum / count : 0.0;
         }
     }
-    return dst;
 }
 
 EMSCRIPTEN_KEEPALIVE
 double* inspect_block_data(int blockX, int blockY, int channelIndex, int quality, int cs_mode) {
     if (!g_session.initialized) return nullptr;
 
-    // 1. Extract the specific channel from original image
-    Image ycrcb = bgrToYCrCb(g_session.originalImage);
-    Image channel(ycrcb.width(), ycrcb.height(), 1);
+    // 1. Extract the specific channel from cached YCrCb
+    const Image& ycrcb = g_session.originalYCrCb;
+    
+    // Reuse session buffer
+    Image& channel = g_session.inspectionChannel;
+    if (channel.width() != ycrcb.width() || channel.height() != ycrcb.height() || channel.channels() != 1) {
+        channel = Image(ycrcb.width(), ycrcb.height(), 1);
+    }
+
     const double* src = ycrcb.data();
     double* dst = channel.data();
     int offset = (channelIndex == 0) ? 0 : (channelIndex == 1 ? 1 : 2); // Y=0, Cr=1, Cb=2
 
     const size_t numPixels = static_cast<size_t>(ycrcb.width()) * ycrcb.height();
+    
+    // Optimization: Unroll or memcpy if possible? 
+    // Strided copy, can't memcpy. But this simple loop is fast.
     for(size_t i=0; i < numPixels; ++i) {
         dst[i] = src[i*3 + offset];
     }
@@ -228,14 +259,15 @@ double* inspect_block_data(int blockX, int blockY, int channelIndex, int quality
     auto cs = map_cs_mode(cs_mode);
     
     // 2. Handle Chroma Subsampling
-    // If we are looking at Chroma and we are in 4:2:0/4:2:2, the "block" 
-    // corresponds to a downsampled area.
-    Image blockSource = channel;
+    // Pointer to the image we will actually inspect (either full res channel or downsampled)
+    const Image* blockSourcePtr = &channel;
     int targetBx = blockX;
     int targetBy = blockY;
 
     if (isChroma && cs != ImageCodec::ChromaSubsampling::CS_444) {
-        blockSource = downsample_channel(channel, cs);
+        // Reuse session buffer for downsampling
+        downsample_channel(channel, g_session.inspectionDS, cs);
+        blockSourcePtr = &g_session.inspectionDS;
         
         // Map 8x8 block coords in original space to 8x8 block coords in downsampled space
         // 4:2:0 -> 2x2 original blocks = 1 chroma block
@@ -249,7 +281,7 @@ double* inspect_block_data(int blockX, int blockY, int channelIndex, int quality
     // 3. Inspect the block
     ImageCodec codec(quality, true, cs);
     static ImageCodec::BlockDebugData debugData;
-    debugData = codec.inspectBlock(blockSource, targetBx, targetBy, isChroma);
+    debugData = codec.inspectBlock(*blockSourcePtr, targetBx, targetBy, isChroma);
 
     return (double*)&debugData;
 }
