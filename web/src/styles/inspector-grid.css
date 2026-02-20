@@ -1,0 +1,177 @@
+/* ===== Grid Cell ===== */
+
+.grid-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.55rem;
+    font-family: var(--font-mono);
+    cursor: default;
+    user-select: none;
+    transition: background-color 0.05s;
+    background: var(--card-bg);
+    overflow: hidden;
+}
+
+.grid-cell:hover {
+    box-shadow: 0 0 0 2px var(--primary);
+    z-index: 10;
+    position: relative;
+    border-radius: 2px;
+}
+
+.grid-cell.cell-highlight {
+    outline: 2px solid #f59e0b;
+    outline-offset: -1px;
+    z-index: 3;
+    border-radius: 2px;
+    animation: cellGlow 1s ease-in-out infinite alternate;
+}
+
+@keyframes cellGlow {
+    from {
+        box-shadow: 0 0 4px rgba(245, 158, 11, 0.3);
+    }
+
+    to {
+        box-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
+    }
+}
+
+.cell-zero {
+    color: var(--text-muted);
+    opacity: 0.3;
+}
+
+/* ===== Loss Meter ===== */
+
+#lossMeterContainer {
+    width: 100%;
+    margin-top: 12px;
+}
+
+.loss-meter {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: rgba(0, 0, 0, 0.04);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+
+[data-theme="dark"] .loss-meter {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.loss-meter-label-wrap {
+    position: relative;
+    flex-shrink: 0;
+    cursor: help;
+}
+
+.loss-meter-label {
+    font-size: var(--text-xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+}
+
+.loss-meter-track {
+    flex: 1;
+    height: 6px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+}
+
+.loss-meter-fill {
+    height: 100%;
+    border-radius: var(--radius-full);
+    transition: width 0.3s ease, background 0.3s ease;
+}
+
+.loss-meter-value {
+    font-size: 0.65rem;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    color: var(--text);
+    flex-shrink: 0;
+    min-width: 24px;
+    text-align: right;
+}
+
+/* ===== Grid Cell Tooltip ===== */
+
+.grid-cell-tooltip {
+    position: fixed;
+    z-index: 3000;
+    pointer-events: none;
+    background: rgba(15, 23, 42, 0.95);
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: var(--text-sm);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    opacity: 0;
+    transition: opacity 0.1s;
+    backdrop-filter: blur(4px);
+}
+
+.grid-cell-tooltip.visible {
+    opacity: 1;
+}
+
+.tooltip-pos {
+    font-family: var(--font-mono);
+    color: rgba(255, 255, 255, 0.6);
+    font-size: var(--text-xs);
+    margin-bottom: 2px;
+}
+
+.tooltip-value {
+    font-weight: 700;
+    font-size: var(--text-md);
+}
+
+.tooltip-desc {
+    margin-top: 4px;
+    font-size: 0.65rem;
+    opacity: 0.8;
+    max-width: 140px;
+}
+
+/* ===== Non-zero count badge ===== */
+
+.nonzero-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: var(--radius-full);
+    background: var(--primary);
+    color: white;
+    font-size: var(--text-xs);
+    font-weight: 700;
+    margin-left: auto;
+}
+
+/* ===== Container-responsive font size ===== */
+/* pipeline-block has container-type: inline-size, so @container queries work */
+
+@container (max-width: 180px) {
+    .grid-cell {
+        font-size: 0.42rem;
+    }
+}
+
+@container (max-width: 150px) {
+    /* Cells are ~18px wide — even tiny text doesn't help; hide it.
+       Values remain visible via hover tooltip. */
+    .grid-cell {
+        font-size: 0;
+    }
+}

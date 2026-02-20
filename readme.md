@@ -4,37 +4,42 @@
 
 An interactive codec laboratory to visualize how transform-based image compression works. The C++ core is compiled to WebAssembly, allowing for real-time, in-browser experimentation.
 
-This project aims to demonstrate:
+This project demonstrates:
 
 - 8x8 block splitting
-- Color Space Transformation (RGB -> YCbCr)
+- Color space transformation (RGB → YCbCr)
 - Discrete Cosine Transform (DCT)
 - Quantization
 - Inverse DCT (reconstruction)
 - PSNR computation
-- Visual difference analysis
-
-The long-term goal is to run the codec core in WebAssembly and build a browser-based interactive visualizer.
+- Visual difference and artifact analysis
+- Block-level coefficient inspection
 
 ---
 
 ## 🏗 Project Structure
 
-- `core/`: Contains the C++ implementation of the codec core.
-  - `inc/`: Header files for the codec core.
-  - `src/`: Source files for the codec core.
-  - `build/`: Directory for build artifacts (ignored in git).
-- `apps/native/`: A native C++ application for testing the core library.
-- `web/`: The web application front-end.
-  - `public/`: Contains the HTML, CSS, JS, and WASM module for the interactive UI.
-
+- `core/`: C++ implementation of the codec core.
+  - `inc/`: Header files.
+  - `src/`: Source files.
+  - `build/`: Build artifacts (git-ignored).
+- `apps/native/`: Native C++ application for testing the core library.
+- `web/`: Svelte 5 + Vite web application.
+  - `src/`: TypeScript + Svelte source files.
+  - `public/`: Static assets including compiled WASM (`codec.js`, `codec.wasm`).
 
 ## ⚙️ Requirements
 
 ### For the Web App
 
-- A modern web browser that supports WebAssembly.
-- A local web server to serve the `web/public` directory (e.g., Python's `http.server`).
+- Node.js ≥ 18
+- npm
+
+### For Rebuilding the WASM (Optional)
+
+Only needed if you modify the C++ core. The compiled WASM is already checked in to `web/public/`.
+
+- [Emscripten SDK](https://emscripten.org/docs/getting_started/downloads.html) (`emcc` on PATH)
 
 ### For the Native C++ App (Optional)
 
@@ -44,73 +49,84 @@ The long-term goal is to run the codec core in WebAssembly and build a browser-b
 - macOS / Linux
 
 ## 🚀 Getting Started
-1. Clone the repository:
-   ```bash
-    git clone https://github.com/thundermage117/codec.git
-    cd codec
-    ```
 
-The easiest way to use the Codec Explorer is through the web interface.
+```bash
+git clone https://github.com/thundermage117/codec.git
+cd codec
+```
 
 ### Running the Web App
 
-1.  Navigate to the web directory:
-    ```bash
-    cd web
-    ```
-2.  You need a simple local HTTP server to run the application. If you have Python 3, you can run:
-    ```bash
-    python3 -m http.server --directory public 8000
-    ```
-3.  Open your web browser and go to `http://localhost:8000`.
-4.  Upload an image and adjust the quality slider to see the effects of compression in real-time.
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Then open `http://localhost:5173` in your browser.
+
+### Building for Production
+
+```bash
+cd web
+npm run build
+```
+
+Output goes to `web/dist/`. The app is deployed to Vercel on every push to `main`.
+
+### Rebuilding the WASM
+
+If you've modified the C++ core and need to recompile:
+
+```bash
+make web
+```
+
+This runs `emcc` and outputs `codec.js` + `codec.wasm` into `web/public/`.
 
 ### Building and Running the Native App
 
-If you want to build the native C++ version for testing:
+From the project root:
 
-1.  From the project root, you can compile and run the native application with a default image using a single command:
+```bash
+make dev
+```
 
-    ```bash
-    make dev
-    ```
-    This will create a `build` directory, compile the code, and run the `codec_app` executable.
+This compiles and runs the native app with a default image. To use a custom image:
 
-2.  **Running with a custom image:**
-    After the app has been built, the executable is located at `build/codec_app`. You can run it with your own image from the project root:
-    ```bash
-    ./build/codec_app path/to/your/image.png
-    ```
-3. You can run help to see available options:
-    ```bash
-    ./build/codec_app --help
-    ```
+```bash
+./build/codec_app path/to/your/image.png
+```
+
+Run `./build/codec_app --help` to see available options.
 
 ## 📈 Roadmap
 
 ### ✅ Phase 1: Complete
 
 - [x] Static Image Transform Explorer (Web UI)
-- [x] Color Image Input (RGB -> YCbCr)
+- [x] Color image input (RGB → YCbCr)
 - [x] 8×8 DCT implementation
 - [x] Quantization control via quality slider
 - [x] Reconstruction (Inverse DCT)
 - [x] PSNR computation for Y, Cb, Cr channels
 
-Phase 2 
-- [x] Display artifact maps highlighting differences between original and reconstructed images
-- Block-Level Inspection
-- Interactive block selection
-- Coefficient heatmap visualization
-- Zig-zag ordering
-- Zero-run visualization
+### ✅ Phase 2: Complete
 
-Phase 3 
-- Motion Estimation
-- Two-frame input
-- Block matching
-- Motion vector visualization
-- Bitrate comparison
+- [x] Artifact maps highlighting differences between original and reconstructed images
+- [x] Block-level inspection mode
+- [x] Interactive block selection
+- [x] Coefficient heatmap visualization
+- [ ] Zig-zag ordering
+- [ ] Zero-run visualization
+
+### Phase 3
+
+- [ ] Motion estimation
+- [ ] Two-frame input
+- [ ] Block matching
+- [ ] Motion vector visualization
+- [ ] Bitrate comparison
 
 ## ▶️ Why This Project Exists
 

@@ -1,0 +1,101 @@
+/* ===== Floating Basis Popover ===== */
+
+.basis-popover {
+    position: fixed;
+    z-index: 2000;
+    pointer-events: none;
+    background: var(--card-bg);
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(139, 92, 246, 0.1);
+    padding: 10px;
+    max-width: 260px;
+    opacity: 0;
+    transform: translateY(6px) scale(0.96);
+    transition: opacity 0.15s ease, transform 0.15s ease;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+[data-theme="dark"] .basis-popover {
+    background: rgba(30, 41, 59, 0.95);
+    border-color: rgba(139, 92, 246, 0.4);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(139, 92, 246, 0.15);
+}
+
+.basis-popover.visible {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+
+.basis-popover-header {
+    margin-bottom: 6px;
+    border-bottom: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.06));
+    padding-bottom: 5px;
+}
+
+.basis-popover-title {
+    font-size: var(--text-sm);
+    font-weight: 700;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.basis-popover-freq {
+    font-size: 0.54rem;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: var(--radius-full);
+    background: rgba(139, 92, 246, 0.1);
+    color: #7c3aed;
+    border: 1px solid rgba(139, 92, 246, 0.2);
+}
+
+.basis-popover-body {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.basis-popover-canvases {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+}
+
+.basis-popover-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+}
+
+.basis-popover-panel-label {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+}
+
+.basis-popover-panel canvas {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--viewer-bg);
+    image-rendering: pixelated;
+}
+
+.basis-popover-stats {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    background: var(--bg-secondary);
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-family: var(--font-mono);
+}
+
+.basis-popover-stats strong {
+    color: var(--text);
+}

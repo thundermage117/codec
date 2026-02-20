@@ -1,0 +1,111 @@
+/* ===== Inspector Responsive Overrides ===== */
+
+@media (max-width: 900px) {
+    .inspector-layout {
+        flex-direction: column;
+    }
+
+    .inspector-sidebar {
+        width: 100%;
+        min-width: 100%;
+        max-width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        max-height: 260px;
+        overflow-y: auto;
+    }
+
+    .inspector-main {
+        padding: 16px;
+    }
+
+    .pipeline-row {
+        flex-direction: column;
+        gap: 24px;
+        align-items: center;
+    }
+
+    .pipeline-block {
+        width: 100%;
+        max-width: 320px;
+    }
+
+    /* Analysis row: let all three items fill the full grid cell width */
+    .analysis-row .pipeline-block {
+        max-width: none;
+    }
+
+    /* Pipeline arrows: display as a compact horizontal row with ↓ icon */
+    .pipeline-arrow {
+        transform: none;
+        min-width: 0;
+        min-height: auto;
+        width: 100%;
+        max-width: 320px;
+        flex-direction: row;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        margin: 0;
+        z-index: 20;
+    }
+
+    .pipeline-arrow .arrow-line {
+        display: none;
+    }
+
+    .arrow-label {
+        transform: none;
+    }
+
+    .arrow-icon {
+        display: inline-block;
+        transform: rotate(90deg);
+        font-size: 1.3rem;
+        margin-top: 0;
+    }
+
+    /* Reset tooltip to normal above-element positioning */
+    .pipeline-arrow .arrow-tooltip {
+        transform: translateX(-50%) translateY(-8px);
+        left: 50%;
+        top: auto;
+        bottom: 100%;
+        right: auto;
+        margin-left: 0;
+        text-align: center;
+        width: 200px;
+        z-index: 1000;
+    }
+
+    .pipeline-arrow:hover .arrow-tooltip {
+        transform: translateX(-50%) translateY(-4px);
+    }
+
+    .analysis-row {
+        grid-template-columns: 1fr;
+    }
+
+    .context-crop-canvas-wrap canvas {
+        width: 200px;
+        height: 200px;
+    }
+
+    .sidebar-shortcuts {
+        display: none;
+    }
+}
+
+@media (max-width: 600px) {
+    .inspector-topbar {
+        padding: 8px 12px;
+    }
+
+    .inspector-topbar-legend {
+        display: none;
+    }
+
+    .inspector-sidebar {
+        max-height: 200px;
+    }
+}

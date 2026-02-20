@@ -10,7 +10,7 @@ import { inspectBlock } from '../../src/lib/inspection.js';
 // Build the minimal DOM structure that inspectBlock() and renderGrid() need.
 
 const REQUIRED_DIVS = [
-    'inspectorContent', 'inspectorPlaceholder', 'blockCoords',
+    'blockCoords',
     'qTableType', 'qTableType2',
     'gridOriginal', 'gridDCT', 'gridQuantized', 'gridQuantized2',
     'gridDequantized', 'gridReconstructed', 'gridQuantTable', 'gridError',
@@ -50,8 +50,6 @@ function buildDOM() {
         }
     });
 
-    document.getElementById('inspectorContent').style.display = 'none';
-    document.getElementById('inspectorPlaceholder').style.display = 'block';
 }
 
 function teardownDOM() {
@@ -118,14 +116,11 @@ afterEach(() => {
 });
 
 // ─── DOM Visibility ───────────────────────────────────────────────────────
+// Note: inspectorContent/inspectorPlaceholder visibility is owned by Svelte
+// (style={appState.inspectedBlock ? ...} in InspectorMode.svelte). inspectBlock
+// itself no longer touches those elements.
 
 describe('inspectBlock - DOM visibility', () => {
-    it('shows inspectorContent and hides inspectorPlaceholder', () => {
-        inspectBlock(0, 0);
-        expect(document.getElementById('inspectorContent').style.display).toBe('block');
-        expect(document.getElementById('inspectorPlaceholder').style.display).toBe('none');
-    });
-
     it('does not clear appState.inspectedBlock when called with coordinates', () => {
         appState.inspectedBlock = { x: 2, y: 7 };
         inspectBlock(2, 7);
@@ -270,6 +265,188 @@ describe('inspectBlock - cross-grid highlighting', () => {
         dctGrid.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false }));
 
         expect(origGrid.children[5].classList.contains('cell-highlight')).toBe(false);
+    });
+});
+
+// ─── Loss Meter ───────────────────────────────────────────────────────────
+
+describe('inspectBlock - loss meter', () => {
+    it('creates a .loss-meter element inside lossMeterContainer', () => {
+        inspectBlock(0, 0);
+        const container = document.getElementById('lossMeterContainer');
+        expect(container.querySelector('.loss-meter')).not.toBeNull();
+    });
+
+    it('.loss-meter-value shows a percentage string', () => {
+        inspectBlock(0, 0);
+        const value = document.querySelector('.loss-meter-value');
+        expect(value).not.toBeNull();
+        expect(value.textContent).toMatch(/^\d+%$/);
+    });
+
+    it('shows 34% quality for the default test data (MSE=64)', () => {
+        // MSE=64 → PSNR = 10*log10(255²/64) ≈ 30.07 dB
+        // qualityPct = round((30.07 - 20) / 30 * 100) = round(33.57) = 34
+        inspectBlock(0, 0);
+        const value = document.querySelector('.loss-meter-value');
+        expect(value.textContent).toBe('34%');
+    });
+
+    it('does not create duplicate .loss-meter elements on repeated calls', () => {
+        inspectBlock(0, 0);
+        inspectBlock(1, 1);
+        const meters = document.getElementById('lossMeterContainer').querySelectorAll('.loss-meter');
+        expect(meters.length).toBe(1);
+    });
+});
+
+// ─── Stat CSS Classes ─────────────────────────────────────────────────────
+
+// Fills heap with uniform error-per-pixel so we can control MSE / peakError.
+// All quantData = 0 → zeroCount = 64 → compression = 100%.
+function fillHeapWithError(errorPerPixel) {
+    const heap = window.Module.HEAPU8;
+    heap.fill(0);
+    const view = new DataView(heap.buffer);
+    const basePtr = 256;
+    const original = 128;
+    const recon = original - errorPerPixel;
+    [
+        new Array(64).fill(original), // originalData
+        new Array(64).fill(0),        // dctData
+        new Array(64).fill(16),       // qtData
+        new Array(64).fill(0),        // quantData  (all zero → zeroCount=64)
+        new Array(64).fill(recon),    // reconData
+    ].forEach((grid, gi) => {
+        grid.forEach((val, i) => {
+            view.setFloat64(basePtr + gi * 64 * 8 + i * 8, val, true);
+        });
+    });
+}
+
+describe('inspectBlock - stat CSS classes', () => {
+    it('MSE < 5 gives stat-good class on statMSE', () => {
+        // error=1 per pixel → MSE = 1
+        fillHeapWithError(1);
+        inspectBlock(0, 0);
+        expect(document.getElementById('statMSE').classList.contains('stat-good')).toBe(true);
+    });
+
+    it('5 ≤ MSE < 20 gives stat-moderate class on statMSE', () => {
+        // error=3 per pixel → MSE = 9
+        fillHeapWithError(3);
+        inspectBlock(0, 0);
+        expect(document.getElementById('statMSE').classList.contains('stat-moderate')).toBe(true);
+    });
+
+    it('MSE ≥ 20 gives stat-poor class on statMSE', () => {
+        // default fillHeap(): error=8 → MSE=64
+        inspectBlock(0, 0);
+        expect(document.getElementById('statMSE').classList.contains('stat-poor')).toBe(true);
+    });
+
+    it('peakError < 10 gives stat-good class on statPeakError', () => {
+        // default fillHeap(): peakError=8 < 10
+        inspectBlock(0, 0);
+        expect(document.getElementById('statPeakError').classList.contains('stat-good')).toBe(true);
+    });
+
+    it('compression > 70% gives stat-good class on statCompression', () => {
+        // fillHeapWithError(1): quantData all 0 → zeroCount=64 → 100%
+        fillHeapWithError(1);
+        inspectBlock(0, 0);
+        expect(document.getElementById('statCompression').classList.contains('stat-good')).toBe(true);
+    });
+});
+
+// ─── Null WASM Pointer ────────────────────────────────────────────────────
+
+describe('inspectBlock - null WASM pointer', () => {
+    it('leaves grids empty when WASM returns 0', () => {
+        const orig = window.Module._inspect_block_data;
+        window.Module._inspect_block_data = () => 0;
+
+        inspectBlock(0, 0);
+
+        expect(document.getElementById('gridDCT').children.length).toBe(0);
+        expect(document.getElementById('gridOriginal').children.length).toBe(0);
+
+        window.Module._inspect_block_data = orig;
+    });
+});
+
+// ─── Quality Slider Selection ─────────────────────────────────────────────
+
+describe('inspectBlock - quality slider selection', () => {
+    function spyOnQuality(callback) {
+        const orig = window.Module._inspect_block_data;
+        let captured = null;
+        window.Module._inspect_block_data = (_bx, _by, _ch, q) => { captured = q; return 256; };
+        callback();
+        window.Module._inspect_block_data = orig;
+        return captured;
+    }
+
+    it('uses inspQualitySlider value in inspector mode', () => {
+        document.getElementById('inspQualitySlider').value = '75';
+        appState.appMode = 'inspector';
+        const q = spyOnQuality(() => inspectBlock(0, 0));
+        expect(q).toBe(75);
+    });
+
+    it('uses qualitySlider value in viewer mode', () => {
+        document.getElementById('qualitySlider').value = '30';
+        appState.appMode = 'viewer';
+        const q = spyOnQuality(() => inspectBlock(0, 0));
+        expect(q).toBe(30);
+    });
+
+    it('falls back to appState.quality when no slider element exists', () => {
+        // Remove both sliders temporarily
+        const insp = document.getElementById('inspQualitySlider');
+        const qual = document.getElementById('qualitySlider');
+        insp.remove();
+        qual.remove();
+
+        appState.quality = 42;
+        appState.appMode = 'viewer';
+        const q = spyOnQuality(() => inspectBlock(0, 0));
+        expect(q).toBe(42);
+
+        document.body.appendChild(insp);
+        document.body.appendChild(qual);
+    });
+});
+
+// ─── Grid Value Accuracy ──────────────────────────────────────────────────
+
+describe('inspectBlock - derived grid values', () => {
+    it('gridError cell[0] shows "8.0" (original 128 − recon 120 = 8)', () => {
+        inspectBlock(0, 0);
+        const cell = document.getElementById('gridError').children[0];
+        expect(cell.innerText).toBe('8.0');
+    });
+
+    it('gridError cells[1..63] show "8.0" (uniform error across block)', () => {
+        inspectBlock(0, 0);
+        const cells = document.getElementById('gridError').children;
+        for (let i = 1; i < 64; i++) {
+            expect(cells[i].innerText).toBe('8.0');
+        }
+    });
+
+    it('gridDequantized cell[0] shows "512.0" (quantData[0]=32 × qtData=16)', () => {
+        inspectBlock(0, 0);
+        const cell = document.getElementById('gridDequantized').children[0];
+        expect(cell.innerText).toBe('512.0');
+    });
+
+    it('gridDequantized cells[1..63] show "0" (quantData[1..63]=0)', () => {
+        inspectBlock(0, 0);
+        const cells = document.getElementById('gridDequantized').children;
+        for (let i = 1; i < 64; i++) {
+            expect(cells[i].innerText).toBe('0');
+        }
     });
 });
 
