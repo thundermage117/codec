@@ -1,7 +1,8 @@
 import { appState, ViewMode } from './state.svelte.js';
 import { inspectBlockData } from './wasm-bridge.js';
 import { hideBasisPopover, setCachedGridData } from './basis-popover.js';
-import { renderGrid, renderLossMeter } from './grid-renderer.js';
+import { renderGrid, renderLossMeter, renderZigzagArray, renderEntropySummary } from './grid-renderer.js';
+import { estimateBlockBits, getEntropySymbols } from './dct-utils.js';
 
 export function inspectBlock(blockX: number, blockY: number): void {
     hideBasisPopover();
@@ -110,16 +111,29 @@ export function inspectBlock(blockX: number, blockY: number): void {
     setStatEl('statZeros', `${zeroCount}/64`, null, null);
     setStatEl('statCompression', `${zeroPercent}%`, compClass, compClass);
 
+    const estBits = estimateBlockBits(quantData);
+    const bpp = estBits / 64;
+
+    // Good bpp is strictly less than 1.5, moderate is < 3.0, otherwise poor.
+    const bppClass = bpp < 1.5 ? 'good' : bpp < 3.0 ? 'moderate' : 'poor';
+    setStatEl('statEstBits', `${estBits}`, null, null);
+    setStatEl('statBpp', bpp.toFixed(2), bppClass, bppClass);
+
     renderGrid('gridOriginal', originalRGB ?? originalData, 'intensity', 'original', appState.currentViewMode === ViewMode.RGB);
     renderGrid('gridDCT', dctData, 'frequency', 'dct');
     renderGrid('gridQuantized', quantData, 'frequency', 'quantized');
     renderGrid('gridQuantized2', quantData, 'frequency', 'quantized');
+    renderGrid('gridQuantizedAdvanced', quantData, 'frequency', 'quantized');
     renderGrid('gridDequantized', dequantizedData, 'frequency', 'dequantized');
     renderGrid('gridReconstructed', reconstructedRGB ?? reconData, 'intensity', 'reconstructed', appState.currentViewMode === ViewMode.RGB);
     renderGrid('gridQuantTable', qtData, 'qtable', 'qtable');
     renderGrid('gridError', Array.from(errorData), 'error', 'error');
 
     renderLossMeter(mse, peakError);
+    renderZigzagArray(quantData);
+
+    const entropySymbols = getEntropySymbols(quantData);
+    renderEntropySummary(entropySymbols);
 }
 
 function getBlockRGB(imageData: ImageData, bx: number, by: number): Uint8ClampedArray {

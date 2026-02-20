@@ -534,6 +534,16 @@
                                         <div class="stat-label">Compression</div>
                                         <div class="tooltip-content-small"><strong>Zero Coefficient Ratio</strong><br><code>(zeros / 64) &times; 100%</code><br>Percentage of quantized DCT coefficients equal to zero.</div>
                                     </div>
+                                    <div class="stat-box tooltip-container">
+                                        <div class="stat-value" id="statEstBits">—</div>
+                                        <div class="stat-label">Est. Bits</div>
+                                        <div class="tooltip-content-small"><strong>Estimated Bits</strong><br>Calculated via simplified Huffman simulation on Zig-zag scanned runs and symbol magnitudes.</div>
+                                    </div>
+                                    <div class="stat-box tooltip-container">
+                                        <div class="stat-value" id="statBpp">—</div>
+                                        <div class="stat-label">Bits / Pixel</div>
+                                        <div class="tooltip-content-small"><strong>Bits Per Pixel</strong><br><code>(Est. Bits) / 64</code><br>Average number of bits required to store each pixel in this block.</div>
+                                    </div>
                                 </div>
                                 <div id="lossMeterContainer" class="mt-auto"></div>
                             </div>
@@ -550,6 +560,56 @@
                         </div>
 
                     </div><!-- /inspector-pipeline -->
+
+                    <!-- Advanced Data Serialization Section -->
+                    <details class="advanced-section">
+                        <summary class="advanced-summary">
+                            <div class="advanced-summary-content">
+                                <span class="advanced-title" style="display: flex; align-items: center; gap: 8px;">
+                                    Entropy Encoding
+                                    <span class="inspector-badge badge-advanced">Advanced</span>
+                                </span>
+                                <span class="advanced-subtitle">Zig-zag scan &rarr; RLE &rarr; Huffman coding</span>
+                            </div>
+                            <svg class="chevron-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                        </summary>
+                        <div class="advanced-body">
+                            <div class="zigzag-header">
+                                <div class="zigzag-info">
+                                    <strong>Zig-zag Scan &amp; Run-Length Encoding</strong>
+                                    <p>
+                                        The quantized block is read diagonally — from DC (top-left) to highest frequency (bottom-right). This ordering groups near-zero high-frequency coefficients together so runs of zeros can be encoded compactly with RLE, followed by Huffman coding for the non-zero values.
+                                    </p>
+                                </div>
+                                <button id="btnAnimateZigzag" class="primary-btn play-btn" onclick={() => window.dispatchEvent(new CustomEvent('animate-zigzag'))}>
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round">
+                                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                    </svg>
+                                    Animate Scan
+                                </button>
+                            </div>
+                            
+                            <div class="zigzag-visualizer-row">
+                                <div class="pipeline-block" style="flex: 0 0 auto; margin-right: 16px;">
+                                    <div class="pipeline-block-header"><h3>Quantized</h3></div>
+                                    <div id="gridQuantizedAdvanced" class="block-grid"></div>
+                                </div>
+                                <div style="flex: 1; min-width: 0;">
+                                    <div id="gridZigzag" class="zigzag-array-container" style="height: 100%;">
+                                        <!-- Populated by grid-renderer -->
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="entropy-summary-container">
+                                <div id="entropySummary" class="entropy-summary-box">
+                                    <!-- Populated by grid-renderer -->
+                                </div>
+                            </div>
+                        </div>
+                    </details>
 
                     <!-- Floating Basis Popover -->
                     <div id="basisPopover" class="basis-popover" style="display: none;">

@@ -1,9 +1,10 @@
 import { showTooltip, hideTooltip } from './tooltip.js';
 import { showBasisPopover, hideBasisPopover } from './basis-popover.js';
+import { ZIGZAG_INDICES } from './dct-utils.js';
 
 const ALL_GRID_IDS = [
     'gridOriginal', 'gridDCT', 'gridQuantized', 'gridQuantized2',
-    'gridDequantized', 'gridReconstructed',
+    'gridQuantizedAdvanced', 'gridDequantized', 'gridReconstructed',
     'gridQuantTable', 'gridError'
 ];
 
@@ -11,20 +12,26 @@ let lastHighlightedKey: string | null = null;
 
 export function clearAllHighlights(): void {
     lastHighlightedKey = null;
-    document.querySelectorAll('.grid-cell.cell-highlight').forEach(c => {
+    document.querySelectorAll('.grid-cell.cell-highlight, .zz-cell.cell-highlight').forEach(c => {
         c.classList.remove('cell-highlight');
     });
 }
 
 export function highlightAcrossGrids(row: number, col: number): void {
     clearAllHighlights();
+    const idx = row * 8 + col;
     ALL_GRID_IDS.forEach(gridId => {
         const grid = document.getElementById(gridId);
         if (!grid) return;
-        const idx = row * 8 + col;
         const cell = grid.children[idx] as HTMLElement | undefined;
-        if (cell) cell.classList.add('cell-highlight');
+        if (cell && cell.classList) cell.classList.add('cell-highlight');
     });
+
+    const zzContainer = document.getElementById('gridZigzag');
+    if (zzContainer) {
+        const zzCell = zzContainer.querySelector(`.zz-cell[data-idx="${idx}"]`) as HTMLElement | null;
+        if (zzCell) zzCell.classList.add('cell-highlight');
+    }
 }
 
 function getCellDescription(row: number, col: number, gridType: string): string {
@@ -182,7 +189,7 @@ export function renderGrid(
             tooltipVal = displayVal;
         }
 
-        cell.innerText = (isRGB && type === 'intensity') ? '' : displayVal;
+        cell.textContent = (isRGB && type === 'intensity') ? '' : displayVal;
         cell.dataset.val = tooltipVal;
         cell.dataset.desc = getCellDescription(row, col, gridType);
 
@@ -242,4 +249,265 @@ export function renderGrid(
             }
         }
     }
+}
+
+export function renderZigzagArray(data: Float64Array): void {
+    const el = document.getElementById('gridZigzag');
+    if (!el) return;
+
+    el.innerHTML = '';
+
+    let run = 0;
+
+    for (let i = 0; i < 64; i++) {
+        const idx = ZIGZAG_INDICES[i];
+        const val = Math.round(data[idx]);
+
+        if (val === 0) {
+            run++;
+        } else {
+            if (run > 0) {
+                if (run > 2) {
+                    const runEl = document.createElement('div');
+                    runEl.className = 'zz-run';
+                    runEl.textContent = `${run} Zeros`;
+                    el.appendChild(runEl);
+                } else {
+                    for (let j = 0; j < run; j++) {
+                        const zeroIdx = ZIGZAG_INDICES[i - run + j];
+                        el.appendChild(createZzCell(0, zeroIdx, i - run + j));
+                    }
+                }
+                run = 0;
+            }
+
+            el.appendChild(createZzCell(val, idx, i));
+        }
+    }
+
+    if (run > 0) {
+        const eobEl = document.createElement('div');
+        eobEl.className = 'zz-eob tooltip-container';
+        eobEl.innerHTML = `EOB<div class="tooltip-content-small"><strong>End of Block</strong><br>Remaining ${run} coefficients are all zero.</div>`;
+        el.appendChild(eobEl);
+    }
+}
+
+function createZzCell(val: number, idx: number, zIndex: number): HTMLElement {
+    const cell = document.createElement('div');
+    cell.className = 'zz-cell';
+    if (val === 0) cell.classList.add('zz-zero');
+    if (zIndex === 0) cell.classList.add('dc-cell');
+
+    cell.dataset.idx = String(idx);
+    cell.textContent = String(val);
+
+    const row = Math.floor(idx / 8);
+    const col = idx % 8;
+
+    cell.addEventListener('mouseenter', (e) => {
+        highlightAcrossGrids(row, col);
+        showTooltip(e, String(val), String(row), String(col), `Position ${zIndex} in Zig-zag scan`);
+    });
+    cell.addEventListener('mouseleave', () => {
+        clearAllHighlights();
+        hideTooltip();
+    });
+
+    return cell;
+}
+
+let animationInterval: number | null = null;
+
+export function startZigzagAnimation(): void {
+    if (animationInterval !== null) {
+        clearInterval(animationInterval);
+        animationInterval = null;
+        clearAllHighlights();
+        // If clicked again, it just stops the animation.
+        return;
+    }
+
+    let currentIndex = 0;
+
+    // First, scroll to the zig-zag view if needed
+    const advancedSection = document.querySelector('.advanced-section') as HTMLDetailsElement;
+    if (advancedSection && !advancedSection.open) {
+        advancedSection.open = true;
+    }
+
+    animationInterval = window.setInterval(() => {
+        if (currentIndex >= 64) {
+            if (animationInterval !== null) {
+                clearInterval(animationInterval);
+                animationInterval = null;
+            }
+            setTimeout(() => {
+                clearAllHighlights();
+            }, 1000);
+            return;
+        }
+
+        const idx = ZIGZAG_INDICES[currentIndex];
+        const row = Math.floor(idx / 8);
+        const col = idx % 8;
+
+        highlightAcrossGrids(row, col);
+
+        // Scroll the active zz-cell into view within the container
+        const zzContainer = document.getElementById('gridZigzag');
+        if (zzContainer) {
+            const activeZz = zzContainer.querySelector(`.zz-cell[data-idx="${idx}"]`) as HTMLElement;
+            if (activeZz) {
+                // simple scroll into view if it's hidden
+                activeZz.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+            }
+        }
+
+        currentIndex++;
+    }, 100); // 100ms per coefficient = 6.4 seconds for a full block
+}
+
+if (typeof window !== 'undefined') {
+    window.addEventListener('animate-zigzag', startZigzagAnimation);
+}
+
+export function renderEntropySummary(symbols: any[]): void {
+    const container = document.getElementById('entropySummary');
+    if (!container) return;
+
+    let dcBits = 0;
+    let acBits = 0;
+    let eobBits = 0;
+    let totalBits = 0;
+
+    const dcSymbols: any[] = [];
+    const acSymbols: any[] = [];
+    const eobSymbols: any[] = [];
+
+    symbols.forEach(sym => {
+        totalBits += sym.totalBits;
+        if (sym.type === 'DC') {
+            dcBits += sym.totalBits;
+            dcSymbols.push(sym);
+        } else if (sym.type === 'EOB') {
+            eobBits += sym.totalBits;
+            eobSymbols.push(sym);
+        } else {
+            acBits += sym.totalBits;
+            acSymbols.push(sym);
+        }
+    });
+
+    const renderMiniTable = (symList: any[]) => {
+        if (symList.length === 0) return '<div class="empty-detail">No symbols</div>';
+        let rows = '';
+        symList.forEach(s => {
+            let valStr = '-';
+            if (s.type === 'AC') valStr = `${s.run} zeros, then ${s.amplitude}`;
+            else if (s.type === 'DC') valStr = `value: ${s.amplitude}`;
+            else if (s.type === 'ZRL') valStr = `16 zeros`;
+
+            rows += `
+                <tr>
+                    <td><span class="sym-type ${s.type.toLowerCase()}">${s.type}</span></td>
+                    <td>${valStr}</td>
+                    <td class="sym-bits-total">${s.totalBits}</td>
+                </tr>
+            `;
+        });
+        return `
+            <table class="entropy-table mini">
+                <thead><tr><th>Symbol</th><th>Value</th><th>Cost</th></tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+        `;
+    };
+
+    const compressionPct = (totalBits / 512 * 100).toFixed(1);
+    const savings = 512 - totalBits;
+    const savingsPct = Math.abs(100 - totalBits / 512 * 100).toFixed(1);
+    const isSmaller = savings > 0;
+
+    const dcPct = totalBits > 0 ? (dcBits / totalBits * 100).toFixed(1) : '0';
+    const acPct = totalBits > 0 ? (acBits / totalBits * 100).toFixed(1) : '0';
+    const eobPct = totalBits > 0 ? (eobBits / totalBits * 100).toFixed(1) : '0';
+
+    container.innerHTML = `
+        <div class="entropy-summary-header">Data Compression Summary</div>
+        <div class="summary-stats">
+            <div class="stat-item">
+                <div class="stat-label">Original</div>
+                <div class="stat-value">512 bits</div>
+                <div class="stat-sub">64 px × 8 bits</div>
+            </div>
+            <div class="stat-item ${isSmaller ? 'highlight-stat' : 'highlight-stat-poor'}">
+                <div class="stat-label">${isSmaller ? 'Saved' : 'Overhead'}</div>
+                <div class="stat-value ${isSmaller ? '' : 'stat-poor'}">${Math.abs(savings)} bits</div>
+                <div class="stat-sub">${savingsPct}% ${isSmaller ? 'smaller' : 'larger'}</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Encoded</div>
+                <div class="stat-value">${totalBits} bits</div>
+                <div class="stat-sub">${(totalBits / 8).toFixed(1)} bytes</div>
+            </div>
+        </div>
+
+        <div class="compression-ratio-wrap">
+            <div class="compression-ratio-label">
+                <span>Encoded size</span>
+                <span class="compression-ratio-value">${compressionPct}% of original</span>
+            </div>
+            <div class="compression-ratio-track">
+                <div class="compression-ratio-fill ${isSmaller ? '' : 'ratio-over'}" style="width: ${Math.min(100, parseFloat(compressionPct))}%"></div>
+            </div>
+        </div>
+
+        <div class="breakdown-bar-wrap">
+            <div class="breakdown-bar-label">Bit breakdown</div>
+            <div class="breakdown-bar">
+                <div class="breakdown-segment seg-dc" style="width: ${dcPct}%" title="DC: ${dcBits} bits"></div>
+                <div class="breakdown-segment seg-ac" style="width: ${acPct}%" title="AC + Runs: ${acBits} bits"></div>
+                <div class="breakdown-segment seg-eob" style="width: ${eobPct}%" title="EOB: ${eobBits} bits"></div>
+            </div>
+            <div class="breakdown-legend">
+                <span class="legend-dot seg-dc"></span><span class="legend-label">DC&nbsp;${dcBits}b</span>
+                <span class="legend-dot seg-ac"></span><span class="legend-label">AC&nbsp;${acBits}b</span>
+                <span class="legend-dot seg-eob"></span><span class="legend-label">EOB&nbsp;${eobBits}b</span>
+            </div>
+        </div>
+
+        <div class="entropy-cost-header">Bit Cost Breakdown <span class="entropy-cost-hint">(click to expand)</span></div>
+        <div class="cost-breakdown">
+            <details class="cost-details">
+                <summary class="cost-row">
+                    <span class="cost-label"><svg class="chevron-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg><span class="sym-type dc">Base Color</span> (DC)</span>
+                    <span class="cost-value">${dcBits} bits</span>
+                </summary>
+                <div class="cost-expanded">
+                    ${renderMiniTable(dcSymbols)}
+                </div>
+            </details>
+            
+            <details class="cost-details">
+                <summary class="cost-row">
+                    <span class="cost-label"><svg class="chevron-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg><span class="sym-type ac">Details & Zeros</span> (AC & Runs)</span>
+                    <span class="cost-value">${acBits} bits</span>
+                </summary>
+                <div class="cost-expanded">
+                    ${renderMiniTable(acSymbols)}
+                </div>
+            </details>
+            
+            <details class="cost-details">
+                <summary class="cost-row">
+                    <span class="cost-label"><svg class="chevron-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg><span class="sym-type eob">End of Block</span> (EOB)</span>
+                    <span class="cost-value">${eobBits} bits</span>
+                </summary>
+                 <div class="cost-expanded">
+                    ${renderMiniTable(eobSymbols)}
+                </div>
+            </details>
+        </div>
+    `;
 }

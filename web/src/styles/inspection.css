@@ -52,6 +52,12 @@
     border: 1px solid rgba(217, 119, 6, 0.15);
 }
 
+.badge-advanced {
+    background: rgba(139, 92, 246, 0.08);
+    color: #7c3aed;
+    border: 1px solid rgba(139, 92, 246, 0.15);
+}
+
 /* ===== Tooltips ===== */
 .tooltip-content-small {
     display: none;
@@ -93,4 +99,3 @@
 .stat-value.stat-poor {
     color: var(--color-poor);
 }
-
