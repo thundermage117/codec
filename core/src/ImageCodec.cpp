@@ -17,6 +17,7 @@
  */
 #include "ImageCodec.h"
 #include "transform.h"
+#include "wavelet.h"
 #include "colorspace.h"
 #include "CodecAnalysis.h"
 
@@ -47,10 +48,11 @@ const int BASE_CHROMA[8][8] = {
 };
 
 
-ImageCodec::ImageCodec(double quality, bool enableQuantization, ChromaSubsampling cs)
+ImageCodec::ImageCodec(double quality, bool enableQuantization, ChromaSubsampling cs, TransformType transform)
     : m_quality(quality),
       m_enableQuantization(enableQuantization),
-      m_chromaSubsampling(cs)
+      m_chromaSubsampling(cs),
+      m_transformType(transform)
 {
     if (m_enableQuantization)
         generateQuantizationTables();
@@ -126,7 +128,10 @@ Image ImageCodec::processChannel(const Image& channel,
                 for (int j = 0; j < 8; ++j)
                     block[i][j] = channelData[(y + i) * channelWidth + (x + j)] - 128.0;
 
-            dct8x8(block, dctBlock);
+            if (m_transformType == TransformType::DWT)
+                dwt8x8(block, dctBlock);
+            else
+                dct8x8(block, dctBlock);
 
             if (m_enableQuantization) {
                 for (int i = 0; i < 8; ++i) {
@@ -137,7 +142,10 @@ Image ImageCodec::processChannel(const Image& channel,
                 }
             }
 
-            idct8x8(dctBlock, reconBlock);
+            if (m_transformType == TransformType::DWT)
+                idwt8x8(dctBlock, reconBlock);
+            else
+                idct8x8(dctBlock, reconBlock);
 
             double* reconData = reconstructed.data();
             const int reconWidth = reconstructed.width();
@@ -340,33 +348,32 @@ ImageCodec::BlockDebugData ImageCodec::inspectBlock(const Image& channel, int bl
         }
     }
 
-    // 3. DCT
+    // 3. Forward transform
     double blockCentered[8][8];
     for(int i=0; i<8; ++i)
         for(int j=0; j<8; ++j)
             blockCentered[i][j] = data.original[i][j] - 128.0;
-    
-    dct8x8(blockCentered, data.dct);
+
+    if (m_transformType == TransformType::DWT)
+        dwt8x8(blockCentered, data.coefficients);
+    else
+        dct8x8(blockCentered, data.coefficients);
 
     // 4. Quantization
     if (m_enableQuantization) {
         for(int i=0; i<8; ++i) {
             for(int j=0; j<8; ++j) {
-                double coeff = data.dct[i][j] / quantTable[i][j];
+                double coeff = data.coefficients[i][j] / quantTable[i][j];
                 data.quantized[i][j] = std::round(coeff); // Store integer index
-                // But for display in "Quantized" view, we might want the actual integer value
-                // In processChannel we do: dctBlock[i][j] = std::round(coeff) * quantTable[i][j];
-                // effectively dequantizing immediately.
-                // Let's store the quantized integer index in `quantized`
             }
         }
     } else {
          for(int i=0; i<8; ++i)
             for(int j=0; j<8; ++j)
-                data.quantized[i][j] = data.dct[i][j];
+                data.quantized[i][j] = data.coefficients[i][j];
     }
 
-    // 5. Dequantization & IDCT (Reconstruction)
+    // 5. Dequantization & inverse transform (Reconstruction)
     double dequantized[8][8];
     for(int i=0; i<8; ++i) {
         for(int j=0; j<8; ++j) {
@@ -378,7 +385,10 @@ ImageCodec::BlockDebugData ImageCodec::inspectBlock(const Image& channel, int bl
     }
 
     double reconBlock[8][8];
-    idct8x8(dequantized, reconBlock);
+    if (m_transformType == TransformType::DWT)
+        idwt8x8(dequantized, reconBlock);
+    else
+        idct8x8(dequantized, reconBlock);
 
     for(int i=0; i<8; ++i)
         for(int j=0; j<8; ++j)

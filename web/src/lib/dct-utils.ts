@@ -94,3 +94,64 @@ export function estimateBlockBits(quantized: Float64Array | number[]): number {
     const symbols = getEntropySymbols(quantized);
     return symbols.reduce((acc, sym) => acc + sym.totalBits, 0);
 }
+
+// ─── Haar DWT utilities ──────────────────────────────────────────────────────
+
+const INV_SQRT2 = 0.7071067811865476;
+
+function haar1d_inv_js(data: Float64Array, n: number): void {
+    const tmp = new Float64Array(8);
+    const half = n >> 1;
+    for (let k = 0; k < half; k++) {
+        tmp[2 * k]     = (data[k] + data[k + half]) * INV_SQRT2;
+        tmp[2 * k + 1] = (data[k] - data[k + half]) * INV_SQRT2;
+    }
+    for (let k = 0; k < n; k++) data[k] = tmp[k];
+}
+
+function idwt8x8_js(src: Float64Array): Float64Array {
+    const tmp = new Float64Array(src);
+    let size = 2;
+    while (size <= 8) {
+        for (let j = 0; j < size; j++) {
+            const col = new Float64Array(size);
+            for (let i = 0; i < size; i++) col[i] = tmp[i * 8 + j];
+            haar1d_inv_js(col, size);
+            for (let i = 0; i < size; i++) tmp[i * 8 + j] = col[i];
+        }
+        for (let i = 0; i < size; i++) {
+            const row = new Float64Array(size);
+            for (let j = 0; j < size; j++) row[j] = tmp[i * 8 + j];
+            haar1d_inv_js(row, size);
+            for (let j = 0; j < size; j++) tmp[i * 8 + j] = row[j];
+        }
+        size *= 2;
+    }
+    return tmp;
+}
+
+/*
+ * Pixel-domain Haar basis function for coefficient position (u, v).
+ * Computed by placing a unit impulse at (u, v) and applying the inverse DWT.
+ * Analogous to computeBasisPattern but for Haar DWT coefficients.
+ */
+export function computeHaarBasisPattern(u: number, v: number): Float64Array {
+    const impulse = new Float64Array(64);
+    impulse[u * 8 + v] = 1.0;
+    return idwt8x8_js(impulse);
+}
+
+/*
+ * Returns a human-readable frequency label for a Haar DWT coefficient.
+ * Subbands are organised by scale: coarsest (level-1 detail around DC) → finest.
+ *   [0][0]       → DC (LL approximation)
+ *   rows 0-1, cols 0-1 (excluding DC) → Low  (coarsest detail sub-bands)
+ *   rows 0-3, cols 0-3 (excluding above) → Mid  (level-2 detail sub-bands)
+ *   rest → High (finest detail sub-bands)
+ */
+export function getHaarFreqLabel(row: number, col: number): string {
+    if (row === 0 && col === 0) return 'DC';
+    if (row <= 1 && col <= 1) return 'Low';
+    if (row <= 3 && col <= 3) return 'Mid';
+    return 'High';
+}

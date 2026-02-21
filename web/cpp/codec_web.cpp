@@ -43,6 +43,10 @@ static ImageCodec::ChromaSubsampling map_cs_mode(int mode) {
     }
 }
 
+static ImageCodec::TransformType map_transform_mode(int mode) {
+    return (mode == 1) ? ImageCodec::TransformType::DWT : ImageCodec::TransformType::DCT;
+}
+
 extern "C" {
 
 EMSCRIPTEN_KEEPALIVE
@@ -64,11 +68,12 @@ void init_session(uint8_t* rgba_input, int width, int height) {
 }
 
 EMSCRIPTEN_KEEPALIVE
-void process_image(int quality, int cs_mode) {
+void process_image(int quality, int cs_mode, int transform_mode) {
     if (!g_session.initialized) return;
 
     auto cs = map_cs_mode(cs_mode);
-    ImageCodec codec(quality, true, cs);
+    auto transform = map_transform_mode(transform_mode);
+    ImageCodec codec(quality, true, cs, transform);
     Image processedBgr = codec.process(g_session.originalImage);
     g_session.metrics = CodecAnalysis::computeMetrics(g_session.originalImage, processedBgr);
     g_session.processedYCrCb = bgrToYCrCb(processedBgr);
@@ -258,7 +263,7 @@ void downsample_channel(const Image& src, Image& dst, ImageCodec::ChromaSubsampl
 }
 
 EMSCRIPTEN_KEEPALIVE
-double* inspect_block_data(int blockX, int blockY, int channelIndex, int quality, int cs_mode) {
+double* inspect_block_data(int blockX, int blockY, int channelIndex, int quality, int cs_mode, int transform_mode) {
     if (!g_session.initialized) return nullptr;
 
     // 1. Extract the specific channel from cached YCrCb
@@ -306,7 +311,8 @@ double* inspect_block_data(int blockX, int blockY, int channelIndex, int quality
     }
 
     // 3. Inspect the block
-    ImageCodec codec(quality, true, cs);
+    auto transform = map_transform_mode(transform_mode);
+    ImageCodec codec(quality, true, cs, transform);
     static ImageCodec::BlockDebugData debugData;
     debugData = codec.inspectBlock(*blockSourcePtr, targetBx, targetBy, isChroma);
 

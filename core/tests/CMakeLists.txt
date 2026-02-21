@@ -20,6 +20,7 @@ add_executable(codec_core_tests
   image_test.cpp
   colorspace_test.cpp
   transform_test.cpp
+  wavelet_test.cpp
   test_imagecodec.cpp
   test_codecanalysis.cpp
 )

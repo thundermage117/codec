@@ -1,8 +1,9 @@
 import { hideTooltip } from './tooltip.js';
-import { computeBasisPattern, getFreqLabel } from './dct-utils.js';
+import { computeBasisPattern, computeHaarBasisPattern, getFreqLabel, getHaarFreqLabel } from './dct-utils.js';
+import { appState } from './state.svelte.js';
 
 interface CachedGridData {
-    dctData?: Float64Array;
+    coeffData?: Float64Array;
     qtData?: Float64Array;
     quantData?: Float64Array;
     dequantizedData?: Float64Array;
@@ -17,6 +18,18 @@ export function setCachedGridData(data: CachedGridData): void {
 
 export function getCachedGridData(): CachedGridData {
     return cachedGridData;
+}
+
+function getBasisPattern(u: number, v: number): Float64Array {
+    return appState.transformType === 1
+        ? computeHaarBasisPattern(u, v)
+        : computeBasisPattern(u, v);
+}
+
+function getTransformFreqLabel(row: number, col: number): string {
+    return appState.transformType === 1
+        ? getHaarFreqLabel(row, col)
+        : getFreqLabel(row, col);
 }
 
 function drawPatternOnCanvas(canvasId: string, data: Float64Array | number[], mode: string): void {
@@ -89,10 +102,10 @@ function positionPopover(popover: HTMLElement, e: MouseEvent): void {
 export function showBasisPopover(e: MouseEvent, row: number, col: number): void {
     hideTooltip();
     const popover = document.getElementById('basisPopover');
-    if (!popover || !cachedGridData.dctData) return;
+    if (!popover || !cachedGridData.coeffData) return;
 
     const idx = row * 8 + col;
-    const dctVal = cachedGridData.dctData[idx];
+    const coeffVal = cachedGridData.coeffData[idx];
     const quantVal = cachedGridData.quantData![idx];
     const qtVal = cachedGridData.qtData![idx];
 
@@ -102,15 +115,19 @@ export function showBasisPopover(e: MouseEvent, row: number, col: number): void 
     };
 
     setEl('basisCoord', `(${row}, ${col})`);
-    setEl('basisFreqLabel', getFreqLabel(row, col));
-    setEl('basisValue', dctVal.toFixed(2));
+    setEl('basisFreqLabel', getTransformFreqLabel(row, col));
+    setEl('basisValue', coeffVal.toFixed(2));
     setEl('basisQuantized', Math.round(quantVal).toString());
     setEl('basisDivisor', Math.round(qtVal).toString());
 
-    const basisPattern = computeBasisPattern(col, row);
+    // Update the static label next to the coefficient value
+    const coeffLabelEl = document.getElementById('basisValueLabel');
+    if (coeffLabelEl) coeffLabelEl.innerText = appState.transformType === 1 ? 'DWT:' : 'DCT:';
+
+    const basisPattern = getBasisPattern(col, row);
     const contribution = new Float64Array(64);
     for (let i = 0; i < 64; i++) {
-        contribution[i] = dctVal * basisPattern[i];
+        contribution[i] = coeffVal * basisPattern[i];
     }
 
     drawPatternOnCanvas('basisCanvas', Array.from(basisPattern), 'diverging');
@@ -153,28 +170,22 @@ export function startBasisAnimation(row: number, col: number, targetGridId: stri
     const cells = Array.from(targetGrid.querySelectorAll('.grid-cell')) as HTMLElement[];
     if (cells.length !== 64) return;
 
-    // Save original colors
     originalColors = cells.map(c => c.style.backgroundColor);
 
-    const basisPattern = computeBasisPattern(col, row);
+    const basisPattern = getBasisPattern(col, row);
     const startTime = performance.now();
-    const duration = 2000; // 2 seconds
+    const duration = 2000;
 
     function frame(now: number) {
         const elapsed = now - startTime;
         const progress = Math.min(1, elapsed / duration);
-
-        // Multiplier for the wave intensity: ramps up then down
         const intensity = Math.sin(progress * Math.PI) * 0.9;
 
         for (let i = 0; i < 64; i++) {
             const val = basisPattern[i];
             const cell = cells[i];
 
-            // Draw the basis pattern as an overlay
-            // val is -0.125 to 0.125 roughly. 
-            // We want red for positive, blue for negative.
-            const t = val * 8; // Normalize to ~ -1 to 1
+            const t = val * 8;
             let overlayR = 0, overlayG = 0, overlayB = 0;
             if (t > 0) {
                 overlayR = 255; overlayG = 50; overlayB = 50;
@@ -183,16 +194,7 @@ export function startBasisAnimation(row: number, col: number, targetGridId: stri
             }
 
             const alpha = Math.abs(t) * intensity * 0.8;
-            cell.style.backgroundColor = `rgba(${overlayR}, ${overlayG}, ${overlayB}, ${alpha})`;
-
-            // Blend with original? Actually, let's just use semi-transparent overlay on top
-            // But since background-color doesn't stack, we can manually blend or use a pseudoelement.
-            // Simplified: we'll set background to a composite color.
-            // For now, let's try just setting it and see how it looks.
-            // If we want it to look "laid over", we should probably use a separate layer or just blend.
-
-            // To blend: parse original color.
-            const orig = originalColors[i]; // e.g. "rgb(200, 200, 200)"
+            const orig = originalColors[i];
             const rgb = orig.match(/\d+/g)?.map(Number) || [255, 255, 255];
 
             const r = Math.round(rgb[0] * (1 - alpha) + overlayR * alpha);
@@ -223,8 +225,6 @@ function restoreOriginalColors() {
             cell.style.backgroundColor = originalColors[i];
         }
     });
-
-    // Also clear title if we set it (actually we should move title to popover)
     currentTargetGridId = null;
     originalColors = [];
 }

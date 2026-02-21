@@ -45,6 +45,9 @@ class AppState {
     // Shared quality (synced between viewer and inspector sliders)
     quality = $state(50);
 
+    // Transform type: 0 = DCT, 1 = DWT (Haar wavelet)
+    transformType = $state(0);
+
     // Render stats
     psnr = $state({ y: 0, cr: 0, cb: 0 });
     ssim = $state({ y: 0, cr: 0, cb: 0 });

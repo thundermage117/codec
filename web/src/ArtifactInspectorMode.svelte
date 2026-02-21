@@ -187,11 +187,12 @@
         renderArtifact();
     });
 
-    // Re-process and re-render when quality or chroma subsampling changes.
+    // Re-process and re-render when quality, chroma subsampling, or transform changes.
     // ViewerMode is unmounted while we're here, so we own the processImage call.
     $effect(() => {
         const q = appState.quality;
         const cs = appState.currentCsMode;
+        const _t = appState.transformType; // track for reactivity
         if (!appState.wasmReady || !appState.originalImageData) return;
         processImage(q, cs);
         const stats = getStats();

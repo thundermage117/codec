@@ -40,11 +40,12 @@
         }
     });
 
-    // Reactive: re-process when quality/CS changes in inspector
+    // Reactive: re-process when quality/CS/transform changes in inspector
     $effect(() => {
         const q = appState.quality;
         const cs = appState.currentCsMode;
-        
+        const _t = appState.transformType; // track for reactivity
+
         // Only run if we are in inspector mode with data
         if (appState.appMode === 'inspector' && appState.wasmReady && appState.originalImageData) {
             processImage(q, cs);
@@ -59,6 +60,11 @@
             computeSuggestedBlocks(document.getElementById('processedCanvas') as HTMLCanvasElement | null);
         }
     });
+
+    const transformName = $derived(appState.transformType === 0 ? 'DCT' : 'DWT');
+    const inverseTransformName = $derived(appState.transformType === 0 ? 'IDCT' : 'IDWT');
+    const transformFullName = $derived(appState.transformType === 0 ? 'Discrete Cosine Transform' : 'Haar Discrete Wavelet Transform');
+    const transformGridLabel = $derived(appState.transformType === 0 ? 'DCT Coefficients' : 'DWT Coefficients');
 
     // Render thumbnail on mount
     $effect(() => {
@@ -394,6 +400,18 @@
                                 {/each}
                             </div>
                         </div>
+
+                        <div class="control-group">
+                            <div class="group-label">Transform</div>
+                            <div class="toggle-group">
+                                {#each [{ id: 'i_transform_dct', val: 0, label: 'DCT' }, { id: 'i_transform_dwt', val: 1, label: 'DWT' }] as t}
+                                <input type="radio" id={t.id} name="i_transform_type"
+                                    checked={appState.transformType === t.val}
+                                    onchange={() => appState.transformType = t.val}>
+                                <label for={t.id}>{t.label}</label>
+                                {/each}
+                            </div>
+                        </div>
                     </div>
                 </details>
 
@@ -450,11 +468,11 @@
                                 <div class="block-label">AxB Pixels</div>
                             </div>
                             <div class="pipeline-arrow">
-                                <div class="arrow-tooltip"><strong>Discrete Cosine Transform</strong> Converts pixel data into frequency coefficients.</div>
-                                <div class="arrow-line"></div><div class="arrow-label">DCT</div><div class="arrow-icon">→</div>
+                                <div class="arrow-tooltip"><strong>{transformFullName}</strong> Converts pixel data into frequency coefficients.</div>
+                                <div class="arrow-line"></div><div class="arrow-label">{transformName}</div><div class="arrow-icon">→</div>
                             </div>
                             <div class="pipeline-block">
-                                <div class="pipeline-block-header"><h3>DCT Coefficients</h3></div>
+                                <div class="pipeline-block-header"><h3>{transformGridLabel}</h3></div>
                                 <div id="gridDCT" class="block-grid" data-target="gridOriginal"></div>
                                 <div class="block-label">Frequencies</div>
                             </div>
@@ -486,8 +504,8 @@
                                 <div class="block-label">Approx Freqs</div>
                             </div>
                             <div class="pipeline-arrow">
-                                <div class="arrow-tooltip"><strong>Inverse DCT</strong> Converts frequency coefficients back into pixel data.</div>
-                                <div class="arrow-line"></div><div class="arrow-label">IDCT</div><div class="arrow-icon">→</div>
+                                <div class="arrow-tooltip"><strong>Inverse {transformName}</strong> Converts frequency coefficients back into pixel data.</div>
+                                <div class="arrow-line"></div><div class="arrow-label">{inverseTransformName}</div><div class="arrow-icon">→</div>
                             </div>
                             <div class="pipeline-block">
                                 <div class="pipeline-block-header">
@@ -554,12 +572,12 @@
                                     <div class="stat-box tooltip-container">
                                         <div class="stat-value" id="statZeros">—</div>
                                         <div class="stat-label">Zeros (Count)</div>
-                                        <div class="tooltip-content-small"><strong>Zero Coefficients</strong><br><code>count(|quant[i]| &lt; 0.5)</code><br>Number of quantized DCT coefficients rounded to zero.</div>
+                                        <div class="tooltip-content-small"><strong>Zero Coefficients</strong><br><code>count(|quant[i]| &lt; 0.5)</code><br>Number of quantized transform coefficients rounded to zero.</div>
                                     </div>
                                     <div class="stat-box tooltip-container">
                                         <div class="stat-value" id="statCompression">—</div>
                                         <div class="stat-label">Compression</div>
-                                        <div class="tooltip-content-small"><strong>Zero Coefficient Ratio</strong><br><code>(zeros / 64) &times; 100%</code><br>Percentage of quantized DCT coefficients equal to zero.</div>
+                                        <div class="tooltip-content-small"><strong>Zero Coefficient Ratio</strong><br><code>(zeros / 64) &times; 100%</code><br>Percentage of quantized transform coefficients equal to zero.</div>
                                     </div>
                                     <div class="stat-box tooltip-container">
                                         <div class="stat-value" id="statEstBits">—</div>
@@ -658,7 +676,7 @@
                                 </div>
                             </div>
                             <div class="basis-popover-stats">
-                                <span class="bps-item">DCT: <strong id="basisValue">&mdash;</strong></span>
+                                <span class="bps-item"><span id="basisValueLabel">{transformName}:</span> <strong id="basisValue">&mdash;</strong></span>
                                 <span class="bps-item">Q: <strong id="basisQuantized">&mdash;</strong></span>
                                 <span class="bps-item">÷ <strong id="basisDivisor">&mdash;</strong></span>
                             </div>

@@ -1,6 +1,19 @@
 import { showTooltip, hideTooltip } from './tooltip.js';
 import { showBasisPopover, hideBasisPopover, getCachedGridData } from './basis-popover.js';
-import { ZIGZAG_INDICES, computeBasisPattern, getFreqLabel } from './dct-utils.js';
+import { ZIGZAG_INDICES, computeBasisPattern, computeHaarBasisPattern, getFreqLabel, getHaarFreqLabel } from './dct-utils.js';
+import { appState } from './state.svelte.js';
+
+function getBasisPattern(u: number, v: number): Float64Array {
+    return appState.transformType === 1
+        ? computeHaarBasisPattern(u, v)
+        : computeBasisPattern(u, v);
+}
+
+function getTransformFreqLabel(row: number, col: number): string {
+    return appState.transformType === 1
+        ? getHaarFreqLabel(row, col)
+        : getFreqLabel(row, col);
+}
 
 const ALL_GRID_IDS = [
     'gridOriginal', 'gridDCT', 'gridQuantized', 'gridQuantized2',
@@ -56,12 +69,10 @@ export function highlightRunAcrossGrids(indices: number[]): void {
 }
 
 function getCellDescription(row: number, col: number, gridType: string): string {
-    if (gridType === 'dct' || gridType === 'dequantized' || gridType === 'quantized') {
+    if (gridType === 'transform' || gridType === 'dequantized' || gridType === 'quantized') {
         if (row === 0 && col === 0) return 'DC coefficient (average brightness)';
-        const freqLevel = row + col;
-        if (freqLevel <= 2) return 'Low frequency';
-        if (freqLevel <= 5) return 'Mid frequency';
-        return 'High frequency';
+        const label = getTransformFreqLabel(row, col);
+        return `${label} frequency`;
     }
     if (gridType === 'original' || gridType === 'reconstructed') return 'Pixel intensity';
     if (gridType === 'error') return 'Error value';
@@ -213,7 +224,7 @@ export function renderGrid(
         cell.dataset.col = String(col);
         cell.dataset.gridType = gridType;
 
-        const isBasis = (gridType === 'dct' || gridType === 'quantized' || gridType === 'dequantized');
+        const isBasis = (gridType === 'transform' || gridType === 'quantized' || gridType === 'dequantized');
         cell.dataset.isBasis = String(isBasis);
         if (isBasis) {
             cell.classList.add('is-basis');
@@ -492,7 +503,7 @@ function applyPartialReconToGrid(row: number, col: number): void {
         if (Math.abs(coeff) > 0.0001) {
             const r2 = Math.floor(zIdx / 8);
             const c2 = zIdx % 8;
-            const pattern = computeBasisPattern(c2, r2);
+            const pattern = getBasisPattern(c2, r2);
             for (let j = 0; j < 64; j++) accumulated[j] += coeff * pattern[j];
             if (i === zzPos) { currentPattern = pattern; currentCoeff = coeff; }
         }
@@ -619,7 +630,7 @@ function runReconFrame(now: number): void {
         if (Math.abs(coeff) > 0.0001) {
             const row = Math.floor(zIdx / 8);
             const col = zIdx % 8;
-            reconState.lastBasisPattern = computeBasisPattern(col, row);
+            reconState.lastBasisPattern = getBasisPattern(col, row);
             reconState.lastBasisCoeff = coeff;
             for (let i = 0; i < 64; i++) {
                 reconState.accumulated[i] += coeff * reconState.lastBasisPattern[i];
@@ -704,7 +715,7 @@ function updateReconstructionProgress(index: number): void {
 
     // Show label for the coefficient we just finished adding (index - 1)
     const zIdx = ZIGZAG_INDICES[index - 1];
-    const label = getFreqLabel(Math.floor(zIdx / 8), zIdx % 8);
+    const label = getTransformFreqLabel(Math.floor(zIdx / 8), zIdx % 8);
     el.textContent = `${index}/64 · ${label}`;
     el.style.display = '';
 }
@@ -728,7 +739,7 @@ function showBannerForCell(row: number, col: number): void {
         if (ZIGZAG_INDICES[i] === flatIdx) { zzPos = Math.min(i + 1, 63); break; }
     }
 
-    const pattern = Math.abs(coeff) > 0.0001 ? computeBasisPattern(col, row) : null;
+    const pattern = Math.abs(coeff) > 0.0001 ? getBasisPattern(col, row) : null;
     updateReconAnimBanner(zzPos, flatIdx, coeff, pattern);
 }
 
@@ -778,7 +789,7 @@ function updateReconAnimBanner(
 
     const row   = Math.floor(zigzagIdx / 8);
     const col   = zigzagIdx % 8;
-    const label = getFreqLabel(row, col);
+    const label = getTransformFreqLabel(row, col);
     const isZero = Math.abs(coeff) < 0.0001;
 
     const stepEl  = document.getElementById('reconBannerStep');

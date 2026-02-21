@@ -214,10 +214,11 @@
 
     // ===== Reactive effects =====
 
-    // Process + render on quality or CS change.
+    // Process + render on quality, CS, or transform type change.
     $effect(() => {
         const q = appState.quality;
         const cs = appState.currentCsMode;
+        const _t = appState.transformType; // track for reactivity
         if (!appState.wasmReady || !appState.originalImageData) return;
         processImage(q, cs);
         render();
@@ -1019,6 +1020,18 @@
                                 checked={appState.currentCsMode === cs.val}
                                 onchange={() => appState.currentCsMode = cs.val}>
                             <label for={cs.id}>{cs.label}</label>
+                            {/each}
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <div class="group-label">Transform</div>
+                        <div class="toggle-group">
+                            {#each [{ id: 'v_transform_dct', val: 0, label: 'DCT' }, { id: 'v_transform_dwt', val: 1, label: 'DWT' }] as t}
+                            <input type="radio" id={t.id} name="v_transform_type"
+                                checked={appState.transformType === t.val}
+                                onchange={() => appState.transformType = t.val}>
+                            <label for={t.id}>{t.label}</label>
                             {/each}
                         </div>
                     </div>

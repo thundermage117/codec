@@ -42,7 +42,7 @@ export function inspectBlock(blockX: number, blockY: number): void {
     };
 
     const originalData = readGrid(0);
-    const dctData = readGrid(1);
+    const coeffData = readGrid(1);
     const qtData = readGrid(2);
     const quantData = readGrid(3);
     const reconData = readGrid(4);
@@ -57,7 +57,7 @@ export function inspectBlock(blockX: number, blockY: number): void {
         dequantizedData[i] = quantData[i] * qtData[i];
     }
 
-    setCachedGridData({ dctData, qtData, quantData, dequantizedData });
+    setCachedGridData({ coeffData, qtData, quantData, dequantizedData });
 
     let originalRGB: Uint8ClampedArray | null = null;
     let reconstructedRGB: Uint8ClampedArray | null = null;
@@ -121,7 +121,7 @@ export function inspectBlock(blockX: number, blockY: number): void {
     setStatEl('statBpp', bpp.toFixed(2), bppClass, bppClass);
 
     renderGrid('gridOriginal', originalRGB ?? originalData, 'intensity', 'original', appState.currentViewMode === ViewMode.RGB);
-    renderGrid('gridDCT', dctData, 'frequency', 'dct');
+    renderGrid('gridDCT', coeffData, 'frequency', 'transform');
     renderGrid('gridQuantized', quantData, 'frequency', 'quantized');
     renderGrid('gridQuantized2', quantData, 'frequency', 'quantized');
     renderGrid('gridQuantizedAdvanced', quantData, 'frequency', 'quantized');

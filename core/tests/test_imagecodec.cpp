@@ -226,7 +226,7 @@ TEST(ImageCodecTest, InspectBlockDCDominatesForUniform) {
     for (int i = 0; i < 8; ++i)
         for (int j = 0; j < 8; ++j)
             if (i != 0 || j != 0)
-                EXPECT_NEAR(debug.dct[i][j], 0.0, 1e-6)
+                EXPECT_NEAR(debug.coefficients[i][j], 0.0, 1e-6)
                     << "AC coefficient [" << i << "][" << j << "] not near zero";
 }
 
@@ -250,7 +250,7 @@ TEST(ImageCodecTest, InspectBlockQuantizationRelationship) {
 
     for (int i = 0; i < 8; ++i)
         for (int j = 0; j < 8; ++j) {
-            double expected = std::round(debug.dct[i][j] / debug.quantTable[i][j]);
+            double expected = std::round(debug.coefficients[i][j] / debug.quantTable[i][j]);
             EXPECT_NEAR(debug.quantized[i][j], expected, 1e-9)
                 << "At [" << i << "][" << j << "]";
         }

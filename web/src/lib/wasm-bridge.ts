@@ -23,7 +23,7 @@ export function initSession(): void {
 }
 
 export function processImage(quality: number, csMode: number): void {
-    Module._process_image(quality, csMode);
+    Module._process_image(quality, csMode, appState.transformType);
 }
 
 export function getViewPtr(viewMode: number): number {
@@ -54,7 +54,7 @@ export function setArtifactGain(gain: number): void {
 }
 
 export function inspectBlockData(blockX: number, blockY: number, channelIndex: number, quality: number): number {
-    return Module._inspect_block_data(blockX, blockY, channelIndex, quality, appState.currentCsMode);
+    return Module._inspect_block_data(blockX, blockY, channelIndex, quality, appState.currentCsMode, appState.transformType);
 }
 
 export function getHeapU8(): Uint8Array {
