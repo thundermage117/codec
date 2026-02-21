@@ -157,6 +157,23 @@ export function renderGrid(
             hideBasisPopover();
             clearAllHighlights();
         });
+
+        el.addEventListener('click', (e) => {
+            const target = e.target as HTMLElement;
+            const cell = target.closest('.grid-cell') as HTMLElement;
+            if (!cell) return;
+
+            const isBasis = cell.dataset.isBasis === 'true';
+            if (!isBasis) return;
+
+            const row = parseInt(cell.dataset.row || '0');
+            const col = parseInt(cell.dataset.col || '0');
+            const targetGridId = el.dataset.target || '';
+
+            window.dispatchEvent(new CustomEvent('animate-basis', {
+                detail: { row, col, targetGridId }
+            }));
+        });
     }
 
     const hasChildren = el.children.length === 64;
@@ -194,8 +211,11 @@ export function renderGrid(
 
         const isBasis = (gridType === 'dct' || gridType === 'quantized' || gridType === 'dequantized');
         cell.dataset.isBasis = String(isBasis);
-        if (isBasis) cell.style.cursor = 'help';
-        else cell.style.cursor = 'default';
+        if (isBasis) {
+            cell.classList.add('is-basis');
+        } else {
+            cell.classList.remove('is-basis');
+        }
 
         let displayVal: string;
         let tooltipVal: string;

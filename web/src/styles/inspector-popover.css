@@ -99,3 +99,39 @@
 .basis-popover-stats strong {
     color: var(--text);
 }
+
+.basis-popover-hint {
+    margin-top: 4px;
+    padding-top: 6px;
+    border-top: 1px dashed rgba(139, 92, 246, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-size: 0.6rem;
+    font-weight: 600;
+    color: #7c3aed;
+    color: color-mix(in srgb, var(--primary) 80%, transparent);
+    animation: hintPulse 2s infinite ease-in-out;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+@keyframes hintPulse {
+
+    0%,
+    100% {
+        opacity: 0.7;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 1;
+        transform: scale(1.02);
+    }
+}
+
+.basis-popover-hint svg {
+    fill: currentColor;
+    opacity: 0.9;
+}

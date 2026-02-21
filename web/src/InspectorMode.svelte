@@ -455,7 +455,7 @@
                             </div>
                             <div class="pipeline-block">
                                 <div class="pipeline-block-header"><h3>DCT Coefficients</h3></div>
-                                <div id="gridDCT" class="block-grid"></div>
+                                <div id="gridDCT" class="block-grid" data-target="gridOriginal"></div>
                                 <div class="block-label">Frequencies</div>
                             </div>
                             <div class="pipeline-arrow">
@@ -464,7 +464,7 @@
                             </div>
                             <div class="pipeline-block">
                                 <div class="pipeline-block-header"><h3>Quantized</h3></div>
-                                <div id="gridQuantized" class="block-grid"></div>
+                                <div id="gridQuantized" class="block-grid" data-target="gridOriginal"></div>
                                 <div class="block-label">Integers</div>
                             </div>
                         </div>
@@ -473,7 +473,7 @@
                         <div class="pipeline-row">
                             <div class="pipeline-block">
                                 <div class="pipeline-block-header"><h3>Quantized</h3></div>
-                                <div id="gridQuantized2" class="block-grid"></div>
+                                <div id="gridQuantized2" class="block-grid" data-target="gridReconstructed"></div>
                                 <div class="block-label">Stored Data</div>
                             </div>
                             <div class="pipeline-arrow">
@@ -482,7 +482,7 @@
                             </div>
                             <div class="pipeline-block">
                                 <div class="pipeline-block-header"><h3>Dequantized</h3></div>
-                                <div id="gridDequantized" class="block-grid"></div>
+                                <div id="gridDequantized" class="block-grid" data-target="gridReconstructed"></div>
                                 <div class="block-label">Approx Freqs</div>
                             </div>
                             <div class="pipeline-arrow">
@@ -595,7 +595,7 @@
                             <div class="zigzag-visualizer-row">
                                 <div class="pipeline-block" style="flex: 0 0 auto; margin-right: 16px;">
                                     <div class="pipeline-block-header"><h3>Quantized</h3></div>
-                                    <div id="gridQuantizedAdvanced" class="block-grid"></div>
+                                    <div id="gridQuantizedAdvanced" class="block-grid" data-target="gridOriginal"></div>
                                 </div>
                                 <div style="flex: 1; min-width: 0;">
                                     <div id="gridZigzag" class="zigzag-array-container" style="height: 100%;">
@@ -635,6 +635,12 @@
                                 <span class="bps-item">DCT: <strong id="basisValue">&mdash;</strong></span>
                                 <span class="bps-item">Q: <strong id="basisQuantized">&mdash;</strong></span>
                                 <span class="bps-item">÷ <strong id="basisDivisor">&mdash;</strong></span>
+                            </div>
+                            <div class="basis-popover-hint" id="basisClickHint">
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                </svg>
+                                Click to see wave overlay
                             </div>
                         </div>
                     </div>

@@ -115,6 +115,16 @@
     overflow: visible;
 }
 
+.block-grid .grid-cell.is-basis {
+    cursor: pointer;
+}
+
+.block-grid .grid-cell.is-basis:hover {
+    outline: 2px solid var(--primary);
+    outline-offset: -2px;
+    z-index: 10;
+}
+
 .block-label {
     display: none;
 }

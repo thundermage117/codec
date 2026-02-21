@@ -128,3 +128,106 @@ export function hideBasisPopover(): void {
     }
     basisPopoverVisible = false;
 }
+
+let animationId: number | null = null;
+let originalColors: string[] = [];
+let currentTargetGridId: string | null = null;
+
+export function startBasisAnimation(row: number, col: number, targetGridId: string = 'gridOriginal'): void {
+    if (animationId !== null) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+        restoreOriginalColors();
+    }
+
+    if (!targetGridId) targetGridId = 'gridOriginal';
+    currentTargetGridId = targetGridId;
+
+    const targetGrid = document.getElementById(targetGridId);
+    if (!targetGrid) return;
+
+    const cells = Array.from(targetGrid.querySelectorAll('.grid-cell')) as HTMLElement[];
+    if (cells.length !== 64) return;
+
+    // Save original colors
+    originalColors = cells.map(c => c.style.backgroundColor);
+
+    const basisPattern = computeBasisPattern(col, row);
+    const startTime = performance.now();
+    const duration = 2000; // 2 seconds
+
+    function frame(now: number) {
+        const elapsed = now - startTime;
+        const progress = Math.min(1, elapsed / duration);
+
+        // Multiplier for the wave intensity: ramps up then down
+        const intensity = Math.sin(progress * Math.PI) * 0.9;
+
+        for (let i = 0; i < 64; i++) {
+            const val = basisPattern[i];
+            const cell = cells[i];
+
+            // Draw the basis pattern as an overlay
+            // val is -0.125 to 0.125 roughly. 
+            // We want red for positive, blue for negative.
+            const t = val * 8; // Normalize to ~ -1 to 1
+            let overlayR = 0, overlayG = 0, overlayB = 0;
+            if (t > 0) {
+                overlayR = 255; overlayG = 50; overlayB = 50;
+            } else {
+                overlayR = 50; overlayG = 50; overlayB = 255;
+            }
+
+            const alpha = Math.abs(t) * intensity * 0.8;
+            cell.style.backgroundColor = `rgba(${overlayR}, ${overlayG}, ${overlayB}, ${alpha})`;
+
+            // Blend with original? Actually, let's just use semi-transparent overlay on top
+            // But since background-color doesn't stack, we can manually blend or use a pseudoelement.
+            // Simplified: we'll set background to a composite color.
+            // For now, let's try just setting it and see how it looks.
+            // If we want it to look "laid over", we should probably use a separate layer or just blend.
+
+            // To blend: parse original color.
+            const orig = originalColors[i]; // e.g. "rgb(200, 200, 200)"
+            const rgb = orig.match(/\d+/g)?.map(Number) || [255, 255, 255];
+
+            const r = Math.round(rgb[0] * (1 - alpha) + overlayR * alpha);
+            const g = Math.round(rgb[1] * (1 - alpha) + overlayG * alpha);
+            const b = Math.round(rgb[2] * (1 - alpha) + overlayB * alpha);
+
+            cell.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+        }
+
+        if (progress < 1) {
+            animationId = requestAnimationFrame(frame);
+        } else {
+            animationId = null;
+            restoreOriginalColors();
+        }
+    }
+
+    animationId = requestAnimationFrame(frame);
+}
+
+function restoreOriginalColors() {
+    if (!currentTargetGridId) return;
+    const targetGrid = document.getElementById(currentTargetGridId);
+    if (!targetGrid) return;
+    const cells = Array.from(targetGrid.querySelectorAll('.grid-cell')) as HTMLElement[];
+    cells.forEach((cell, i) => {
+        if (originalColors[i]) {
+            cell.style.backgroundColor = originalColors[i];
+        }
+    });
+
+    // Also clear title if we set it (actually we should move title to popover)
+    currentTargetGridId = null;
+    originalColors = [];
+}
+
+if (typeof window !== 'undefined') {
+    window.addEventListener('animate-basis', (e: any) => {
+        const { row, col, targetGridId } = e.detail;
+        startBasisAnimation(row, col, targetGridId);
+    });
+}
