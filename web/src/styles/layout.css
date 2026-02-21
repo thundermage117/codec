@@ -2,23 +2,108 @@
     width: 100%;
     max-width: 1280px;
     display: grid;
-    grid-template-columns: 1fr 320px;
-    /* Sidebar layout */
+    grid-template-columns: minmax(0, 1fr) 320px;
     gap: 24px;
     align-items: start;
+    margin-top: 4px;
+}
+
+.main-column {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    min-width: 0;
+}
+
+.controls-card {
+    align-self: start;
 }
 
 .card {
-    background: var(--card-bg);
-    border: 1px solid var(--border);
+    background: var(--card-bg-glass, var(--card-bg));
+    border: 1px solid var(--border-subtle, var(--border));
     border-radius: 12px;
-    box-shadow: 0 4px 6px -1px var(--shadow-color), 0 2px 4px -1px var(--shadow-color);
+    box-shadow: 0 6px 24px -12px var(--shadow-color), 0 2px 6px -2px var(--shadow-color);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
     padding: 12px;
+    transition: transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1),
+        box-shadow 0.24s cubic-bezier(0.2, 0.8, 0.2, 1),
+        border-color 0.24s ease;
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .card {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+}
+
+#viewerMode .main-column > .card,
+#viewerMode .container > .controls-card {
+    opacity: 0;
+    transform: translateY(14px);
+    animation: viewerCardIn 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+#viewerMode .viewer-card {
+    animation-delay: 0.05s;
+}
+
+#viewerMode .rd-card {
+    animation-delay: 0.12s;
+}
+
+#viewerMode .controls-card {
+    animation-delay: 0.15s;
+}
+
+#viewerMode .main-column > .card:hover,
+#viewerMode .container > .controls-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 30px -14px var(--shadow-color), 0 5px 12px -6px var(--shadow-color);
+    border-color: color-mix(in srgb, var(--primary) 22%, var(--border-subtle, var(--border)));
+}
+
+@keyframes viewerCardIn {
+    from {
+        opacity: 0;
+        transform: translateY(14px) scale(0.995);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #viewerMode .main-column > .card,
+    #viewerMode .container > .controls-card {
+        opacity: 1;
+        transform: none;
+        animation: none;
+    }
+
+    #viewerMode .main-column > .card:hover,
+    #viewerMode .container > .controls-card:hover {
+        transform: none;
+    }
+
+    .card {
+        transition: none;
+    }
 }
 
 @media (max-width: 768px) {
     .container {
         grid-template-columns: 1fr;
-        /* Stack vertically */
+    }
+}
+
+@media (max-width: 1024px) {
+    .card {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
     }
 }

@@ -300,7 +300,6 @@
                     <summary class="sidebar-section-title"><span>Image Navigator</span></summary>
                     <div class="sidebar-section-body">
                         <div class="thumbnail-container" id="thumbnailContainer">
-                            <!-- svelte-ignore a11y-no-static-element-interactions -->
                             <canvas id="thumbnailCanvas" bind:this={thumbnailCanvas}
                                 onclick={onThumbnailClick}
                                 onmousemove={onThumbnailMouseMove}
@@ -370,7 +369,7 @@
                         </div>
 
                         <div class="control-group">
-                            <label class="group-label">View Mode</label>
+                            <div class="group-label">View Mode</div>
                             <div class="toggle-group">
                                 {#each inspViewModes as mode}
                                 <input type="radio" id={mode.id} name="insp_view_mode"
@@ -382,7 +381,7 @@
                         </div>
 
                         <div class="control-group">
-                            <label class="group-label">Chroma Subsampling</label>
+                            <div class="group-label">Chroma Subsampling</div>
                             <div class="toggle-group">
                                 {#each chromaModes as cs}
                                 <input type="radio" id={cs.id} name="insp_chroma_subsampling"

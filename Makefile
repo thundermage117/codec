@@ -18,7 +18,7 @@ NATIVE_APP_NAME = codec_app
 NPROCS = $(shell sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
 
 # --- PHONY TARGETS ---
-.PHONY: all web web-dev native dev clean test test-web test-web-unit test-web-browser
+.PHONY: all web web-dev native dev clean test web-test web-test-unit web-test-browser
 
 # Default: Build & Run Native
 all: dev
@@ -83,18 +83,18 @@ sanitize:
 # ------------------------------------
 
 # 7. Run all JS tests (unit + browser)
-test-web:
+web-test:
 	@echo "Running JS unit tests..."
 	@cd web && npm run test
 	@echo "Running JS browser integration tests..."
 	@cd web && npm run test:browser
 
 # 8. Unit tests only (fast, no browser)
-test-web-unit:
+web-test-unit:
 	@cd web && npm run test
 
 # 9. Browser integration tests only
-test-web-browser:
+web-test-browser:
 	@cd web && npm run test:browser
 
 # ------------------------------------
