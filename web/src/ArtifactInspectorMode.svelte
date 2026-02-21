@@ -3,6 +3,7 @@
     import { fade } from 'svelte/transition';
     import { appState, ViewMode } from './lib/state.svelte.js';
     import { processImage, getViewPtr, getStats, free, setArtifactGain } from './lib/wasm-bridge.js';
+    import ImageViewer from './lib/components/ImageViewer.svelte';
 
     let artifactCanvas: HTMLCanvasElement;
     let originalCanvas: HTMLCanvasElement;
@@ -90,25 +91,6 @@
         }
     }
 
-    function drawBlockGrid() {
-        if (!artifactCtx) return;
-        const w = artifactCanvas.width;
-        const h = artifactCanvas.height;
-        artifactCtx.save();
-        artifactCtx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
-        artifactCtx.lineWidth = 0.5;
-        artifactCtx.beginPath();
-        for (let x = 8; x < w; x += 8) {
-            artifactCtx.moveTo(x + 0.5, 0);
-            artifactCtx.lineTo(x + 0.5, h);
-        }
-        for (let y = 8; y < h; y += 8) {
-            artifactCtx.moveTo(0, y + 0.5);
-            artifactCtx.lineTo(w, y + 0.5);
-        }
-        artifactCtx.stroke();
-        artifactCtx.restore();
-    }
 
     function onArtifactMouseMove(e: MouseEvent) {
         if (!rawArtifactData || !artifactCanvas) { tooltip.visible = false; return; }
@@ -183,7 +165,6 @@
             for (let i = 0; i < w * h; i++) rawArtifactData[i] = artifactImageData.data[i * 4];
             if (showHeatmap) applyHeatmap(artifactImageData.data, w * h);
             artifactCtx.putImageData(artifactImageData, 0, 0);
-            if (showBlockGrid) drawBlockGrid();
         } catch (err) {
             console.error('Artifact render error:', err);
         } finally {
@@ -281,7 +262,39 @@
         appState.appMode = 'viewer';
         appState.currentViewMode = ViewMode.RGB;
     }
+
+    // ===== Zoom =====
+    const ART_ZOOM_LEVEL = 3;
+    let isZoomMode = $state(false);
+    let zoom = $state(1);
+    let zoomOriginX = $state(50); // % of canvas
+    let zoomOriginY = $state(50);
+
+    function toggleArtZoomMode() {
+        isZoomMode = !isZoomMode;
+        if (!isZoomMode) { zoom = 1; }
+    }
+
+    function resetArtZoom() {
+        zoom = 1;
+    }
+
+    function onArtCanvasClick(e: MouseEvent) {
+        if (!isZoomMode) return;
+        const canvas = viewType === 'artifact' ? artifactCanvas : originalCanvas;
+        if (!canvas) return;
+        if (zoom > 1) {
+            resetArtZoom();
+        } else {
+            const rect = canvas.getBoundingClientRect();
+            zoomOriginX = ((e.clientX - rect.left) / rect.width) * 100;
+            zoomOriginY = ((e.clientY - rect.top) / rect.height) * 100;
+            zoom = ART_ZOOM_LEVEL;
+        }
+    }
+
 </script>
+
 
 <div id="artifactInspector">
     <div class="inspector-fullpage">
@@ -470,7 +483,7 @@
             <!-- Main Content Area -->
             <main class="artifact-content">
 
-                <!-- Single View Toggle -->
+                <!-- View Toggle + Zoom Controls (single row) -->
                 <div class="view-toggle-container">
                     <div class="view-toggle">
                         <button class:active={viewType === 'original'}
@@ -482,20 +495,49 @@
                             {currentMode.label}
                         </button>
                     </div>
+                    <div class="art-zoom-controls">
+                        {#if zoom > 1}
+                        <span class="zoom-level-chip">{zoom.toFixed(0)}×</span>
+                        <button class="zoom-ctrl-btn zoom-out-btn" onclick={resetArtZoom} title="Reset zoom (Esc)">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="11" cy="11" r="8"/>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                                <line x1="8" y1="11" x2="14" y2="11"/>
+                            </svg>
+                            Zoom out
+                        </button>
+                        {:else}
+                        <button class="zoom-ctrl-btn" class:active={isZoomMode}
+                            onclick={toggleArtZoomMode}
+                            title={isZoomMode ? 'Exit zoom mode (Esc)' : 'Zoom mode — click image to zoom in'}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="11" cy="11" r="8"/>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                                {#if !isZoomMode}<line x1="11" y1="8" x2="11" y2="14"/>{/if}
+                                <line x1="8" y1="11" x2="14" y2="11"/>
+                            </svg>
+                            {isZoomMode ? 'Zoom ON' : 'Zoom'}
+                        </button>
+                        {/if}
+                    </div>
                 </div>
 
-                <div class="art-canvas-outer">
-                    <div class="art-canvas-container">
-                        <!-- We keep both canvases but toggle visibility/z-index to avoid re-renders or context loss -->
-                        <div class="art-canvas-wrap" class:visible={viewType === 'original'}>
-                            <canvas bind:this={originalCanvas}></canvas>
-                        </div>
-                        <div class="art-canvas-wrap" class:visible={viewType === 'artifact'}>
-                            <canvas bind:this={artifactCanvas}
-                                onmousemove={onArtifactMouseMove}
-                                onmouseleave={() => tooltip.visible = false}></canvas>
-                        </div>
-                    </div>
+                <div class="artifact-viewer-wrap">
+                    <ImageViewer
+                        id="artifact"
+                        bind:originalCanvas
+                        bind:processedCanvas={artifactCanvas}
+                        viewType={viewType === 'artifact' ? 'processed' : 'original'}
+                        bind:isZoomMode
+                        bind:zoom
+                        bind:zoomOriginX
+                        bind:zoomOriginY
+                        showBlockGrid={showBlockGrid}
+                        zoomHint="Click image to zoom in &nbsp;·&nbsp; Esc to exit"
+                        onViewerClick={onArtCanvasClick}
+                        onViewerMouseMove={onArtifactMouseMove}
+                        onViewerMouseLeave={() => tooltip.visible = false}
+                    />
                 </div>
 
 
@@ -585,11 +627,38 @@
         gap: 1rem;
     }
 
+    /* Wrapper that stretches to fill remaining flex space after the toggle row */
+    .artifact-viewer-wrap {
+        flex: 1;
+        width: 100%;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* Canvas fits within the constrained height while maintaining aspect ratio */
+    .artifact-viewer-wrap :global(.canvas-wrap canvas) {
+        display: block;
+    }
+
     /* ===== View Toggle ===== */
     .view-toggle-container {
         display: flex;
+        align-items: center;
         justify-content: center;
         flex-shrink: 0;
+        gap: 12px;
+        position: relative;
+    }
+
+    .art-zoom-controls {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        position: absolute;
+        right: 0;
     }
 
     .view-toggle {
@@ -623,63 +692,6 @@
         background: var(--primary);
         color: white;
         box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
-    }
-
-    /* ===== Canvas Area ===== */
-    .art-canvas-outer {
-        flex: 1;
-        position: relative;
-        min-height: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    .art-canvas-container {
-        position: relative;
-        width: 100%;
-        height: 100%;
-        max-width: 100%;
-        max-height: 100%;
-    }
-
-    .art-canvas-wrap {
-        position: absolute;
-        inset: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: var(--viewer-bg, #111);
-        border-radius: 12px;
-        border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.07));
-        overflow: hidden;
-        opacity: 0;
-        visibility: hidden;
-        pointer-events: none;
-        transition: opacity 0.3s ease, visibility 0.3s ease, border-color 0.2s, box-shadow 0.2s;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-    }
-
-    .art-canvas-wrap.visible {
-        opacity: 1;
-        visibility: visible;
-        pointer-events: auto;
-    }
-
-
-
-    .art-canvas-wrap canvas {
-        max-width: 100%;
-        max-height: 100%;
-        display: block;
-        image-rendering: pixelated;
-        cursor: crosshair;
-    }
-
-    .indicator-blink {
-        color: #ef4444;
-        background: rgba(239, 68, 68, 0.1);
-        border-color: rgba(239, 68, 68, 0.2);
     }
 
     /* ===== Error Gain slider ===== */

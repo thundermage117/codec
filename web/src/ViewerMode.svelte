@@ -4,6 +4,7 @@
     import { processImage, getViewPtr, getStats, free, setViewTint, inspectBlockData } from './lib/wasm-bridge.js';
     import { handleFileSelect } from './lib/image-manager.js';
     import { inspectBlock } from './lib/inspection.js';
+    import ImageViewer from './lib/components/ImageViewer.svelte';
 
     let originalCanvas: HTMLCanvasElement;
     let processedCanvas: HTMLCanvasElement;
@@ -34,6 +35,50 @@
     let qualitySliderValue = $state(appState.quality);
     let isQualitySliderInteracting = false;
 
+    // ===== Zoom =====
+    const ZOOM_LEVEL = 3;
+    let isZoomMode = $state(false);
+    let zoom = $state(1);
+    let zoomOriginX = $state(50); // % of canvas
+    let zoomOriginY = $state(50);
+    let viewerToggle = $state<'comparison' | 'original' | 'processed'>('comparison');
+
+    // Keep comparisonPercent in sync with toggle
+    $effect(() => {
+        if (viewerToggle === 'original') {
+            appState.comparisonPercent = 100;
+        } else if (viewerToggle === 'processed') {
+            appState.comparisonPercent = 0;
+        } else if (viewerToggle === 'comparison') {
+            // Restore center split by default when switching back to comparison
+            // or we could keep its last dragged value. User said "Set default view to comparison mode"
+            // so we set it to 50 when first entering or switching.
+            if (appState.comparisonPercent === 100 || appState.comparisonPercent === 0) {
+                appState.comparisonPercent = 50;
+            }
+        }
+    });
+
+    // Handle view toggle dragging vs clicking
+    // If user drags the slider, we should switch to 'comparison' mode automatically
+    $effect(() => {
+        const p = appState.comparisonPercent;
+        if (p > 0 && p < 100 && viewerToggle !== 'comparison') {
+            viewerToggle = 'comparison';
+        }
+    });
+
+
+    function toggleZoomMode() {
+        isZoomMode = !isZoomMode;
+        if (!isZoomMode) { zoom = 1; }
+    }
+
+    function resetZoom() {
+        zoom = 1;
+    }
+
+
     onMount(() => {
         // Ensure we're in a view mode supported by the viewer UI
         const viewerModes = [ViewMode.RGB, ViewMode.Artifacts, ViewMode.Y, ViewMode.Cr, ViewMode.Cb];
@@ -45,8 +90,12 @@
             // Ensure drop zone is hidden
             dropZoneVisible = false;
 
+            // Reset toggle when returning
+            viewerToggle = 'comparison';
+
             // Render to the new canvas elements
             render();
+
 
             // Update UI state
             updateFileSizeEstimate();
@@ -262,16 +311,27 @@
 
 
     let isDraggingComparison = false;
+    // Track whether the pointer moved enough to count as a drag vs. a click
+    let mouseDownClientX = 0;
+    let hasDraggedSinceDown = false;
 
     function onViewerMouseDown(e: MouseEvent) {
-        if (appState.isInspectMode) return;
+        mouseDownClientX = e.clientX;
+        hasDraggedSinceDown = false;
+        if (appState.isInspectMode || isZoomMode) return;
         isDraggingComparison = true;
         handleViewerInteraction(e.clientX);
     }
 
     function onDocumentMouseMove(e: MouseEvent) {
+        if (Math.abs(e.clientX - mouseDownClientX) > 4) hasDraggedSinceDown = true;
         if (isDraggingComparison) {
             handleViewerInteraction(e.clientX);
+        }
+        // In zoom mode, allow comparison slider via drag even while zoomed
+        if (isZoomMode && !isDraggingComparison && hasDraggedSinceDown &&
+            !appState.isInspectMode && e.buttons === 1) {
+            isDraggingComparison = true;
         }
         if (appState.isInspectMode && appState.originalImageData && processedCanvas) {
             const rect = processedCanvas.getBoundingClientRect();
@@ -302,7 +362,18 @@
         updateComparisonView((x / rect.width) * 100);
     }
 
-    function onViewerClick() {
+    function onViewerClick(e: MouseEvent) {
+        if (isZoomMode && !hasDraggedSinceDown) {
+            if (zoom > 1) {
+                resetZoom();
+            } else if (originalCanvas) {
+                const rect = originalCanvas.getBoundingClientRect();
+                zoomOriginX = ((e.clientX - rect.left) / rect.width) * 100;
+                zoomOriginY = ((e.clientY - rect.top) / rect.height) * 100;
+                zoom = ZOOM_LEVEL;
+            }
+            return;
+        }
         if (appState.isInspectMode && appState.highlightBlock && appState.wasmReady) {
             appState.inspectedBlock = { ...appState.highlightBlock };
             appState.appMode = 'inspector';
@@ -310,13 +381,6 @@
         }
     }
 
-    function onViewerKeyDown(e: KeyboardEvent) {
-        if (!appState.isInspectMode) return;
-        if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            onViewerClick();
-        }
-    }
 
     function enterInspectorMode() {
         appState.appMode = 'inspector';
@@ -545,6 +609,15 @@
         return d;
     }
 
+    // ===== Keyboard shortcuts =====
+
+    function onDocumentKeyDown(e: KeyboardEvent) {
+        if (e.key === 'Escape') {
+            if (zoom > 1) { zoom = 1; }
+            if (isZoomMode) { isZoomMode = false; }
+        }
+    }
+
     // ===== Theme toggle =====
 
     let isDarkTheme = $state(
@@ -564,7 +637,7 @@
     }
 </script>
 
-<svelte:document onmousemove={onDocumentMouseMove} onmouseup={onDocumentMouseUp} />
+<svelte:document onmousemove={onDocumentMouseMove} onmouseup={onDocumentMouseUp} onkeydown={onDocumentKeyDown} />
 
 <!-- ===== VIEWER MODE ===== -->
 <div id="viewerMode">
@@ -608,52 +681,82 @@
             <div class="card viewer-card">
             <div class="canvas-wrapper" id="viewer-container">
                 {#if appState.originalImageData && !appState.isInspectMode}
-                <div class="comparison-labels">
-                    <span class="comparison-label label-original">Original</span>
-                    <span class="viewer-info-mini">{appState.imgWidth} × {appState.imgHeight} px</span>
-                    <span class="comparison-label label-processed">Processed</span>
-                </div>
-                {/if}
-
-                <div class="comparison-viewer"
-                    style={appState.isInspectMode ? 'cursor: crosshair' : 'cursor: col-resize'}
-                    role="button"
-                    tabindex="0"
-                    aria-label={appState.isInspectMode ? 'Inspector viewer. Press Enter to inspect highlighted block.' : 'Image comparison viewer. Drag to adjust split.'}
-                    onmousedown={onViewerMouseDown}
-                    onclick={onViewerClick}
-                    onkeydown={onViewerKeyDown}
-                    onmouseleave={onViewerMouseLeave}>
-                    <canvas bind:this={originalCanvas} id="originalCanvas"></canvas>
-                    <canvas bind:this={processedCanvas} id="processedCanvas"
-                        style={`clip-path: polygon(${appState.comparisonPercent}% 0, 100% 0, 100% 100%, ${appState.comparisonPercent}% 100%)`}></canvas>
-
-                    {#if appState.originalImageData && appState.isInspectMode}
-                    <div class="inspector-active-banner">
-                        <span class="banner-dot"></span>
-                        <strong>Inspector mode ON</strong>
-                        <span>Click any 8×8 block to open the full pipeline.</span>
-                    </div>
-                    {/if}
-                    {#if appState.originalImageData && !appState.isInspectMode}
-                    <div class="comparison-divider" style={`left: ${appState.comparisonPercent}%`} aria-hidden="true">
-                        <div class="comparison-handle">
-                            <span></span>
-                            <span></span>
+                <div class="viewer-canvas-header">
+                    <div class="canvas-header-left">
+                        <div class="img-dim-info">
+                            <span class="dim-val">{appState.imgWidth}</span>
+                            <span class="dim-sep">×</span>
+                            <span class="dim-val">{appState.imgHeight}</span>
+                            <span class="dim-unit">px</span>
                         </div>
                     </div>
-                    {/if}
-                </div>
 
-                {#if appState.originalImageData}
-                <div class="inspector-quickstart">
-                    <div class="quickstart-copy">
-                        <strong>Block Inspector</strong>
-                        <span>Click any 8×8 region to inspect DCT coefficients and quantization.</span>
+                    <div class="canvas-header-center">
+                        <div class="view-mode-toggle">
+                            <button class:active={viewerToggle === 'comparison'} onclick={() => viewerToggle = 'comparison'}>
+                                Comparison
+                            </button>
+                            <button class:active={viewerToggle === 'original'} onclick={() => viewerToggle = 'original'}>
+                                Original
+                            </button>
+                            <button class:active={viewerToggle === 'processed'} onclick={() => viewerToggle = 'processed'}>
+                                Processed
+                            </button>
+                        </div>
                     </div>
-                    <button class="inspector-quickstart-btn" onclick={enterInspectorMode}>Enter Block Inspector</button>
+
+                    <div class="canvas-header-right">
+                        <div class="viewer-zoom-controls">
+                            {#if zoom > 1}
+                            <span class="zoom-level-chip">{zoom.toFixed(0)}×</span>
+                            <button class="zoom-ctrl-btn zoom-out-btn" onclick={resetZoom} title="Reset zoom (Esc)">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="11" cy="11" r="8"/>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                                    <line x1="8" y1="11" x2="14" y2="11"/>
+                                </svg>
+                                Zoom out
+                            </button>
+                            {:else}
+                            <button class="zoom-ctrl-btn" class:active={isZoomMode}
+                                onclick={toggleZoomMode}
+                                title={isZoomMode ? 'Exit zoom mode (Esc)' : 'Zoom mode — click image to zoom in'}>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="11" cy="11" r="8"/>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                                    {#if !isZoomMode}<line x1="11" y1="8" x2="11" y2="14"/>{/if}
+                                    <line x1="8" y1="11" x2="14" y2="11"/>
+                                </svg>
+                                {isZoomMode ? 'Zoom ON' : 'Zoom'}
+                            </button>
+                            {/if}
+                        </div>
+                    </div>
                 </div>
                 {/if}
+
+
+                <ImageViewer
+                    id="viewer"
+                    style="width: 100%"
+                    bind:originalCanvas
+                    bind:processedCanvas
+                    viewType={viewerToggle}
+                    bind:comparisonPercent={appState.comparisonPercent}
+                    bind:isZoomMode
+                    bind:zoom
+                    bind:zoomOriginX
+                    bind:zoomOriginY
+                    isInspectMode={appState.isInspectMode}
+                    bind:highlightBlock={appState.highlightBlock}
+                    showInspectorBanner={true}
+                    showQuickstart={true}
+                    zoomHint="Click image to zoom in &nbsp;·&nbsp; drag to use comparison slider &nbsp;·&nbsp; Esc to exit"
+                    onViewerMouseDown={onViewerMouseDown}
+                    onViewerClick={onViewerClick}
+                    onViewerMouseLeave={onViewerMouseLeave}
+                    onEnterInspector={enterInspectorMode}
+                />
             </div>
         </div>
 
@@ -958,15 +1061,21 @@
                     {#if appState.fileSizeInfo}
                     <div class="file-size-bar-container" id="fileSizeContainer">
                         <div class="file-size-header">
-                            <span class="file-size-title">Estimated File Size</span>
-                            <span class="file-size-values" id="fileSizeValues">{appState.fileSizeInfo.original} → ~{appState.fileSizeInfo.estimated}</span>
+                            <span class="file-size-title">File Size Comparison</span>
+                            <span class="reduction-badge">-{appState.fileSizeInfo.reduction}%</span>
+                        </div>
+                        <div class="file-size-main">
+                            <div class="size-comparison-flow">
+                                <span class="size-val secondary">{appState.fileSizeInfo.original}</span>
+                                <span class="size-arrow">→</span>
+                                <span class="size-val primary highlight">~{appState.fileSizeInfo.estimated}</span>
+                            </div>
                         </div>
                         <div class="file-size-track">
                             <div class="file-size-fill" id="fileSizeFill" style="width: {appState.fileSizeInfo.fillPercent}%"></div>
                         </div>
-                        <div class="file-size-labels">
-                            <span class="file-size-label-left" id="fileSizeOrigLabel">Original: {appState.fileSizeInfo.original}</span>
-                            <span class="file-size-label-right" id="fileSizeReduction">~{appState.fileSizeInfo.reduction}% smaller ({appState.fileSizeInfo.ratio}× compression)</span>
+                        <div class="file-size-footer">
+                            <span class="compression-ratio-label">{appState.fileSizeInfo.ratio}× compression ratio</span>
                         </div>
                     </div>
                     {/if}

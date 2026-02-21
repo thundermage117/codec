@@ -41,6 +41,8 @@ h1 {
     flex-wrap: wrap;
 }
 
+
+
 @media (max-width: 900px) {
     header {
         top: 8px;
