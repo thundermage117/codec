@@ -287,6 +287,7 @@
                 <span class="legend-item"><span class="legend-dot dot-negative"></span>Negative</span>
                 <span class="legend-item"><span class="legend-dot dot-zero"></span>Near Zero</span>
                 <span class="legend-item"><span class="legend-dot dot-intensity"></span>Pixel Intensity</span>
+                <span class="legend-item"><span class="run-dot" style="margin-right: 4px; opacity: 1;"></span>Zero Run</span>
             </div>
         </div>
 

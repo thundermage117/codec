@@ -35,6 +35,7 @@ export const ZIGZAG_INDICES = new Uint8Array([
 
 export interface EntropySymbol {
     type: 'DC' | 'AC' | 'ZRL' | 'EOB';
+    zIndex: number;
     run?: number;
     size?: number;
     amplitude?: number;
@@ -50,9 +51,10 @@ export function getEntropySymbols(quantized: Float64Array | number[]): EntropySy
     const dc = Math.round(quantized[0]);
     if (dc !== 0) {
         const size = Math.floor(Math.log2(Math.abs(dc))) + 1;
-        symbols.push({ type: 'DC', size, amplitude: dc, baseBits: 4, magBits: size, totalBits: 4 + size });
+        // DC symbols use 2-9 bits for base category in JPEG
+        symbols.push({ type: 'DC', zIndex: 0, size, amplitude: dc, baseBits: 3, magBits: size, totalBits: 3 + size });
     } else {
-        symbols.push({ type: 'DC', size: 0, amplitude: 0, baseBits: 2, magBits: 0, totalBits: 2 });
+        symbols.push({ type: 'DC', zIndex: 0, size: 0, amplitude: 0, baseBits: 2, magBits: 0, totalBits: 2 });
     }
 
     // AC coefficients (Zig-zag scan)
@@ -66,19 +68,23 @@ export function getEntropySymbols(quantized: Float64Array | number[]): EntropySy
         } else {
             // Encode ZRL (Zero Run Length) symbols if run > 15
             while (run > 15) {
-                symbols.push({ type: 'ZRL', run: 15, baseBits: 11, magBits: 0, totalBits: 11 });
+                // ZRL is a fixed 11-bit code in JPEG
+                symbols.push({ type: 'ZRL', zIndex: i - run, run: 15, baseBits: 11, magBits: 0, totalBits: 11 });
                 run -= 16;
             }
 
             const size = Math.floor(Math.log2(Math.abs(ac))) + 1;
-            symbols.push({ type: 'AC', run, size, amplitude: ac, baseBits: 8, magBits: size, totalBits: 8 + size });
+            // AC symbols vary widely; 4-10 bits is a reasonable simulation for category + run
+            const baseBits = (run < 4 && size < 4) ? 5 : 9;
+            symbols.push({ type: 'AC', zIndex: i, run, size, amplitude: ac, baseBits, magBits: size, totalBits: baseBits + size });
             run = 0;
         }
     }
 
     // End of Block (EOB)
     if (run > 0) {
-        symbols.push({ type: 'EOB', baseBits: 4, magBits: 0, totalBits: 4 });
+        // EOB is usually 2-4 bits
+        symbols.push({ type: 'EOB', zIndex: 63, baseBits: 4, magBits: 0, totalBits: 4 });
     }
 
     return symbols;

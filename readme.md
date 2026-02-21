@@ -117,8 +117,8 @@ Run `./build/codec_app --help` to see available options.
 - [x] Block-level inspection mode
 - [x] Interactive block selection
 - [x] Coefficient heatmap visualization
-- [ ] Zig-zag ordering
-- [ ] Zero-run visualization
+- [x] Zig-zag ordering
+- [x] Zero-run visualization
 
 ### Phase 3
 

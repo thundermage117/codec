@@ -550,15 +550,54 @@
 
 .zz-run {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 4px;
-    padding: 0 8px;
-    height: 28px;
-    font-size: 0.7rem;
+    justify-content: center;
+    gap: 2px;
+    padding: 2px 8px;
+    height: 36px;
+    font-size: 0.65rem;
     color: var(--text-muted);
     background: rgba(0, 0, 0, 0.03);
     border: 1px dashed var(--border);
-    border-radius: 14px;
+    border-radius: 6px;
+    cursor: help;
+    transition: all 0.2s;
+    min-width: 48px;
+}
+
+.zz-run:hover,
+.zz-run.cell-highlight {
+    background: var(--primary-subtle);
+    border-color: var(--primary);
+    color: var(--primary);
+    transform: scale(1.05);
+    z-index: 10;
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.15);
+}
+
+.run-count {
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.run-dots {
+    display: flex;
+    gap: 2px;
+}
+
+.run-dot {
+    width: 4px;
+    height: 4px;
+    background: currentColor;
+    border-radius: 50%;
+    opacity: 0.4;
+}
+
+.run-more {
+    font-size: 8px;
+    line-height: 1;
+    font-weight: 800;
 }
 
 [data-theme="dark"] .zz-run {
@@ -845,27 +884,125 @@
     text-align: left;
     color: var(--text-muted);
     font-weight: 600;
-    padding-bottom: 8px;
+    padding: 8px 12px;
     border-bottom: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.1));
 }
 
 .entropy-table.mini td {
-    padding: 6px 0;
+    padding: 10px 12px;
     border-bottom: 1px dashed var(--border-subtle, rgba(0, 0, 0, 0.05));
     color: var(--text);
+    vertical-align: middle;
 }
 
 .entropy-table.mini tr:last-child td {
     border-bottom: none;
 }
 
-.entropy-table.mini .sym-bits-total {
-    text-align: right;
+.entropy-table.mini th:first-child,
+.entropy-table.mini td:first-child {
+    padding-left: 0;
+    width: 40px;
+    color: var(--text-muted);
     font-family: var(--font-mono);
+    font-size: 0.65rem;
 }
 
-.entropy-table.mini th:last-child {
+.entropy-table.mini .sym-pos-cell {
+    opacity: 0.7;
+}
+
+.entropy-table.mini th:nth-child(2),
+.entropy-table.mini td:nth-child(2) {
+    width: 80px;
+}
+
+.entropy-table.mini th:last-child,
+.entropy-table.mini td:last-child {
+    padding-right: 0;
     text-align: right;
+    width: 100px;
+}
+
+.cost-calc {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 3px;
+    font-size: 0.68rem;
+    color: var(--text-muted);
+}
+
+.calc-op,
+.calc-eq {
+    opacity: 0.4;
+    font-size: 0.6rem;
+}
+
+.calc-res {
+    font-weight: 700;
+    color: var(--primary);
+    margin-left: 2px;
+}
+
+.calc-part {
+    cursor: help;
+    border-bottom: 1px dotted rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="dark"] .calc-part {
+    border-bottom: 1px dotted rgba(255, 255, 255, 0.1);
+}
+
+.entropy-table.mini .sym-val-cell {
+    width: auto;
+}
+
+.mini-zz {
+    transform: none !important;
+    cursor: default !important;
+    box-shadow: none !important;
+}
+
+.zz-cell.mini-zz {
+    width: 24px;
+    height: 24px;
+    font-size: 0.65rem;
+}
+
+.zz-run.mini-zz {
+    height: 30px;
+    padding: 0 6px;
+    min-width: 40px;
+    gap: 1px;
+}
+
+.zz-run.mini-zz .run-count {
+    font-size: 0.6rem;
+}
+
+.zz-eob.mini-zz {
+    height: 24px;
+    font-size: 0.65rem;
+    padding: 0 8px;
+}
+
+.sym-val-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sym-val-sep {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    font-style: italic;
+    opacity: 0.7;
+}
+
+.entropy-table.mini .sym-bits-total {
+    font-family: var(--font-mono);
+    font-weight: 600;
 }
 
 /* ===== Entropy Summary Header ===== */
@@ -993,6 +1130,9 @@
 
 /* ===== Entropy Cost Breakdown Header ===== */
 .entropy-cost-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     font-size: 0.78rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -1000,6 +1140,32 @@
     color: var(--text-muted);
     margin-top: 8px;
     margin-bottom: 8px;
+}
+
+.cost-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.cost-action-btn {
+    appearance: none;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-muted);
+    font-size: 0.6rem;
+    padding: 2px 6px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.15s;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.cost-action-btn:hover {
+    background: var(--bg-secondary);
+    color: var(--primary);
+    border-color: var(--primary);
 }
 
 .entropy-cost-hint {
@@ -1013,4 +1179,39 @@
 .highlight-stat-poor {
     background: rgba(239, 68, 68, 0.05);
     border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+/* ===== Educational Section ===== */
+.entropy-education {
+    margin-top: 20px;
+    padding: 12px;
+    background: rgba(59, 130, 246, 0.05);
+    border-radius: 8px;
+    border: 1px solid rgba(59, 130, 246, 0.1);
+}
+
+[data-theme="dark"] .entropy-education {
+    background: rgba(59, 130, 246, 0.1);
+    border-color: rgba(59, 130, 246, 0.2);
+}
+
+.edu-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #3b82f6;
+    margin-bottom: 6px;
+    letter-spacing: 0.03em;
+}
+
+.edu-text {
+    font-size: 0.72rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+    margin: 0;
+}
+
+.edu-text strong {
+    color: var(--text);
+    font-weight: 600;
 }

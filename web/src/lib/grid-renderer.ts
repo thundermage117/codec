@@ -29,8 +29,29 @@ export function highlightAcrossGrids(row: number, col: number): void {
 
     const zzContainer = document.getElementById('gridZigzag');
     if (zzContainer) {
-        const zzCell = zzContainer.querySelector(`.zz-cell[data-idx="${idx}"]`) as HTMLElement | null;
+        const zzCell = (zzContainer.querySelector(`.zz-cell[data-idx="${idx}"]`) ||
+            zzContainer.querySelector(`.zz-run[data-indices~="${idx}"]`)) as HTMLElement | null;
         if (zzCell) zzCell.classList.add('cell-highlight');
+    }
+}
+
+export function highlightRunAcrossGrids(indices: number[]): void {
+    clearAllHighlights();
+    indices.forEach(idx => {
+        ALL_GRID_IDS.forEach(gridId => {
+            const grid = document.getElementById(gridId);
+            if (!grid) return;
+            const cell = grid.children[idx] as HTMLElement | undefined;
+            if (cell && cell.classList) cell.classList.add('cell-highlight');
+        });
+    });
+
+    const zzContainer = document.getElementById('gridZigzag');
+    if (zzContainer) {
+        indices.forEach(idx => {
+            const zzCell = zzContainer.querySelector(`.zz-cell[data-idx="${idx}"]`) as HTMLElement | null;
+            if (zzCell) zzCell.classList.add('cell-highlight');
+        });
     }
 }
 
@@ -267,16 +288,15 @@ export function renderZigzagArray(data: Float64Array): void {
             run++;
         } else {
             if (run > 0) {
-                if (run > 2) {
-                    const runEl = document.createElement('div');
-                    runEl.className = 'zz-run';
-                    runEl.textContent = `${run} Zeros`;
-                    el.appendChild(runEl);
-                } else {
+                if (run > 1) {
+                    const runIndices = [];
                     for (let j = 0; j < run; j++) {
-                        const zeroIdx = ZIGZAG_INDICES[i - run + j];
-                        el.appendChild(createZzCell(0, zeroIdx, i - run + j));
+                        runIndices.push(ZIGZAG_INDICES[i - run + j]);
                     }
+                    el.appendChild(createRunElement(run, runIndices, i - run));
+                } else {
+                    const zeroIdx = ZIGZAG_INDICES[i - 1];
+                    el.appendChild(createZzCell(0, zeroIdx, i - 1));
                 }
                 run = 0;
             }
@@ -317,6 +337,37 @@ function createZzCell(val: number, idx: number, zIndex: number): HTMLElement {
     return cell;
 }
 
+function createRunElement(count: number, indices: number[], startIndex: number): HTMLElement {
+    const runEl = document.createElement('div');
+    runEl.className = 'zz-run tooltip-container';
+    runEl.dataset.indices = indices.join(' ');
+
+    // Create visual dots for the zeros
+    let dots = '';
+    const maxDots = 8;
+    for (let i = 0; i < Math.min(count, maxDots); i++) {
+        dots += '<span class="run-dot"></span>';
+    }
+    if (count > maxDots) dots += '<span class="run-more">+</span>';
+
+    runEl.innerHTML = `
+        <span class="run-count">${count} Zeros</span>
+        <div class="run-dots">${dots}</div>
+    `;
+
+    runEl.addEventListener('mouseenter', (e) => {
+        highlightRunAcrossGrids(indices);
+        showTooltip(e, `${count} Zeros`, `Pos ${startIndex}-${startIndex + count - 1}`, '', `Run of ${count} zero coefficients in Zig-zag scan`);
+    });
+
+    runEl.addEventListener('mouseleave', () => {
+        clearAllHighlights();
+        hideTooltip();
+    });
+
+    return runEl;
+}
+
 let animationInterval: number | null = null;
 
 export function startZigzagAnimation(): void {
@@ -354,10 +405,11 @@ export function startZigzagAnimation(): void {
 
         highlightAcrossGrids(row, col);
 
-        // Scroll the active zz-cell into view within the container
+        // Scroll the active zz-cell or zz-run into view within the container
         const zzContainer = document.getElementById('gridZigzag');
         if (zzContainer) {
-            const activeZz = zzContainer.querySelector(`.zz-cell[data-idx="${idx}"]`) as HTMLElement;
+            const activeZz = (zzContainer.querySelector(`.zz-cell[data-idx="${idx}"]`) ||
+                zzContainer.querySelector(`.zz-run[data-indices~="${idx}"]`)) as HTMLElement | null;
             if (activeZz) {
                 // simple scroll into view if it's hidden
                 activeZz.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
@@ -403,22 +455,50 @@ export function renderEntropySummary(symbols: any[]): void {
         if (symList.length === 0) return '<div class="empty-detail">No symbols</div>';
         let rows = '';
         symList.forEach(s => {
-            let valStr = '-';
-            if (s.type === 'AC') valStr = `${s.run} zeros, then ${s.amplitude}`;
-            else if (s.type === 'DC') valStr = `value: ${s.amplitude}`;
-            else if (s.type === 'ZRL') valStr = `16 zeros`;
+            let valHtml = '-';
+            if (s.type === 'AC') {
+                const dots = Array.from({ length: Math.min(s.run, 5) }, () => '<span class="run-dot"></span>').join('');
+                const runHtml = s.run > 0 ? (s.run > 1
+                    ? `<div class="zz-run mini-zz"><span class="run-count">${s.run} Zeros</span><div class="run-dots">${dots}${s.run > 5 ? '<span class="run-more">+</span>' : ''}</div></div>`
+                    : '<div class="zz-cell zz-zero mini-zz">0</div>') : '';
+                const valCellHtml = `<div class="zz-cell mini-zz">${s.amplitude}</div>`;
+                valHtml = `<div class="sym-val-wrap">${valCellHtml}${runHtml ? '<span class="sym-val-sep">and</span>' : ''}${runHtml}</div>`;
+            } else if (s.type === 'DC') {
+                valHtml = `<div class="zz-cell dc-cell mini-zz">${s.amplitude}</div>`;
+            } else if (s.type === 'ZRL') {
+                const dots = Array.from({ length: 5 }, () => '<span class="run-dot"></span>').join('');
+                valHtml = `<div class="zz-run mini-zz"><span class="run-count">16 Zeros</span><div class="run-dots">${dots}<span class="run-more">+</span></div></div>`;
+            } else if (s.type === 'EOB') {
+                valHtml = '<div class="zz-eob mini-zz">EOB</div>';
+            }
 
             rows += `
                 <tr>
+                    <td class="sym-pos-cell">#${s.zIndex}</td>
                     <td><span class="sym-type ${s.type.toLowerCase()}">${s.type}</span></td>
-                    <td>${valStr}</td>
-                    <td class="sym-bits-total">${s.totalBits}</td>
+                    <td class="sym-val-cell">${valHtml}</td>
+                    <td class="sym-bits-total">
+                        <div class="cost-calc">
+                            <span class="calc-part" title="Huffman Code: A variable-length code representing the (Run, Category) pair. Common patterns get shorter codes.">${s.baseBits}</span>
+                            <span class="calc-op">+</span>
+                            <span class="calc-part" title="Extra Bits: Fixed-length bits used to specify the exact sign and magnitude within the category.">${s.magBits}</span>
+                            <span class="calc-eq">=</span>
+                            <span class="calc-res">${s.totalBits}</span>
+                        </div>
+                    </td>
                 </tr>
             `;
         });
         return `
             <table class="entropy-table mini">
-                <thead><tr><th>Symbol</th><th>Value</th><th>Cost</th></tr></thead>
+                <thead>
+                    <tr>
+                        <th title="Position in the 0-63 zig-zag scan order">Pos</th>
+                        <th title="DC = Base color difference, AC = Detail/Edge, ZRL = Zero Run, EOB = End of Block">Symbol</th>
+                        <th title="Visual representation of the coefficient and any preceding zeros">Value</th>
+                        <th title="Total cost = Category Huffman code + Extra magnitude bits">Cost (H+E=Total)</th>
+                    </tr>
+                </thead>
                 <tbody>${rows}</tbody>
             </table>
         `;
@@ -477,7 +557,13 @@ export function renderEntropySummary(symbols: any[]): void {
             </div>
         </div>
 
-        <div class="entropy-cost-header">Bit Cost Breakdown <span class="entropy-cost-hint">(click to expand)</span></div>
+        <div class="entropy-cost-header">
+            <span class="cost-title">Bit Cost Breakdown <span class="entropy-cost-hint">(click to expand)</span></span>
+            <div class="cost-actions">
+                <button class="cost-action-btn" id="expandAllCosts">Expand All</button>
+                <button class="cost-action-btn" id="collapseAllCosts">Collapse All</button>
+            </div>
+        </div>
         <div class="cost-breakdown">
             <details class="cost-details">
                 <summary class="cost-row">
@@ -509,5 +595,31 @@ export function renderEntropySummary(symbols: any[]): void {
                 </div>
             </details>
         </div>
+
+        <div class="entropy-education">
+            <div class="edu-title">How it works</div>
+            <p class="edu-text">
+                JPEG saves space by grouping <strong>runs of zeros</strong> and <strong>value ranges</strong> into categories. 
+                Common categories get short <strong>Huffman Codes</strong> (the first number), while the exact value is specified 
+                using <strong>Extra Bits</strong> (the second number). Most high-frequency coefficients become zero after quantization, 
+                allowing them to be skipped entirely with a single EOB symbol.
+            </p>
+        </div>
     `;
+
+    // Add event listeners for expand/collapse all
+    const expandBtn = container.querySelector('#expandAllCosts');
+    const collapseBtn = container.querySelector('#collapseAllCosts');
+
+    if (expandBtn) {
+        expandBtn.addEventListener('click', () => {
+            container.querySelectorAll('.cost-details').forEach(el => (el as HTMLDetailsElement).open = true);
+        });
+    }
+
+    if (collapseBtn) {
+        collapseBtn.addEventListener('click', () => {
+            container.querySelectorAll('.cost-details').forEach(el => (el as HTMLDetailsElement).open = false);
+        });
+    }
 }
