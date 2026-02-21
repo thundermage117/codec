@@ -28,7 +28,9 @@ enum ViewMode {
     Artifacts = 1,
     Y = 2,
     Cr = 3,
-    Cb = 4
+    Cb = 4,
+    EdgeDistortion = 5,
+    BlockingMap = 6
 };
 
 static ImageCodec::ChromaSubsampling map_cs_mode(int mode) {
@@ -92,6 +94,12 @@ uint8_t* get_view_ptr(int mode) {
         case Artifacts:
             viewImage = g_session.metrics.artifactMap;
             break;
+        case EdgeDistortion:
+            viewImage = CodecAnalysis::computeEdgeDistortionMap(g_session.originalImage, ycrcbToBgr(g_session.processedYCrCb));
+            break;
+        case BlockingMap:
+            viewImage = CodecAnalysis::computeBlockingMap(ycrcbToBgr(g_session.processedYCrCb));
+            break;
         case Y:
         case Cr:
         case Cb: {
@@ -133,11 +141,20 @@ uint8_t* get_view_ptr(int mode) {
     }
 
     const double* viewData = viewImage.data();
-    // Convert the 3-channel BGR viewImage to 4-channel RGBA for the canvas
+    const int viewCh = viewImage.channels();
+    // Convert viewImage to 4-channel RGBA for the canvas.
+    // EdgeDistortion and BlockingMap return 1-channel images; handle both cases.
     for (size_t i = 0; i < numPixels; ++i) {
-        rgba_output[i * 4 + 0] = static_cast<uint8_t>(std::max(0.0, std::min(viewData[i * 3 + 2], 255.0))); // R
-        rgba_output[i * 4 + 1] = static_cast<uint8_t>(std::max(0.0, std::min(viewData[i * 3 + 1], 255.0))); // G
-        rgba_output[i * 4 + 2] = static_cast<uint8_t>(std::max(0.0, std::min(viewData[i * 3 + 0], 255.0))); // B
+        if (viewCh == 1) {
+            uint8_t v = static_cast<uint8_t>(std::max(0.0, std::min(viewData[i], 255.0)));
+            rgba_output[i * 4 + 0] = v; // R
+            rgba_output[i * 4 + 1] = v; // G
+            rgba_output[i * 4 + 2] = v; // B
+        } else {
+            rgba_output[i * 4 + 0] = static_cast<uint8_t>(std::max(0.0, std::min(viewData[i * 3 + 2], 255.0))); // R
+            rgba_output[i * 4 + 1] = static_cast<uint8_t>(std::max(0.0, std::min(viewData[i * 3 + 1], 255.0))); // G
+            rgba_output[i * 4 + 2] = static_cast<uint8_t>(std::max(0.0, std::min(viewData[i * 3 + 0], 255.0))); // B
+        }
         rgba_output[i * 4 + 3] = 255; // Alpha
     }
     return rgba_output;

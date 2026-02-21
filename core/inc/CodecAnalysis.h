@@ -38,6 +38,17 @@ public:
         double gain = 5.0
     );
 
+    // Compute edge-specific distortion (ringing/blurring)
+    static Image computeEdgeDistortionMap(
+        const Image& original,
+        const Image& reconstructed
+    );
+
+    // Compute blocking artifact visibility map
+    static Image computeBlockingMap(
+        const Image& reconstructed
+    );
+
     // Compute PSNR (moved out of utils if you want)
     static double computePSNR(
         const Image& I1,

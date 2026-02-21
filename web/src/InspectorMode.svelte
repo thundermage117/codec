@@ -219,6 +219,7 @@
 
     function onBack() {
         appState.appMode = 'viewer';
+        appState.currentViewMode = ViewMode.RGB;
         appState.isInspectMode = false;
         appState.highlightBlock = null;
         // Button in ViewerMode handles its own active state via class:active

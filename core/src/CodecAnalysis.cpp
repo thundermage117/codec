@@ -53,6 +53,60 @@ Image CodecAnalysis::computeArtifactMap(
     return artifact;
 }
 
+Image CodecAnalysis::computeEdgeDistortionMap(
+    const Image& original,
+    const Image& reconstructed
+) {
+    int w = original.width();
+    int h = original.height();
+    Image edgeDist(w, h, 1);
+    
+    // Simple Sobel-based edge detection and error comparison
+    for (int y = 1; y < h - 1; ++y) {
+        for (int x = 1; x < w - 1; ++x) {
+            // Compute gradient in original
+            double gx = original.at(x+1, y, 0) - original.at(x-1, y, 0);
+            double gy = original.at(x, y+1, 0) - original.at(x, y-1, 0);
+            double gradOrig = std::sqrt(gx*gx + gy*gy);
+            
+            // Compute gradient in reconstructed
+            double rgx = reconstructed.at(x+1, y, 0) - reconstructed.at(x-1, y, 0);
+            double rgy = reconstructed.at(x, y+1, 0) - reconstructed.at(x, y-1, 0);
+            double gradRecon = std::sqrt(rgx*rgx + rgy*rgy);
+            
+            // Error is the loss of edge strength or introduction of spurious edges
+            double diff = std::abs(gradOrig - gradRecon) * 4.0;
+            edgeDist.at(x, y, 0) = std::min(255.0, diff);
+        }
+    }
+    return edgeDist;
+}
+
+Image CodecAnalysis::computeBlockingMap(
+    const Image& reconstructed
+) {
+    int w = reconstructed.width();
+    int h = reconstructed.height();
+    Image blocking(w, h, 1);
+    
+    // Detect discontinuities at 8x8 boundaries
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            double score = 0.0;
+            if (x % 8 == 0 && x > 0 && x < w) {
+                double diff = std::abs(reconstructed.at(x, y, 0) - reconstructed.at(x-1, y, 0));
+                score += diff;
+            }
+            if (y % 8 == 0 && y > 0 && y < h) {
+                double diff = std::abs(reconstructed.at(x, y, 0) - reconstructed.at(x, y-1, 0));
+                score += diff;
+            }
+            blocking.at(x, y, 0) = std::min(255.0, score * 8.0);
+        }
+    }
+    return blocking;
+}
+
 double CodecAnalysis::computePSNR(const Image& I1, const Image& I2) {
     if (I1.width() != I2.width() || I1.height() != I2.height() || I1.channels() != I2.channels()) {
         return 0.0; // Or throw an exception

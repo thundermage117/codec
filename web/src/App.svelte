@@ -1,8 +1,9 @@
 <script lang="ts">
-    import { appState } from './lib/state.svelte.js';
+    import { appState, ViewMode } from './lib/state.svelte.js';
     import { setupWasm } from './lib/wasm-bridge.js';
     import ViewerMode from './ViewerMode.svelte';
     import InspectorMode from './InspectorMode.svelte';
+    import ArtifactInspectorMode from './ArtifactInspectorMode.svelte';
 
     // WASM init
     setupWasm(() => {
@@ -12,15 +13,16 @@
 
     // Global keyboard handler
     function onKeyDown(e: KeyboardEvent) {
-        if (appState.appMode !== 'inspector') return;
-
         if (e.key === 'Escape') {
             e.preventDefault();
             appState.appMode = 'viewer';
+            appState.currentViewMode = ViewMode.RGB;
             appState.isInspectMode = false;
             appState.highlightBlock = null;
             return;
         }
+
+        if (appState.appMode !== 'inspector') return;
 
         if (e.key === '?') {
             const shortcuts = document.querySelector('.sidebar-shortcuts') as HTMLElement | null;
@@ -52,5 +54,9 @@
 {#if appState.appMode === 'viewer'}
     <ViewerMode />
 {:else}
-    <InspectorMode />
+    {#if appState.appMode === 'inspector'}
+        <InspectorMode />
+    {:else if appState.appMode === 'artifact_inspector'}
+        <ArtifactInspectorMode />
+    {/if}
 {/if}

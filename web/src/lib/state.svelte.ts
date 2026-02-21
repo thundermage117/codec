@@ -3,7 +3,9 @@ export const ViewMode = {
     Artifacts: 1,
     Y: 2,
     Cr: 3,
-    Cb: 4
+    Cb: 4,
+    EdgeDistortion: 5,
+    BlockingMap: 6
 } as const;
 
 export type ViewModeValue = typeof ViewMode[keyof typeof ViewMode];
@@ -37,7 +39,7 @@ class AppState {
     highlightBlock = $state<{ x: number; y: number } | null>(null);
     inspectedBlock = $state<{ x: number; y: number } | null>(null);
     isDragging = $state(false);
-    appMode = $state<'viewer' | 'inspector'>('viewer');
+    appMode = $state<'viewer' | 'inspector' | 'artifact_inspector'>('viewer');
     suggestedBlocks = $state<SuggestedBlock[]>([]);
 
     // Shared quality (synced between viewer and inspector sliders)

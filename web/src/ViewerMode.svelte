@@ -35,6 +35,12 @@
     let isQualitySliderInteracting = false;
 
     onMount(() => {
+        // Ensure we're in a view mode supported by the viewer UI
+        const viewerModes = [ViewMode.RGB, ViewMode.Artifacts, ViewMode.Y, ViewMode.Cr, ViewMode.Cb];
+        if (!viewerModes.includes(appState.currentViewMode)) {
+            appState.currentViewMode = ViewMode.RGB;
+        }
+
         if (appState.wasmReady && appState.originalImageData) {
             // Ensure drop zone is hidden
             dropZoneVisible = false;
@@ -981,7 +987,16 @@
                             </svg>
                             Inspect Block
                         </button>
-                        <p class="advanced-hint">Jump to inspector mode to inspect individual 8×8 blocks and DCT coefficients.</p>
+                        <button id="artifact_inspector_btn" class="tool-btn"
+                            onclick={() => appState.appMode = 'artifact_inspector'}
+                            disabled={!appState.originalImageData}>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                            </svg>
+                            Artifact Inspector
+                        </button>
+                        <p class="advanced-hint">Dive deep into compression artifacts, error heatmaps, and edge distortion analysis.</p>
                     </div>
                 </div>
             </details>
