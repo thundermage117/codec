@@ -137,13 +137,13 @@ describe('dct-utils', () => {
 
         test('estimates bits correctly for block with DC and one AC', () => {
             const block = new Array(64).fill(0);
-            block[0] = 5; // DC: size=3, base=4 -> 7 bits
-            block[ZIGZAG_INDICES[1]] = 2; // AC: run=0, size=2, base=8 -> 10 bits
+            block[0] = 5; // DC: size=3, base=3 -> 6 bits
+            block[ZIGZAG_INDICES[1]] = 2; // AC: run=0, size=2, base=5 -> 7 bits
 
             const bits = estimateBlockBits(block);
 
-            // DC(7) + AC(10) + EOB(4) = 21 bits
-            expect(bits).toBe(21);
+            // DC(6) + AC(7) + EOB(4) = 17 bits
+            expect(bits).toBe(17);
         });
     });
 });

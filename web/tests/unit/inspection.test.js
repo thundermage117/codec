@@ -9,6 +9,7 @@ vi.mock('../../src/lib/grid-renderer.js', () => ({
     renderLossMeter: vi.fn(),
     renderZigzagArray: vi.fn(),
     renderEntropySummary: vi.fn(),
+    stopReconstructionAnimation: vi.fn(),
 }));
 
 vi.mock('../../src/lib/basis-popover.js', () => ({
