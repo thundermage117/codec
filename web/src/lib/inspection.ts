@@ -1,11 +1,12 @@
 import { appState, ViewMode } from './state.svelte.js';
 import { inspectBlockData } from './wasm-bridge.js';
 import { hideBasisPopover, setCachedGridData } from './basis-popover.js';
-import { renderGrid, renderLossMeter, renderZigzagArray, renderEntropySummary } from './grid-renderer.js';
+import { renderGrid, renderLossMeter, renderZigzagArray, renderEntropySummary, stopReconstructionAnimation } from './grid-renderer.js';
 import { estimateBlockBits, getEntropySymbols } from './dct-utils.js';
 
 export function inspectBlock(blockX: number, blockY: number): void {
     hideBasisPopover();
+    stopReconstructionAnimation();
 
     const coordsSpan = document.getElementById('blockCoords');
     const qTableType = document.getElementById('qTableType');

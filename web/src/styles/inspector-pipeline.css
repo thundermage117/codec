@@ -103,6 +103,134 @@
     white-space: nowrap;
 }
 
+.pipeline-play-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-left: auto;
+}
+
+.pipeline-play-btn:hover {
+    background: var(--primary-hover, #2563eb);
+    transform: scale(1.1);
+}
+
+.pipeline-play-btn:active {
+    transform: scale(0.95);
+}
+
+.reconstruction-progress {
+    font-size: 0.62rem;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: var(--primary);
+    white-space: nowrap;
+    margin-left: auto;
+    opacity: 0.85;
+}
+
+/* ===== Reconstruction Animation Banner ===== */
+.recon-anim-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 8px;
+    animation: bannerFadeIn 0.2s ease;
+}
+
+@keyframes bannerFadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.recon-basis-canvas {
+    flex-shrink: 0;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    image-rendering: pixelated;
+}
+
+.recon-banner-body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.recon-banner-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.recon-banner-step {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.recon-banner-step strong {
+    color: var(--text);
+    font-family: var(--font-mono);
+}
+
+.recon-banner-freq-pill {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 2px 7px;
+    border-radius: 10px;
+    white-space: nowrap;
+}
+
+.recon-banner-coeff {
+    font-size: 0.72rem;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    margin-left: auto;
+    white-space: nowrap;
+}
+
+.recon-banner-bar-track {
+    height: 4px;
+    background: var(--bg-secondary);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.recon-banner-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary), #818cf8);
+    border-radius: 2px;
+    transition: width 0.1s linear;
+}
+
+.recon-banner-desc {
+    margin: 0;
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 .block-grid {
     width: 100%;
     aspect-ratio: 1;

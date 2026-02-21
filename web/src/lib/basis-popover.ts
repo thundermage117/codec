@@ -15,6 +15,10 @@ export function setCachedGridData(data: CachedGridData): void {
     cachedGridData = data;
 }
 
+export function getCachedGridData(): CachedGridData {
+    return cachedGridData;
+}
+
 function drawPatternOnCanvas(canvasId: string, data: Float64Array | number[], mode: string): void {
     const canvas = document.getElementById(canvasId) as HTMLCanvasElement | null;
     if (!canvas) return;

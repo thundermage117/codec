@@ -490,9 +490,35 @@
                                 <div class="arrow-line"></div><div class="arrow-label">IDCT</div><div class="arrow-icon">→</div>
                             </div>
                             <div class="pipeline-block">
-                                <div class="pipeline-block-header"><h3>Reconstructed</h3></div>
+                                <div class="pipeline-block-header">
+                                    <h3>Reconstructed</h3>
+                                    <span id="reconstructionProgress" class="reconstruction-progress" style="display:none"></span>
+                                    <button class="pipeline-play-btn tooltip-container"
+                                        onclick={() => window.dispatchEvent(new CustomEvent('animate-reconstruction'))}>
+                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round">
+                                            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                        </svg>
+                                        <div class="tooltip-content-small"><strong>Animate Reconstruction</strong><br>Watch the block build up coefficient by coefficient. Click again to pause.</div>
+                                    </button>
+                                </div>
                                 <div id="gridReconstructed" class="block-grid"></div>
                                 <div class="block-label">Final Image</div>
+                            </div>
+                        </div>
+
+                        <!-- Reconstruction animation info banner (shown only during animation) -->
+                        <div id="reconAnimBanner" class="recon-anim-banner" style="display:none">
+                            <canvas id="reconBasisCanvas" class="recon-basis-canvas" width="56" height="56"></canvas>
+                            <div class="recon-banner-body">
+                                <div class="recon-banner-top">
+                                    <span class="recon-banner-step">Step <strong id="reconBannerStep">—</strong> of 64</span>
+                                    <span id="reconBannerFreq" class="recon-banner-freq-pill">—</span>
+                                    <span id="reconBannerCoeff" class="recon-banner-coeff">—</span>
+                                </div>
+                                <div class="recon-banner-bar-track">
+                                    <div class="recon-banner-bar-fill" id="reconBannerFill" style="width:0%"></div>
+                                </div>
+                                <p id="reconBannerDesc" class="recon-banner-desc">—</p>
                             </div>
                         </div>
 

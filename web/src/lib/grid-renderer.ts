@@ -1,6 +1,6 @@
 import { showTooltip, hideTooltip } from './tooltip.js';
-import { showBasisPopover, hideBasisPopover } from './basis-popover.js';
-import { ZIGZAG_INDICES } from './dct-utils.js';
+import { showBasisPopover, hideBasisPopover, getCachedGridData } from './basis-popover.js';
+import { ZIGZAG_INDICES, computeBasisPattern, getFreqLabel } from './dct-utils.js';
 
 const ALL_GRID_IDS = [
     'gridOriginal', 'gridDCT', 'gridQuantized', 'gridQuantized2',
@@ -173,6 +173,10 @@ export function renderGrid(
             window.dispatchEvent(new CustomEvent('animate-basis', {
                 detail: { row, col, targetGridId }
             }));
+            showBannerForCell(row, col);
+            if (el.id === 'gridDequantized') {
+                applyPartialReconToGrid(row, col);
+            }
         });
     }
 
@@ -440,8 +444,432 @@ export function startZigzagAnimation(): void {
     }, 100); // 100ms per coefficient = 6.4 seconds for a full block
 }
 
+const RECON_STEP_MS = 120; // ms per coefficient
+
+interface ReconState {
+    dequantized: Float64Array;
+    cells: HTMLElement[];
+    accumulated: Float64Array;
+    currentIndex: number;
+    lastBasisPattern: Float64Array | null;
+    lastBasisCoeff: number;
+    startTime: number;
+    // For the info banner: last processed position (even zero coefficients)
+    lastZigzagIdx: number;
+    lastRawCoeff: number;
+}
+
+let reconstructionAnimationId: number | null = null;
+let reconState: ReconState | null = null;
+let partialReconTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+function applyPartialReconToGrid(row: number, col: number): void {
+    if (reconstructionAnimationId !== null) return; // animation takes priority
+
+    const data = getCachedGridData();
+    if (!data?.dequantizedData) return;
+
+    const flatIdx = row * 8 + col;
+    let zzPos = -1;
+    for (let i = 0; i < 64; i++) {
+        if (ZIGZAG_INDICES[i] === flatIdx) { zzPos = i; break; }
+    }
+    if (zzPos < 0) return;
+
+    const targetGrid = document.getElementById('gridReconstructed');
+    if (!targetGrid) return;
+    const cells = Array.from(targetGrid.querySelectorAll('.grid-cell')) as HTMLElement[];
+    if (cells.length !== 64) return;
+
+    // Compute partial IDCT: sum DC through zzPos in zig-zag order
+    const accumulated = new Float64Array(64);
+    let currentPattern: Float64Array | null = null;
+    let currentCoeff = 0;
+
+    for (let i = 0; i <= zzPos; i++) {
+        const zIdx = ZIGZAG_INDICES[i];
+        const coeff = data.dequantizedData[zIdx];
+        if (Math.abs(coeff) > 0.0001) {
+            const r2 = Math.floor(zIdx / 8);
+            const c2 = zIdx % 8;
+            const pattern = computeBasisPattern(c2, r2);
+            for (let j = 0; j < 64; j++) accumulated[j] += coeff * pattern[j];
+            if (i === zzPos) { currentPattern = pattern; currentCoeff = coeff; }
+        }
+    }
+
+    // Normalise tint by max absolute contribution of this step
+    let maxContrib = 0;
+    if (currentPattern) {
+        for (let i = 0; i < 64; i++) {
+            const v = Math.abs(currentPattern[i] * currentCoeff);
+            if (v > maxContrib) maxContrib = v;
+        }
+    }
+
+    // Flash: render with vivid red/blue basis overlay
+    for (let i = 0; i < 64; i++) {
+        const baseVal = Math.max(0, Math.min(255, accumulated[i] + 128));
+        let r = baseVal, g = baseVal, b = baseVal;
+        if (currentPattern && maxContrib > 0) {
+            const contrib = currentPattern[i] * currentCoeff;
+            const t = Math.min(1, Math.abs(contrib) / maxContrib) * 0.75;
+            if (contrib > 0) {
+                r = Math.round(r + (239 - r) * t);
+                g = Math.round(g + (68  - g) * t);
+                b = Math.round(b + (68  - b) * t);
+            } else if (contrib < 0) {
+                r = Math.round(r + (59  - r) * t);
+                g = Math.round(g + (130 - g) * t);
+                b = Math.round(b + (246 - b) * t);
+            }
+        }
+        cells[i].style.backgroundColor = `rgb(${r},${g},${b})`;
+        cells[i].style.color = baseVal > 128 ? '#1e293b' : '#f1f5f9';
+        cells[i].textContent = String(Math.round(baseVal));
+    }
+
+    // After flash, settle to clean partial reconstruction
+    if (partialReconTimeoutId !== null) clearTimeout(partialReconTimeoutId);
+    partialReconTimeoutId = setTimeout(() => {
+        partialReconTimeoutId = null;
+        if (reconstructionAnimationId !== null) return;
+        for (let i = 0; i < 64; i++) {
+            const baseVal = Math.max(0, Math.min(255, accumulated[i] + 128));
+            cells[i].style.backgroundColor = `rgb(${baseVal},${baseVal},${baseVal})`;
+            cells[i].style.color = baseVal > 128 ? '#1e293b' : '#f1f5f9';
+            cells[i].textContent = String(Math.round(baseVal));
+        }
+    }, 600);
+}
+
+export function stopReconstructionAnimation(): void {
+    if (reconstructionAnimationId !== null) {
+        cancelAnimationFrame(reconstructionAnimationId);
+        reconstructionAnimationId = null;
+    }
+    if (partialReconTimeoutId !== null) {
+        clearTimeout(partialReconTimeoutId);
+        partialReconTimeoutId = null;
+    }
+    reconState = null;
+    setReconstructionButtonIcon(false);
+    updateReconstructionProgress(-1);
+    hideReconAnimBanner();
+}
+
+export function startReconstructionAnimation(): void {
+    // Pause if currently playing
+    if (reconstructionAnimationId !== null) {
+        cancelAnimationFrame(reconstructionAnimationId);
+        reconstructionAnimationId = null;
+        setReconstructionButtonIcon(false);
+        return;
+    }
+
+    // Resume if paused mid-animation
+    if (reconState !== null) {
+        reconState.startTime = performance.now() - reconState.currentIndex * RECON_STEP_MS;
+        setReconstructionButtonIcon(true);
+        reconstructionAnimationId = requestAnimationFrame(runReconFrame);
+        return;
+    }
+
+    // Fresh start
+    const data = getCachedGridData();
+    if (!data || !data.dequantizedData) return;
+
+    const targetGrid = document.getElementById('gridReconstructed');
+    if (!targetGrid) return;
+
+    const cells = Array.from(targetGrid.querySelectorAll('.grid-cell')) as HTMLElement[];
+    if (cells.length !== 64) return;
+
+    reconState = {
+        dequantized: data.dequantizedData,
+        cells,
+        accumulated: new Float64Array(64),
+        currentIndex: 0,
+        lastBasisPattern: null,
+        lastBasisCoeff: 0,
+        startTime: performance.now(),
+        lastZigzagIdx: 0,
+        lastRawCoeff: 0,
+    };
+
+    setReconstructionButtonIcon(true);
+    updateReconstructionProgress(0);
+    reconstructionAnimationId = requestAnimationFrame(runReconFrame);
+}
+
+function runReconFrame(now: number): void {
+    if (!reconState) return;
+
+    const elapsed = now - reconState.startTime;
+    const targetIdx = Math.floor(elapsed / RECON_STEP_MS);
+
+    let stepped = false;
+    while (reconState.currentIndex <= targetIdx && reconState.currentIndex < 64) {
+        const zIdx = ZIGZAG_INDICES[reconState.currentIndex];
+        const coeff = reconState.dequantized[zIdx];
+
+        reconState.lastZigzagIdx = zIdx;
+        reconState.lastRawCoeff = coeff;
+
+        if (Math.abs(coeff) > 0.0001) {
+            const row = Math.floor(zIdx / 8);
+            const col = zIdx % 8;
+            reconState.lastBasisPattern = computeBasisPattern(col, row);
+            reconState.lastBasisCoeff = coeff;
+            for (let i = 0; i < 64; i++) {
+                reconState.accumulated[i] += coeff * reconState.lastBasisPattern[i];
+            }
+        }
+        reconState.currentIndex++;
+        stepped = true;
+    }
+
+    // Cross-highlight and update banner for the step just processed
+    if (stepped && reconState.currentIndex < 64) {
+        const zIdx = ZIGZAG_INDICES[reconState.currentIndex];
+        highlightAcrossGrids(Math.floor(zIdx / 8), zIdx % 8);
+        updateReconstructionProgress(reconState.currentIndex);
+        updateReconAnimBanner(reconState.currentIndex, reconState.lastZigzagIdx, reconState.lastRawCoeff, reconState.lastBasisPattern);
+    }
+
+    renderReconCells(reconState.cells, reconState.accumulated, reconState.lastBasisPattern, reconState.lastBasisCoeff);
+
+    if (reconState.currentIndex < 64) {
+        reconstructionAnimationId = requestAnimationFrame(runReconFrame);
+    } else {
+        // Final pass: render without tint for clean result
+        renderReconCells(reconState.cells, reconState.accumulated, null, 0);
+        reconstructionAnimationId = null;
+        reconState = null;
+        clearAllHighlights();
+        setReconstructionButtonIcon(false);
+        updateReconstructionProgress(64);
+        updateReconAnimBanner(64, 0, 0, null);
+    }
+}
+
+function renderReconCells(
+    cells: HTMLElement[],
+    accumulated: Float64Array,
+    basisPattern: Float64Array | null,
+    basisCoeff: number
+): void {
+    for (let i = 0; i < 64; i++) {
+        const val = accumulated[i];
+        const baseVal = Math.max(0, Math.min(255, val + 128));
+        let r = baseVal, g = baseVal, b = baseVal;
+
+        if (basisPattern) {
+            const contrib = basisPattern[i] * basisCoeff;
+            if (contrib > 1) {
+                r = Math.min(255, r + 30); g = Math.max(0, g - 10); b = Math.max(0, b - 10);
+            } else if (contrib < -1) {
+                b = Math.min(255, b + 30); r = Math.max(0, r - 10); g = Math.max(0, g - 10);
+            }
+        }
+
+        cells[i].style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+        cells[i].style.color = baseVal > 128 ? '#1e293b' : '#f1f5f9';
+        cells[i].textContent = Math.round(baseVal).toString();
+    }
+}
+
+function setReconstructionButtonIcon(playing: boolean): void {
+    const btn = document.querySelector('.pipeline-play-btn') as HTMLButtonElement | null;
+    if (!btn) return;
+    const svg = btn.querySelector('svg');
+    if (!svg) return;
+    svg.innerHTML = playing
+        ? '<rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect>'
+        : '<polygon points="5 3 19 12 5 21 5 3"></polygon>';
+}
+
+function updateReconstructionProgress(index: number): void {
+    const el = document.getElementById('reconstructionProgress');
+    if (!el) return;
+
+    if (index < 0) { el.style.display = 'none'; return; }
+    if (index === 0) { el.textContent = ''; el.style.display = 'none'; return; }
+
+    if (index >= 64) {
+        el.textContent = '64/64';
+        el.style.display = '';
+        return;
+    }
+
+    // Show label for the coefficient we just finished adding (index - 1)
+    const zIdx = ZIGZAG_INDICES[index - 1];
+    const label = getFreqLabel(Math.floor(zIdx / 8), zIdx % 8);
+    el.textContent = `${index}/64 · ${label}`;
+    el.style.display = '';
+}
+
+function hideReconAnimBanner(): void {
+    const banner = document.getElementById('reconAnimBanner');
+    if (banner) banner.style.display = 'none';
+}
+
+function showBannerForCell(row: number, col: number): void {
+    if (reconstructionAnimationId !== null) return; // animation takes priority
+    const data = getCachedGridData();
+    if (!data?.dequantizedData) return;
+
+    const flatIdx = row * 8 + col;
+    const coeff = data.dequantizedData[flatIdx];
+
+    // Find 1-based zig-zag scan position (capped at 63 to avoid the "done" state)
+    let zzPos = 1;
+    for (let i = 0; i < 64; i++) {
+        if (ZIGZAG_INDICES[i] === flatIdx) { zzPos = Math.min(i + 1, 63); break; }
+    }
+
+    const pattern = Math.abs(coeff) > 0.0001 ? computeBasisPattern(col, row) : null;
+    updateReconAnimBanner(zzPos, flatIdx, coeff, pattern);
+}
+
+const FREQ_DESCRIPTIONS: Record<string, string> = {
+    'DC':   'Sets the average brightness across the whole block',
+    'Low':  'Broad shapes and gentle gradients',
+    'Mid':  'Edges and moderate detail',
+    'High': 'Sharp edges and fine texture',
+};
+
+const FREQ_COLORS: Record<string, string> = {
+    'DC':   '#8b5cf6',
+    'Low':  '#10b981',
+    'Mid':  '#f59e0b',
+    'High': '#ef4444',
+};
+
+function updateReconAnimBanner(
+    processedCount: number,
+    zigzagIdx: number,
+    coeff: number,
+    basisPattern: Float64Array | null
+): void {
+    const banner = document.getElementById('reconAnimBanner');
+    if (!banner) return;
+
+    if (processedCount >= 64) {
+        // Done state
+        const stepEl  = document.getElementById('reconBannerStep');
+        const fillEl  = document.getElementById('reconBannerFill') as HTMLElement | null;
+        const freqEl  = document.getElementById('reconBannerFreq');
+        const coeffEl = document.getElementById('reconBannerCoeff');
+        const descEl  = document.getElementById('reconBannerDesc');
+        if (stepEl)  stepEl.textContent  = '64';
+        if (fillEl)  fillEl.style.width  = '100%';
+        if (freqEl)  { freqEl.textContent = 'Complete'; freqEl.style.background = '#10b981'; freqEl.style.color = 'white'; }
+        if (coeffEl) { coeffEl.textContent = ''; coeffEl.style.color = ''; }
+        if (descEl)  descEl.textContent  = 'All 64 coefficients applied — reconstruction complete';
+        // Clear the canvas
+        const canvas = document.getElementById('reconBasisCanvas') as HTMLCanvasElement | null;
+        if (canvas) { const ctx = canvas.getContext('2d'); if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height); }
+        banner.style.display = '';
+        return;
+    }
+
+    banner.style.display = '';
+
+    const row   = Math.floor(zigzagIdx / 8);
+    const col   = zigzagIdx % 8;
+    const label = getFreqLabel(row, col);
+    const isZero = Math.abs(coeff) < 0.0001;
+
+    const stepEl  = document.getElementById('reconBannerStep');
+    const fillEl  = document.getElementById('reconBannerFill') as HTMLElement | null;
+    const freqEl  = document.getElementById('reconBannerFreq');
+    const coeffEl = document.getElementById('reconBannerCoeff');
+    const descEl  = document.getElementById('reconBannerDesc');
+
+    if (stepEl)  stepEl.textContent = String(processedCount);
+    if (fillEl)  fillEl.style.width = `${(processedCount / 64) * 100}%`;
+
+    if (freqEl) {
+        freqEl.textContent = label;
+        freqEl.style.background = FREQ_COLORS[label] ?? 'var(--primary)';
+        freqEl.style.color = 'white';
+    }
+
+    if (coeffEl) {
+        if (isZero) {
+            coeffEl.textContent = 'coeff = 0  (skipped)';
+            coeffEl.style.color = 'var(--text-muted)';
+        } else {
+            const sign = coeff > 0 ? '+' : '';
+            coeffEl.textContent = `coeff = ${sign}${coeff.toFixed(1)}`;
+            coeffEl.style.color = coeff > 0 ? '#ef4444' : '#3b82f6';
+        }
+    }
+
+    if (descEl) {
+        descEl.textContent = isZero
+            ? 'Quantized to zero — contributes nothing to the image'
+            : FREQ_DESCRIPTIONS[label] ?? '';
+    }
+
+    const canvas = document.getElementById('reconBasisCanvas') as HTMLCanvasElement | null;
+    if (canvas && basisPattern && !isZero) {
+        drawContributionOnCanvas(canvas, basisPattern, coeff);
+    } else if (canvas && isZero) {
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+            ctx.fillStyle = 'var(--bg-secondary, #f1f5f9)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'rgba(0,0,0,0.2)';
+            ctx.font = '10px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('zero', canvas.width / 2, canvas.height / 2 + 4);
+        }
+    }
+}
+
+function drawContributionOnCanvas(canvas: HTMLCanvasElement, pattern: Float64Array, coeff: number): void {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const size = canvas.width;
+    const cell = size / 8;
+
+    let maxAbs = 0;
+    for (let i = 0; i < 64; i++) {
+        const v = Math.abs(pattern[i] * coeff);
+        if (v > maxAbs) maxAbs = v;
+    }
+    const range = maxAbs || 1;
+
+    for (let y = 0; y < 8; y++) {
+        for (let x = 0; x < 8; x++) {
+            const contrib = pattern[y * 8 + x] * coeff;
+            const t = contrib / range; // -1..1
+            let r: number, g: number, b: number;
+            if (t >= 0) {
+                // positive → warm red
+                r = 239; g = Math.round(220 * (1 - t * 0.7)); b = Math.round(220 * (1 - t * 0.7));
+            } else {
+                // negative → cool blue
+                r = Math.round(220 * (1 + t * 0.7)); g = Math.round(220 * (1 + t * 0.7)); b = 239;
+            }
+            ctx.fillStyle = `rgb(${r},${g},${b})`;
+            ctx.fillRect(x * cell, y * cell, cell, cell);
+        }
+    }
+    // Subtle grid lines
+    ctx.strokeStyle = 'rgba(0,0,0,0.08)';
+    ctx.lineWidth = 0.5;
+    for (let i = 1; i < 8; i++) {
+        ctx.beginPath(); ctx.moveTo(i * cell, 0); ctx.lineTo(i * cell, size); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, i * cell); ctx.lineTo(size, i * cell); ctx.stroke();
+    }
+}
+
 if (typeof window !== 'undefined') {
     window.addEventListener('animate-zigzag', startZigzagAnimation);
+    window.addEventListener('animate-reconstruction', startReconstructionAnimation);
 }
 
 export function renderEntropySummary(symbols: any[]): void {
