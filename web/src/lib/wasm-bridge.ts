@@ -49,6 +49,10 @@ export function setViewTint(enabled: number): void {
     Module._set_view_tint(enabled);
 }
 
+export function setArtifactGain(gain: number): void {
+    Module._set_artifact_gain(gain);
+}
+
 export function inspectBlockData(blockX: number, blockY: number, channelIndex: number, quality: number): number {
     return Module._inspect_block_data(blockX, blockY, channelIndex, quality, appState.currentCsMode);
 }

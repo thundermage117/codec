@@ -21,6 +21,7 @@ struct CodecSession {
 };
 
 static CodecSession g_session;
+static double g_artifact_gain = 5.0;
 
 // Enum to match view modes in JavaScript.
 enum ViewMode {
@@ -92,7 +93,11 @@ uint8_t* get_view_ptr(int mode) {
             viewImage = ycrcbToBgr(g_session.processedYCrCb);
             break;
         case Artifacts:
-            viewImage = g_session.metrics.artifactMap;
+            viewImage = CodecAnalysis::computeArtifactMap(
+                g_session.originalImage,
+                ycrcbToBgr(g_session.processedYCrCb),
+                g_artifact_gain
+            );
             break;
         case EdgeDistortion:
             viewImage = CodecAnalysis::computeEdgeDistortionMap(g_session.originalImage, ycrcbToBgr(g_session.processedYCrCb));
@@ -163,6 +168,11 @@ uint8_t* get_view_ptr(int mode) {
 EMSCRIPTEN_KEEPALIVE
 void set_view_tint(int enable) {
     g_session.useTint = (enable != 0);
+}
+
+EMSCRIPTEN_KEEPALIVE
+void set_artifact_gain(double gain) {
+    if (gain > 0.0) g_artifact_gain = gain;
 }
 
 EMSCRIPTEN_KEEPALIVE

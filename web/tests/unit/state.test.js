@@ -44,8 +44,8 @@ describe('ViewMode', () => {
         expect(ViewMode.Cb).toBe(4);
     });
 
-    it('has exactly 5 entries', () => {
-        expect(Object.keys(ViewMode)).toHaveLength(5);
+    it('has exactly 7 entries', () => {
+        expect(Object.keys(ViewMode)).toHaveLength(7);
     });
 
     it('all values are unique integers', () => {
