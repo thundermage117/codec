@@ -22,8 +22,9 @@ export function initSession(): void {
     }
 }
 
-export function processImage(quality: number, csMode: number): void {
-    Module._process_image(quality, csMode, appState.transformType);
+export function processImage(quality: number, csMode: number, transformType?: number): void {
+    const t = transformType !== undefined ? transformType : appState.transformType;
+    Module._process_image(quality, csMode, t);
 }
 
 export function getViewPtr(viewMode: number): number {
@@ -45,6 +46,10 @@ export function getStats() {
     };
 }
 
+export function getLastBitEstimate(): number {
+    return Module._get_last_bit_estimate();
+}
+
 export function setViewTint(enabled: number): void {
     Module._set_view_tint(enabled);
 }
@@ -53,8 +58,29 @@ export function setArtifactGain(gain: number): void {
     Module._set_artifact_gain(gain);
 }
 
-export function inspectBlockData(blockX: number, blockY: number, channelIndex: number, quality: number): number {
-    return Module._inspect_block_data(blockX, blockY, channelIndex, quality, appState.currentCsMode, appState.transformType);
+export function inspectBlockData(blockX: number, blockY: number, channelIndex: number, quality: number, transformType?: number): number {
+    const t = transformType !== undefined ? transformType : appState.transformType;
+    return Module._inspect_block_data(blockX, blockY, channelIndex, quality, appState.currentCsMode, t);
+}
+
+// Returns normalized DCT and DWT AC coefficient histograms for the Y channel.
+// num_bins bins from [0, max_val); the last bin is an overflow bucket.
+// Returns null if WASM is not ready or no image is loaded.
+export function getCoeffHistogram(numBins: number, maxVal: number): { dct: number[]; dwt: number[] } | null {
+    const ptr = Module._get_coeff_histogram(numBins, maxVal);
+    if (!ptr) return null;
+    try {
+        const view = new DataView(Module.HEAPU8.buffer);
+        const dct: number[] = [];
+        const dwt: number[] = [];
+        for (let i = 0; i < numBins; i++) {
+            dct.push(view.getFloat64(ptr + i * 8, true));
+            dwt.push(view.getFloat64(ptr + (numBins + i) * 8, true));
+        }
+        return { dct, dwt };
+    } finally {
+        Module._free(ptr);
+    }
 }
 
 export function getHeapU8(): Uint8Array {

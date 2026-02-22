@@ -344,8 +344,8 @@ canvas {
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
-    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border);
+    background: var(--card-bg);
     color: var(--text-muted);
     border-radius: 6px;
     font-size: 0.72rem;
@@ -357,7 +357,7 @@ canvas {
 }
 
 .zoom-ctrl-btn:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--bg-secondary);
     color: var(--text);
     border-color: var(--primary);
 }
@@ -370,7 +370,9 @@ canvas {
 }
 
 .zoom-out-btn {
-    color: var(--text);
+    background: var(--card-bg);
+    color: var(--primary);
+    border-color: color-mix(in srgb, var(--primary) 30%, transparent);
 }
 
 .zoom-level-chip {
@@ -471,6 +473,14 @@ canvas {
     stroke-linejoin: round;
 }
 
+.rd-curve-path-dwt {
+    stroke: #f59e0b;
+}
+
+.rd-fill-dwt {
+    fill: url(#rdFillGradDwt);
+}
+
 .rd-crosshair {
     stroke: var(--primary);
     stroke-width: 1;
@@ -500,6 +510,14 @@ canvas {
 
 .rd-point-current:hover {
     transform: scale(1.2);
+}
+
+.rd-point-dwt {
+    stroke: #f59e0b;
+}
+
+.rd-point-current-dwt {
+    fill: #f59e0b;
 }
 
 .rd-point-label {
@@ -616,4 +634,22 @@ canvas {
 .inspector-quickstart-btn:hover {
     background: var(--primary-hover);
     transform: translateY(-1px);
+}
+
+.hist-bar-dct {
+    fill: var(--primary);
+    opacity: 0.82;
+}
+
+.hist-bar-dwt {
+    fill: #f59e0b;
+    opacity: 0.82;
+}
+
+.hist-dct-value {
+    color: var(--primary);
+}
+
+.hist-dwt-value {
+    color: #f59e0b;
 }

@@ -1,20 +1,23 @@
 #include <cstdint>
 #include <cstdlib>
 #include <algorithm>
+#include <cmath>
 #include <emscripten.h>
 #include "ImageCodec.h"
 #include "CodecAnalysis.h"
 #include "Image.h"
 #include "colorspace.h"
+#include "transform.h"
+#include "wavelet.h"
 
 // A global session to hold the state between calls from JavaScript.
 struct CodecSession {
     Image originalImage;
     Image originalYCrCb;
     Image processedYCrCb;
-    // Reusable buffers for inspection to avoid reallocating 16MB+ per frame
     Image inspectionChannel;
     Image inspectionDS;
+    double lastBitEstimate = 0.0;
     CodecMetrics metrics;
     bool initialized = false;
     bool useTint = true;
@@ -75,6 +78,7 @@ void process_image(int quality, int cs_mode, int transform_mode) {
     auto transform = map_transform_mode(transform_mode);
     ImageCodec codec(quality, true, cs, transform);
     Image processedBgr = codec.process(g_session.originalImage);
+    g_session.lastBitEstimate = codec.getLastBitEstimate();
     g_session.metrics = CodecAnalysis::computeMetrics(g_session.originalImage, processedBgr);
     g_session.processedYCrCb = bgrToYCrCb(processedBgr);
 }
@@ -210,6 +214,72 @@ double get_ssim_cb() {
     return g_session.initialized ? g_session.metrics.ssimCb : 0.0;
 }
 
+EMSCRIPTEN_KEEPALIVE
+double get_last_bit_estimate() {
+    return g_session.initialized ? g_session.lastBitEstimate : 0.0;
+}
+
+// Returns a malloc'd array of 2*num_bins doubles: [dct_bins | dwt_bins].
+// Each series is normalized by the total AC coefficient count.
+// Scans all 8×8 blocks of the Y channel, applies both DCT and DWT per block,
+// and bins the absolute magnitudes of AC coefficients (skipping DC [0][0]).
+// Caller must free the returned pointer.
+EMSCRIPTEN_KEEPALIVE
+double* get_coeff_histogram(int num_bins, double max_val) {
+    if (!g_session.initialized || num_bins <= 0 || max_val <= 0.0) return nullptr;
+
+    const Image& ycrcb = g_session.originalYCrCb;
+    const int w = ycrcb.width();
+    const int h = ycrcb.height();
+    const int blocksX = w / 8;
+    const int blocksY = h / 8;
+    if (blocksX == 0 || blocksY == 0) return nullptr;
+
+    double* out = (double*)calloc(2 * num_bins, sizeof(double));
+    if (!out) return nullptr;
+
+    double* dctBins = out;
+    double* dwtBins = out + num_bins;
+    long long totalCount = 0;
+
+    double src[8][8], dctCoeffs[8][8], dwtCoeffs[8][8];
+    const double* ycrcbData = ycrcb.data();
+
+    for (int by = 0; by < blocksY; by++) {
+        for (int bx = 0; bx < blocksX; bx++) {
+            // Extract 8×8 Y block with level shift matching processChannel
+            for (int row = 0; row < 8; row++) {
+                for (int col = 0; col < 8; col++) {
+                    src[row][col] = ycrcbData[((by * 8 + row) * w + (bx * 8 + col)) * 3] - 128.0;
+                }
+            }
+
+            dct8x8(src, dctCoeffs);
+            dwt8x8(src, dwtCoeffs);
+
+            // Bin AC coefficients — skip [0][0] (DC / LL)
+            for (int i = 0; i < 8; i++) {
+                for (int j = 0; j < 8; j++) {
+                    if (i == 0 && j == 0) continue;
+
+                    int dctBin = std::min(num_bins - 1, (int)(std::abs(dctCoeffs[i][j]) / max_val * num_bins));
+                    dctBins[dctBin]++;
+
+                    int dwtBin = std::min(num_bins - 1, (int)(std::abs(dwtCoeffs[i][j]) / max_val * num_bins));
+                    dwtBins[dwtBin]++;
+
+                    totalCount++;
+                }
+            }
+        }
+    }
+
+    if (totalCount > 0) {
+        for (int i = 0; i < 2 * num_bins; i++) out[i] /= totalCount;
+    }
+
+    return out;
+}
 
 // Re-declaring to match the plan's arguments
 // Helper to downsample a channel (simple averaging)

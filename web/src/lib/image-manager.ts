@@ -1,15 +1,12 @@
 import { appState } from './state.svelte.js';
 import { initSession } from './wasm-bridge.js';
 
-export function handleFileSelect(
-    file: File,
+function loadImageElement(
+    img: HTMLImageElement,
     originalCanvas: HTMLCanvasElement,
     processedCanvas: HTMLCanvasElement,
     onImageLoaded?: () => void
 ): void {
-    if (!file) return;
-
-    const img = new Image();
     img.onload = () => {
         let scale = 1.0;
         if (img.width > appState.maxDim || img.height > appState.maxDim) {
@@ -32,5 +29,27 @@ export function handleFileSelect(
 
         if (onImageLoaded) onImageLoaded();
     };
+}
+
+export function handleFileSelect(
+    file: File,
+    originalCanvas: HTMLCanvasElement,
+    processedCanvas: HTMLCanvasElement,
+    onImageLoaded?: () => void
+): void {
+    if (!file) return;
+    const img = new Image();
+    loadImageElement(img, originalCanvas, processedCanvas, onImageLoaded);
     img.src = URL.createObjectURL(file);
+}
+
+export function loadImageFromUrl(
+    url: string,
+    originalCanvas: HTMLCanvasElement,
+    processedCanvas: HTMLCanvasElement,
+    onImageLoaded?: () => void
+): void {
+    const img = new Image();
+    loadImageElement(img, originalCanvas, processedCanvas, onImageLoaded);
+    img.src = url;
 }

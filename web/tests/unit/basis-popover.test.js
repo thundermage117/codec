@@ -13,6 +13,7 @@ describe('basis-popover.js', () => {
             <span id="basisCoord"></span>
             <span id="basisFreqLabel"></span>
             <span id="basisValue"></span>
+            <span id="basisValueLabel"></span>
             <span id="basisQuantized"></span>
             <span id="basisDivisor"></span>
             <canvas id="basisCanvas" width="100" height="100"></canvas>
@@ -39,7 +40,7 @@ describe('basis-popover.js', () => {
 
     it('setCachedGridData stores data used by showBasisPopover', () => {
         setCachedGridData({
-            dctData: new Float64Array(64).fill(10),
+            coeffData: new Float64Array(64).fill(10),
             quantData: new Float64Array(64).fill(2),
             qtData: new Float64Array(64).fill(5),
             dequantizedData: new Float64Array(64).fill(10),
@@ -57,13 +58,13 @@ describe('basis-popover.js', () => {
 
     it('showBasisPopover does nothing if popover element missing', () => {
         document.getElementById('basisPopover').remove();
-        setCachedGridData({ dctData: new Float64Array(64) });
+        setCachedGridData({ coeffData: new Float64Array(64) });
         const ev = new MouseEvent('mouseenter', { clientX: 100, clientY: 100 });
 
         expect(() => showBasisPopover(ev, 0, 0)).not.toThrow();
     });
 
-    it('showBasisPopover does nothing if cachedGridData.dctData is undefined', () => {
+    it('showBasisPopover does nothing if cachedGridData.coeffData is undefined', () => {
         setCachedGridData({}); // Empty cache
         const ev = new MouseEvent('mouseenter', { clientX: 100, clientY: 100 });
 
@@ -75,7 +76,7 @@ describe('basis-popover.js', () => {
 
     it('showBasisPopover positions popover correctly (normal)', () => {
         setCachedGridData({
-            dctData: new Float64Array(64),
+            coeffData: new Float64Array(64),
             quantData: new Float64Array(64),
             qtData: new Float64Array(64),
         });
@@ -90,7 +91,7 @@ describe('basis-popover.js', () => {
 
     it('showBasisPopover clamps position to window bounds', () => {
         setCachedGridData({
-            dctData: new Float64Array(64),
+            coeffData: new Float64Array(64),
             quantData: new Float64Array(64),
             qtData: new Float64Array(64),
         });
@@ -119,7 +120,7 @@ describe('basis-popover.js', () => {
 
     it('drawPatternOnCanvas executes logic correctly', () => {
         setCachedGridData({
-            dctData: new Float64Array(64).fill(-25), // negative value to hit diverging branch
+            coeffData: new Float64Array(64).fill(-25), // negative value to hit diverging branch
             quantData: new Float64Array(64).fill(-5),
             qtData: new Float64Array(64).fill(5),
         });
@@ -143,7 +144,7 @@ describe('basis-popover.js', () => {
 
     it('hideBasisPopover hides popover and removes classes', () => {
         setCachedGridData({
-            dctData: new Float64Array(64),
+            coeffData: new Float64Array(64),
             quantData: new Float64Array(64),
             qtData: new Float64Array(64),
         });
@@ -167,7 +168,7 @@ describe('basis-popover.js', () => {
 
     it('showBasisPopover calls hideTooltip', () => {
         setCachedGridData({
-            dctData: new Float64Array(64),
+            coeffData: new Float64Array(64),
             quantData: new Float64Array(64),
             qtData: new Float64Array(64),
         });

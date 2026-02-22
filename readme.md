@@ -120,13 +120,20 @@ Run `./build/codec_app --help` to see available options.
 - [x] Zig-zag ordering
 - [x] Zero-run visualization
 
-### Phase 3
+### ✅ Phase 3: Wavelet Transform Integration
 
-- [ ] Motion estimation
-- [ ] Two-frame input
-- [ ] Block matching
+- [x] Discrete Wavelet Transform (DWT) Implementation
+- [x] Haar Wavelet basis support
+- [x] Multi-level decomposition (subband scaling)
+- [x] DWT-specific artifact analysis in Inspector
+- [x] Multi-transform bitrate estimation & comparison
+
+### Phase 4: Motion Estimation
+
+- [ ] Two-frame video input
+- [ ] Block matching (SAD/MSE)
 - [ ] Motion vector visualization
-- [ ] Bitrate comparison
+- [ ] Temporal bitrate comparison vs. static frames
 
 ## ▶️ Why This Project Exists
 

@@ -328,7 +328,7 @@ void CodecExplorerApp::render() {
 
         // Adjusted positions
         drawGrid(20, 50, "Original", m_inspectionData.original, true);
-        drawGrid(420, 50, "DCT", m_inspectionData.dct, false);
+        drawGrid(420, 50, "DCT", m_inspectionData.coefficients, false);
         drawGrid(20, 300, "Quantized", m_inspectionData.quantized, true);
         drawGrid(420, 300, "Reconstructed", m_inspectionData.reconstructed, true);
 

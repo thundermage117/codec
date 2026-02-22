@@ -63,9 +63,12 @@ private:
     ChromaSubsampling m_chromaSubsampling;
     TransformType     m_transformType;
 
+    double m_lastBitEstimate = 0.0; // Total bits estimated in the last process() call
+
     void generateQuantizationTables();
     Image processChannel(const Image& channel,
                          const double quantTable[8][8]);
+    Image processChannelDWT(const Image& channel);
     Image downsampleChannel(const Image& channel, ChromaSubsampling cs) const;
     Image upsampleChannel(const Image& channel, int targetWidth, int targetHeight, ChromaSubsampling cs) const;
 
@@ -79,6 +82,8 @@ public:
     };
 
     BlockDebugData inspectBlock(const Image& channel, int blockX, int blockY, bool isChroma = false);
+
+    double getLastBitEstimate() const { return m_lastBitEstimate; }
 };
 
 #endif

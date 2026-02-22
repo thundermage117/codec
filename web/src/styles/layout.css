@@ -54,6 +54,10 @@
     animation-delay: 0.12s;
 }
 
+#viewerMode .hist-card {
+    animation-delay: 0.19s;
+}
+
 #viewerMode .controls-card {
     animation-delay: 0.15s;
 }

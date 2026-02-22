@@ -596,6 +596,22 @@ input[type="checkbox"] {
     font-size: var(--text-base-sm);
 }
 
+/* Beta Badge */
+.beta-badge {
+    font-size: 0.6rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: transparent;
+    color: #f59e0b;
+    border: 1px solid #f59e0b;
+    margin-left: 5px;
+    flex-shrink: 0;
+    opacity: 0.85;
+}
+
 /* Tool Button */
 .tool-btn {
     display: flex;
@@ -638,4 +654,206 @@ input[type="checkbox"] {
 
 .tool-btn svg {
     stroke-width: 2.5;
+}
+
+/* Test / Sample Images */
+.test-images-section {
+    margin-top: 8px;
+}
+
+.test-images-toggle {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    width: 100%;
+    padding: 6px 8px 6px 6px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    color: var(--text-muted);
+    font-size: var(--text-base-sm);
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    text-align: left;
+}
+
+.test-images-toggle:hover:not(:disabled) {
+    background: var(--bg-hover);
+    color: var(--text);
+    border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
+}
+
+.test-images-toggle:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.test-images-toggle.has-active {
+    border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
+}
+
+/* Mini thumbnail strip in the toggle button */
+.test-images-preview-strip {
+    display: flex;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.test-images-preview-strip img {
+    width: 22px;
+    height: 15px;
+    object-fit: cover;
+    border-radius: 3px;
+    display: block;
+    border: 1px solid var(--border);
+}
+
+.test-images-toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex: 1;
+    min-width: 0;
+}
+
+.test-images-active-dot {
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--primary);
+    flex-shrink: 0;
+}
+
+.test-images-count {
+    font-size: var(--text-2xs);
+    font-weight: 700;
+    background: var(--border);
+    color: var(--text-muted);
+    border-radius: var(--radius-full);
+    padding: 1px 5px;
+    letter-spacing: 0;
+    flex-shrink: 0;
+}
+
+.test-images-toggle .chevron {
+    flex-shrink: 0;
+    color: var(--text-muted);
+    transition: transform 0.2s;
+}
+
+.test-images-toggle .chevron.open {
+    transform: rotate(180deg);
+}
+
+.test-images-panel {
+    margin-top: 6px;
+    animation: testImagesIn 0.18s ease;
+}
+
+@keyframes testImagesIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.test-images-scroll {
+    max-height: 148px;
+    overflow-y: auto;
+    border-radius: var(--radius-md);
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+}
+
+.test-images-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 3px;
+}
+
+.test-img-btn {
+    position: relative;
+    padding: 0;
+    border: 2px solid transparent;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    cursor: pointer;
+    background: var(--bg-tertiary);
+    aspect-ratio: 3/2;
+    display: block;
+    transition: border-color 0.14s, transform 0.12s, box-shadow 0.14s;
+}
+
+.test-img-btn:hover {
+    border-color: var(--primary);
+    transform: scale(1.07);
+    z-index: 2;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.22);
+}
+
+.test-img-btn.active {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 1px var(--primary);
+}
+
+.test-img-btn img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: filter 0.14s;
+}
+
+.test-img-btn:hover img {
+    filter: brightness(1.06);
+}
+
+.test-img-label {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 0.52rem;
+    font-weight: 700;
+    color: #fff;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.7) 0%, transparent 100%);
+    padding: 5px 0 2px;
+    opacity: 0;
+    transition: opacity 0.14s;
+}
+
+.test-img-btn:hover .test-img-label,
+.test-img-btn.active .test-img-label {
+    opacity: 1;
+}
+
+.test-img-active-check {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 13px;
+    height: 13px;
+    background: var(--primary);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.test-images-credit {
+    margin: 5px 0 0;
+    font-size: var(--text-2xs);
+    color: var(--text-muted);
+    text-align: center;
+    opacity: 0.7;
+}
+
+/* Specific button for RD/Histogram generation to ensure consistency */
+.rd-generate-btn {
+    width: 120px !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    flex-shrink: 0;
 }

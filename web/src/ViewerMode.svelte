@@ -1,8 +1,8 @@
 <script lang="ts">
     import { onDestroy, onMount } from 'svelte';
     import { appState, ViewMode } from './lib/state.svelte.js';
-    import { processImage, getViewPtr, getStats, free, setViewTint, inspectBlockData } from './lib/wasm-bridge.js';
-    import { handleFileSelect } from './lib/image-manager.js';
+    import { processImage, getViewPtr, getStats, free, setViewTint, inspectBlockData, getCoeffHistogram, getLastBitEstimate } from './lib/wasm-bridge.js';
+    import { handleFileSelect, loadImageFromUrl } from './lib/image-manager.js';
     import { inspectBlock } from './lib/inspection.js';
     import ImageViewer from './lib/components/ImageViewer.svelte';
 
@@ -15,7 +15,8 @@
         bitrate: number;
         estimatedBytes: number;
     };
-    let rdPoints = $state<RdPoint[]>([]);
+    let rdPointsDct = $state<RdPoint[]>([]);
+    let rdPointsDwt = $state<RdPoint[]>([]);
     let rdLoading = $state(false);
     let rdError = $state('');
     let rdJobId = 0;
@@ -259,6 +260,7 @@
     function loadFile(file: File) {
         if (!file || !file.type.startsWith('image/')) return;
         handleFileSelect(file, originalCanvas, processedCanvas, () => {
+            activeTestImageIndex = null;
             appState.quality = 50;
             processImage(50, appState.currentCsMode);
             appState.comparisonPercent = 50;
@@ -290,6 +292,24 @@
             openFilePicker();
         }
     }
+
+    const TEST_IMAGE_COUNT = 20; // 0 to 24 (Kodak dataset)
+    let testImagesOpen = $state(false);
+    let activeTestImageIndex = $state<number | null>(null);
+
+    function loadTestImage(index: number) {
+        if (!appState.wasmReady) return;
+        loadImageFromUrl(`/test-images/${index}.png`, originalCanvas, processedCanvas, () => {
+            activeTestImageIndex = index;
+            appState.quality = 50;
+            processImage(50, appState.currentCsMode);
+            appState.comparisonPercent = 50;
+            render();
+            updateFileSizeEstimate();
+            dropZoneVisible = false;
+        });
+    }
+
 
     // ===== Comparison slider =====
 
@@ -326,13 +346,13 @@
 
     function onDocumentMouseMove(e: MouseEvent) {
         if (Math.abs(e.clientX - mouseDownClientX) > 4) hasDraggedSinceDown = true;
-        if (isDraggingComparison) {
-            handleViewerInteraction(e.clientX);
-        }
-        // In zoom mode, allow comparison slider via drag even while zoomed
+        // In zoom mode, start comparison drag as soon as the threshold is met
         if (isZoomMode && !isDraggingComparison && hasDraggedSinceDown &&
             !appState.isInspectMode && e.buttons === 1) {
             isDraggingComparison = true;
+        }
+        if (isDraggingComparison) {
+            handleViewerInteraction(e.clientX);
         }
         if (appState.isInspectMode && appState.originalImageData && processedCanvas) {
             const rect = processedCanvas.getBoundingClientRect();
@@ -358,7 +378,12 @@
 
     function handleViewerInteraction(clientX: number) {
         if (!processedCanvas) return;
-        const rect = processedCanvas.getBoundingClientRect();
+        // When zoomed, the canvas CSS transform inflates its bounding rect by the zoom factor,
+        // making 1px of mouse movement produce only 1/zoom change in percent. Use the
+        // unscaled viewport container so comparisonPercent always tracks mouse 1:1.
+        const viewportEl = processedCanvas.closest('.zoom-viewport');
+        const refEl = (zoom > 1 && viewportEl) ? viewportEl : processedCanvas;
+        const rect = refEl.getBoundingClientRect();
         const x = clientX - rect.left;
         updateComparisonView((x / rect.width) * 100);
     }
@@ -419,7 +444,7 @@
         return bytes + ' B';
     }
 
-    function estimateFileSizeBytesForQuality(quality: number): number | null {
+    function estimateFileSizeBytesForQuality(quality: number, transformType?: number): number | null {
         if (!appState.wasmReady || !appState.originalImageData) return null;
 
         const w = appState.imgWidth;
@@ -438,7 +463,7 @@
             if (sampledIndices.has(idx)) continue;
             sampledIndices.add(idx);
             try {
-                const ptr = inspectBlockData(idx % blocksX, Math.floor(idx / blocksX), 0, quality);
+                const ptr = inspectBlockData(idx % blocksX, Math.floor(idx / blocksX), 0, quality, transformType);
                 if (!ptr) continue;
                 const blockSize = 64;
                 const startBytes = ptr + (3 * blockSize * 8);
@@ -474,7 +499,11 @@
         const h = appState.imgHeight;
         const totalPixels = w * h;
         const originalBytes = totalPixels * 3;
-        const estimatedBytes = estimateFileSizeBytesForQuality(appState.quality);
+        
+        // Use the actual bit estimate from the last encode
+        const bits = getLastBitEstimate();
+        const estimatedBytes = Math.max(64, Math.round(bits / 8));
+
         if (!estimatedBytes) return;
 
         const reduction = Math.max(0, Math.round((1 - estimatedBytes / originalBytes) * 100));
@@ -496,36 +525,46 @@
         rdLoading = true;
         rdError = '';
 
-        const points: RdPoint[] = [];
+        const pointsDct: RdPoint[] = [];
+        const pointsDwt: RdPoint[] = [];
+
         try {
-            for (let i = 0; i < RD_QUALITIES.length; i++) {
-                if (jobId !== rdJobId) return;
+            // Process DCT (0) and DWT (1)
+            for (const tType of [0, 1]) {
+                for (let i = 0; i < RD_QUALITIES.length; i++) {
+                    if (jobId !== rdJobId) return;
 
-                const quality = RD_QUALITIES[i];
-                processImage(quality, appState.currentCsMode);
-                const stats = getStats();
-                const estimatedBytes = estimateFileSizeBytesForQuality(quality);
-                if (estimatedBytes) {
-                    points.push({
-                        quality,
-                        psnr: stats.psnr.y,
-                        estimatedBytes,
-                        bitrate: (estimatedBytes * 8) / (appState.imgWidth * appState.imgHeight)
-                    });
+                    const quality = RD_QUALITIES[i];
+                    processImage(quality, appState.currentCsMode, tType);
+                    const stats = getStats();
+                    const bits = getLastBitEstimate();
+                    const estimatedBytes = bits > 0 ? Math.max(64, Math.round(bits / 8)) : null;
+                    if (estimatedBytes) {
+                        const pt = {
+                            quality,
+                            psnr: stats.psnr.y,
+                            estimatedBytes,
+                            bitrate: (estimatedBytes * 8) / (appState.imgWidth * appState.imgHeight)
+                        };
+                        if (tType === 0) pointsDct.push(pt);
+                        else pointsDwt.push(pt);
+                    }
+
+                    // Yield after every encode so the event loop can process slider/UI events
+                    await new Promise(resolve => setTimeout(resolve, 0));
                 }
-
-                // Yield after every encode so the event loop can process slider/UI events
-                await new Promise(resolve => setTimeout(resolve, 0));
             }
 
             if (jobId === rdJobId) {
-                rdPoints = points.sort((a, b) => a.bitrate - b.bitrate);
+                rdPointsDct = pointsDct.sort((a, b) => a.bitrate - b.bitrate);
+                rdPointsDwt = pointsDwt.sort((a, b) => a.bitrate - b.bitrate);
             }
         } catch (error) {
             console.error('RD curve generation error:', error);
             if (jobId === rdJobId) {
                 rdError = 'Unable to generate RD curve.';
-                rdPoints = [];
+                rdPointsDct = [];
+                rdPointsDwt = [];
             }
         } finally {
             if (jobId === rdJobId) {
@@ -567,7 +606,8 @@
         const _image = appState.originalImageData;
         clearRdScheduling();
         rdJobId++;
-        rdPoints = [];
+        rdPointsDct = [];
+        rdPointsDwt = [];
         rdLoading = false;
         rdError = '';
     });
@@ -609,6 +649,40 @@
         }
         return d;
     }
+
+    // ===== Coefficient Histogram =====
+
+    const HIST_BINS = 32;
+    const HIST_MAX = 512.0;
+
+    type HistData = { dct: number[]; dwt: number[] };
+    let histData = $state<HistData | null>(null);
+    let histLoading = $state(false);
+    let histJobId = 0;
+
+    function generateHistogram() {
+        if (!appState.wasmReady || !appState.originalImageData) return;
+        const jobId = ++histJobId;
+        histLoading = true;
+        // Yield one frame so "Computing…" appears before the synchronous WASM call
+        setTimeout(() => {
+            if (jobId !== histJobId) return;
+            try {
+                histData = getCoeffHistogram(HIST_BINS, HIST_MAX);
+            } finally {
+                if (jobId === histJobId) histLoading = false;
+            }
+        }, 0);
+    }
+
+    // Clear histogram when image changes
+    $effect(() => {
+        const _ready = appState.wasmReady;
+        const _image = appState.originalImageData;
+        histJobId++;
+        histData = null;
+        histLoading = false;
+    });
 
     // ===== Keyboard shortcuts =====
 
@@ -770,12 +844,12 @@
                     </div>
                     {#if rdLoading}
                     <span class="rd-chart-status">Sampling…</span>
-                    {:else if rdPoints.length > 0}
-                    <span class="rd-chart-status">{rdPoints.length} points</span>
+                    {:else if rdPointsDct.length > 0 || rdPointsDwt.length > 0}
+                    <span class="rd-chart-status">{rdPointsDct.length + rdPointsDwt.length} points</span>
                     {/if}
                     {#if appState.originalImageData && !rdLoading}
-                    <button class="tool-btn" onclick={() => void rebuildRdCurve()} style="margin-left: auto;">
-                        {rdPoints.length > 0 ? 'Regenerate' : 'Generate'}
+                    <button class="tool-btn rd-generate-btn" onclick={() => void rebuildRdCurve()} style="margin-left: auto;">
+                        {rdPointsDct.length > 0 ? 'Regenerate' : 'Generate'}
                     </button>
                     {/if}
                 </div>
@@ -784,21 +858,22 @@
                 <div class="rd-chart-empty">Load an image to generate an RD plot.</div>
                 {:else if rdError}
                 <div class="rd-chart-empty">{rdError}</div>
-                {:else if rdLoading && rdPoints.length === 0}
+                {:else if rdLoading && rdPointsDct.length === 0 && rdPointsDwt.length === 0}
                 <div class="rd-chart-empty">Sampling {RD_QUALITIES.length} quality levels…</div>
-                {:else if rdPoints.length === 0}
+                {:else if rdPointsDct.length === 0 && rdPointsDwt.length === 0}
                 <div class="rd-chart-empty">Click Generate to compute the rate-distortion curve.</div>
-                {:else if rdPoints.length >= 2}
+                {:else if rdPointsDct.length >= 2 || rdPointsDwt.length >= 2}
                 {@const svgW = 700}
                 {@const svgH = 280}
                 {@const padL = 64}
                 {@const padR = 20}
                 {@const padT = 18}
                 {@const padB = 52}
-                {@const xMinRaw = Math.min(...rdPoints.map((p) => p.bitrate))}
-                {@const xMaxRaw = Math.max(...rdPoints.map((p) => p.bitrate))}
-                {@const yMinRaw = Math.min(...rdPoints.map((p) => p.psnr))}
-                {@const yMaxRaw = Math.max(...rdPoints.map((p) => p.psnr))}
+                {@const allPoints = [...rdPointsDct, ...rdPointsDwt]}
+                {@const xMinRaw = Math.min(...allPoints.map((p) => p.bitrate))}
+                {@const xMaxRaw = Math.max(...allPoints.map((p) => p.bitrate))}
+                {@const yMinRaw = Math.min(...allPoints.map((p) => p.psnr))}
+                {@const yMaxRaw = Math.max(...allPoints.map((p) => p.psnr))}
                 {@const xPad = Math.max(0.05, (xMaxRaw - xMinRaw) * 0.08)}
                 {@const yPad = Math.max(0.5, (yMaxRaw - yMinRaw) * 0.12)}
                 {@const xMin = xMinRaw - xPad}
@@ -811,20 +886,31 @@
                 {@const mapY = (v: number) => svgH - padB - ((v - yMin) / (yMax - yMin || 1)) * chartH}
                 {@const xTicks = Array.from({length: 5}, (_, i) => xMinRaw + i * (xMaxRaw - xMinRaw) / 4)}
                 {@const yTicks = Array.from({length: 5}, (_, i) => yMinRaw + i * (yMaxRaw - yMinRaw) / 4)}
-                {@const pts = rdPoints.map(p => ({ x: mapX(p.bitrate), y: mapY(p.psnr) }))}
-                {@const curvePath = smoothSvgPath(pts)}
-                {@const fillPath = curvePath + ` L ${pts[pts.length - 1].x},${svgH - padB} L ${pts[0].x},${svgH - padB} Z`}
-                {@const currentPoint = rdPoints.reduce((best, p) =>
-                    Math.abs(p.quality - appState.quality) < Math.abs(best.quality - appState.quality) ? p : best
-                )}
+                
+                {@const ptsDct = rdPointsDct.map(p => ({ x: mapX(p.bitrate), y: mapY(p.psnr) }))}
+                {@const curvePathDct = smoothSvgPath(ptsDct)}
+                {@const fillPathDct = ptsDct.length > 0 ? curvePathDct + ` L ${ptsDct[ptsDct.length - 1].x},${svgH - padB} L ${ptsDct[0].x},${svgH - padB} Z` : ''}
+                
+                {@const ptsDwt = rdPointsDwt.map(p => ({ x: mapX(p.bitrate), y: mapY(p.psnr) }))}
+                {@const curvePathDwt = smoothSvgPath(ptsDwt)}
+                {@const fillPathDwt = ptsDwt.length > 0 ? curvePathDwt + ` L ${ptsDwt[ptsDwt.length - 1].x},${svgH - padB} L ${ptsDwt[0].x},${svgH - padB} Z` : ''}
+
+                {@const targetPoints = appState.transformType === 0 ? rdPointsDct : rdPointsDwt}
+                {@const currentPoint = targetPoints.length > 0 
+                    ? targetPoints.reduce((best, p) => Math.abs(p.quality - appState.quality) < Math.abs(best.quality - appState.quality) ? p : best)
+                    : (allPoints.reduce((best, p) => Math.abs(p.quality - appState.quality) < Math.abs(best.quality - appState.quality) ? p : best))}
                 {@const cpx = mapX(currentPoint.bitrate)}
                 {@const cpy = mapY(currentPoint.psnr)}
                 <div class="rd-chart-svg-wrap">
                     <svg viewBox={`0 0 ${svgW} ${svgH}`} role="img" aria-label="Rate-distortion curve">
                         <defs>
                             <linearGradient id="rdFillGrad" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" style="stop-color: var(--primary); stop-opacity: 0.2;"/>
+                                <stop offset="0%" style="stop-color: var(--primary); stop-opacity: 0.15;"/>
                                 <stop offset="100%" style="stop-color: var(--primary); stop-opacity: 0.01;"/>
+                            </linearGradient>
+                            <linearGradient id="rdFillGradDwt" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" style="stop-color: #f59e0b; stop-opacity: 0.15;"/>
+                                <stop offset="100%" style="stop-color: #f59e0b; stop-opacity: 0.01;"/>
                             </linearGradient>
                             <clipPath id="rdClip">
                                 <rect x={padL} y={padT} width={chartW} height={chartH + 1}/>
@@ -838,26 +924,61 @@
                         {/each}
                         <line x1={padL} y1={svgH - padB} x2={svgW - padR} y2={svgH - padB} class="rd-axis-line"/>
                         <line x1={padL} y1={padT} x2={padL} y2={svgH - padB} class="rd-axis-line"/>
-                        <path d={fillPath} class="rd-fill" clip-path="url(#rdClip)"/>
-                        <path d={curvePath} class="rd-curve-path" clip-path="url(#rdClip)"/>
-                        <line x1={cpx} y1={padT} x2={cpx} y2={svgH - padB} class="rd-crosshair"/>
-                        <line x1={padL} y1={cpy} x2={svgW - padR} y2={cpy} class="rd-crosshair"/>
-                        {#each rdPoints as point}
+                        
+                        <!-- DCT Curve -->
+                        {#if ptsDct.length > 0}
+                        <path d={fillPathDct} class="rd-fill" clip-path="url(#rdClip)"/>
+                        <path d={curvePathDct} class="rd-curve-path" clip-path="url(#rdClip)"/>
+                        {/if}
+
+                        <!-- DWT Curve -->
+                        {#if ptsDwt.length > 0}
+                        <path d={fillPathDwt} class="rd-fill-dwt" clip-path="url(#rdClip)"/>
+                        <path d={curvePathDwt} class="rd-curve-path rd-curve-path-dwt" clip-path="url(#rdClip)"/>
+                        {/if}
+
+                        <line x1={cpx} y1={padT} x2={cpx} y2={svgH - padB} class="rd-crosshair" style="stroke: {appState.transformType === 0 ? 'var(--primary)' : '#f59e0b'}"/>
+                        <line x1={padL} y1={cpy} x2={svgW - padR} y2={cpy} class="rd-crosshair" style="stroke: {appState.transformType === 0 ? 'var(--primary)' : '#f59e0b'}"/>
+                        
+                        {#each rdPointsDct as point}
                         <circle
                             cx={mapX(point.bitrate)}
                             cy={mapY(point.psnr)}
-                            r={point.quality === currentPoint.quality ? 5.5 : 3.5}
+                            r={point.quality === appState.quality && appState.transformType === 0 ? 5.5 : 3.5}
                             class="rd-point"
-                            class:rd-point-current={point.quality === currentPoint.quality}
+                            class:rd-point-current={point.quality === appState.quality && appState.transformType === 0}
                             role="button"
                             tabindex="0"
                             aria-label="Set quality to {point.quality}"
-                            onclick={() => { appState.quality = point.quality; }}
-                            onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') appState.quality = point.quality; }}>
-                            <title>Q{point.quality} · {point.psnr.toFixed(2)} dB · {point.bitrate.toFixed(2)} bpp</title>
+                            onclick={() => { appState.quality = point.quality; appState.transformType = 0; }}
+                            onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { appState.quality = point.quality; appState.transformType = 0; } }}>
+                            <title>DCT: Q{point.quality} · {point.psnr.toFixed(2)} dB · {point.bitrate.toFixed(2)} bpp</title>
                         </circle>
                         {/each}
-                        <text x={cpx} y={Math.max(padT + 12, cpy - 10)} class="rd-point-label rd-axis-text-middle">Q{currentPoint.quality}</text>
+
+                        {#each rdPointsDwt as point}
+                        <circle
+                            cx={mapX(point.bitrate)}
+                            cy={mapY(point.psnr)}
+                            r={point.quality === appState.quality && appState.transformType === 1 ? 5.5 : 3.5}
+                            class="rd-point rd-point-dwt"
+                            class:rd-point-current-dwt={point.quality === appState.quality && appState.transformType === 1}
+                            role="button"
+                            tabindex="0"
+                            aria-label="Set quality to {point.quality}"
+                            onclick={() => { appState.quality = point.quality; appState.transformType = 1; }}
+                            onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { appState.quality = point.quality; appState.transformType = 1; } }}>
+                            <title>DWT: Q{point.quality} · {point.psnr.toFixed(2)} dB · {point.bitrate.toFixed(2)} bpp</title>
+                        </circle>
+                        {/each}
+
+                        <text x={cpx} y={Math.max(padT + 12, cpy - 10)} class="rd-point-label rd-axis-text-middle" style="fill: {appState.transformType === 0 ? 'var(--primary)' : '#f59e0b'}">Q{currentPoint.quality}</text>
+                        
+                        <!-- Legend -->
+                        <rect x={padL + 10} y={padT + 5} width={10} height={3} class="rd-curve-path" style="stroke-width: 2;"/>
+                        <text x={padL + 25} y={padT + 9} class="rd-axis-text">DCT</text>
+                        <rect x={padL + 60} y={padT + 5} width={10} height={3} class="rd-curve-path rd-curve-path-dwt" style="stroke-width: 2;"/>
+                        <text x={padL + 75} y={padT + 9} class="rd-axis-text">DWT (Haar)</text>
                         {#each xTicks as tick}
                         <text x={mapX(tick)} y={svgH - padB + 14} class="rd-axis-text rd-axis-text-middle">{tick.toFixed(2)}</text>
                         {/each}
@@ -892,6 +1013,124 @@
                 </div>
                 {:else}
                 <div class="rd-chart-empty">Need more samples to render an RD curve.</div>
+                {/if}
+            </section>
+        </div>
+
+        <div class="card hist-card">
+            <section class="rd-chart-panel" aria-live="polite">
+                <div class="rd-chart-header">
+                    <div>
+                        <h3>Coefficient Histogram <span class="beta-badge">Beta</span></h3>
+                        <p>AC coefficient magnitude distribution — DWT concentrates more energy near zero, explaining its advantage at low bitrates.</p>
+                    </div>
+                    {#if histLoading}
+                    <span class="rd-chart-status">Computing…</span>
+                    {:else if histData}
+                    <span class="rd-chart-status">{appState.imgWidth / 8 | 0}×{appState.imgHeight / 8 | 0} blocks</span>
+                    {/if}
+                    {#if appState.originalImageData && !histLoading}
+                    <button class="tool-btn rd-generate-btn" onclick={generateHistogram} style="margin-left: auto;">
+                        {histData ? 'Regenerate' : 'Generate'}
+                    </button>
+                    {/if}
+                </div>
+
+                {#if !appState.originalImageData}
+                <div class="rd-chart-empty">Load an image to generate a coefficient histogram.</div>
+                {:else if histLoading}
+                <div class="rd-chart-empty">Computing transform coefficients for all blocks…</div>
+                {:else if !histData}
+                <div class="rd-chart-empty">Click Generate to compare DCT vs DWT coefficient sparsity.</div>
+                {:else}
+                {@const svgW = 700}
+                {@const svgH = 240}
+                {@const padL = 52}
+                {@const padR = 24}
+                {@const padT = 18}
+                {@const padB = 48}
+                {@const chartW = svgW - padL - padR}
+                {@const chartH = svgH - padT - padB}
+                {@const maxY = Math.max(...histData.dct, ...histData.dwt) * 1.15}
+                {@const groupW = chartW / HIST_BINS}
+                {@const barW = (groupW - 2) / 2}
+                {@const binWidth = HIST_MAX / HIST_BINS}
+                {@const mapBarY = (v: number) => padT + chartH - (v / maxY) * chartH}
+                <div class="rd-chart-svg-wrap">
+                    <svg viewBox={`0 0 ${svgW} ${svgH}`} role="img" aria-label="DCT vs DWT coefficient histogram">
+                        <defs>
+                            <clipPath id="histClip">
+                                <rect x={padL} y={padT} width={chartW} height={chartH + 1}/>
+                            </clipPath>
+                        </defs>
+                        <!-- Grid lines -->
+                        {#each [0.25, 0.5, 0.75, 1.0] as frac}
+                        {@const gy = padT + chartH * (1 - frac)}
+                        <line x1={padL} y1={gy} x2={svgW - padR} y2={gy} class="rd-grid-line"/>
+                        <text x={padL - 5} y={gy + 4} class="rd-axis-text rd-axis-text-end">{(maxY * frac * 100).toFixed(1)}%</text>
+                        {/each}
+                        <!-- Axes -->
+                        <line x1={padL} y1={padT} x2={padL} y2={padT + chartH} class="rd-axis-line"/>
+                        <line x1={padL} y1={padT + chartH} x2={svgW - padR} y2={padT + chartH} class="rd-axis-line"/>
+
+                        <!-- DCT bars (left of each group) -->
+                        {#each histData.dct as val, i}
+                        {@const x = padL + i * groupW + 1}
+                        {@const barH = Math.max(0, (val / maxY) * chartH)}
+                        <rect x={x} y={padT + chartH - barH} width={barW} height={barH} class="hist-bar-dct" clip-path="url(#histClip)"/>
+                        {/each}
+
+                        <!-- DWT bars (right of each group) -->
+                        {#each histData.dwt as val, i}
+                        {@const x = padL + i * groupW + 1 + barW}
+                        {@const barH = Math.max(0, (val / maxY) * chartH)}
+                        <rect x={x} y={padT + chartH - barH} width={barW} height={barH} class="hist-bar-dwt" clip-path="url(#histClip)"/>
+                        {/each}
+
+                        <!-- X axis labels every 8 bins -->
+                        {#each {length: Math.floor(HIST_BINS / 8) + 1} as _, k}
+                        {@const binIdx = k * 8}
+                        {#if binIdx <= HIST_BINS}
+                        <text x={padL + binIdx * groupW} y={padT + chartH + 14} class="rd-axis-text rd-axis-text-middle">
+                            {binIdx === HIST_BINS ? `${Math.round(HIST_MAX)}+` : Math.round(binIdx * binWidth)}
+                        </text>
+                        {/if}
+                        {/each}
+
+                        <!-- Axis titles -->
+                        <text x={(padL + svgW - padR) / 2} y={svgH - 2} class="rd-axis-title rd-axis-text-middle">AC Coefficient Magnitude</text>
+                        <text x={11} y={(padT + padT + chartH) / 2} transform={`rotate(-90 11 ${(padT + padT + chartH) / 2})`} class="rd-axis-title rd-axis-text-middle">Fraction</text>
+
+                        <!-- Legend -->
+                        <rect x={svgW - padR - 90} y={padT + 2} width={9} height={9} class="hist-bar-dct"/>
+                        <text x={svgW - padR - 77} y={padT + 10} class="rd-axis-text">DCT</text>
+                        <rect x={svgW - padR - 90} y={padT + 17} width={9} height={9} class="hist-bar-dwt"/>
+                        <text x={svgW - padR - 77} y={padT + 25} class="rd-axis-text">DWT (Haar)</text>
+                    </svg>
+                </div>
+
+                <!-- Sparsity callout — bin 0 = |coeff| < binWidth -->
+                {@const dctNZ = (histData.dct[0] * 100)}
+                {@const dwtNZ = (histData.dwt[0] * 100)}
+                {@const gain = dwtNZ - dctNZ}
+                <div class="rd-current-callout">
+                    <div class="rd-callout-item">
+                        <span class="rd-callout-label">DCT near-zero (&lt;{Math.round(binWidth)})</span>
+                        <span class="rd-callout-value hist-dct-value">{dctNZ.toFixed(1)}%</span>
+                    </div>
+                    <div class="rd-callout-sep"></div>
+                    <div class="rd-callout-item">
+                        <span class="rd-callout-label">DWT near-zero (&lt;{Math.round(binWidth)})</span>
+                        <span class="rd-callout-value hist-dwt-value">{dwtNZ.toFixed(1)}%</span>
+                    </div>
+                    <div class="rd-callout-sep"></div>
+                    <div class="rd-callout-item">
+                        <span class="rd-callout-label">DWT sparsity gain</span>
+                        <span class="rd-callout-value" class:stat-good={gain > 0} class:stat-poor={gain < 0}>
+                            {gain >= 0 ? '+' : ''}{gain.toFixed(1)} pp
+                        </span>
+                    </div>
+                </div>
                 {/if}
             </section>
         </div>
@@ -941,6 +1180,60 @@
                         Load new image
                     </button>
                     {/if}
+
+                    <!-- Sample / built-in test images -->
+                    <div class="test-images-section">
+                        <button
+                            class="test-images-toggle"
+                            class:has-active={activeTestImageIndex !== null}
+                            onclick={() => testImagesOpen = !testImagesOpen}
+                            disabled={!appState.wasmReady}
+                            aria-expanded={testImagesOpen}>
+                            <!-- Mini preview strip: 3 sample thumbnails -->
+                            <div class="test-images-preview-strip" aria-hidden="true">
+                                {#each [1, 8, 15] as n}
+                                <img src="/test-images/{n}.png" alt="" />
+                                {/each}
+                            </div>
+                            <span class="test-images-toggle-label">
+                                Sample Images
+                                {#if activeTestImageIndex !== null}
+                                <span class="test-images-active-dot"></span>
+                                {/if}
+                            </span>
+                            <span class="test-images-count">{TEST_IMAGE_COUNT}</span>
+                            <svg class="chevron" class:open={testImagesOpen} width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                        </button>
+                        {#if testImagesOpen}
+                        <div class="test-images-panel">
+                            <div class="test-images-scroll">
+                                <div class="test-images-grid">
+                                    {#each {length: TEST_IMAGE_COUNT} as _, i}
+                                    <button
+                                        class="test-img-btn"
+                                        class:active={activeTestImageIndex === i}
+                                        onclick={() => loadTestImage(i)}
+                                        title="Kodak #{i}"
+                                        aria-label="Load Kodak test image {i}">
+                                        <img src="/test-images/{i}.png" alt="" loading="lazy" />
+                                        <span class="test-img-label">{i}</span>
+                                        {#if activeTestImageIndex === i}
+                                        <span class="test-img-active-check" aria-hidden="true">
+                                            <svg width="8" height="8" viewBox="0 0 12 12" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                                <polyline points="2 6 5 9 10 3"></polyline>
+                                            </svg>
+                                        </span>
+                                        {/if}
+                                    </button>
+                                    {/each}
+                                </div>
+                            </div>
+                            <p class="test-images-credit">Kodak Lossless True Color Image Suite</p>
+                        </div>
+                        {/if}
+                    </div>
 
                     <div class="control-group">
                         <label for="qualitySlider">
@@ -1031,7 +1324,10 @@
                             <input type="radio" id={t.id} name="v_transform_type"
                                 checked={appState.transformType === t.val}
                                 onchange={() => appState.transformType = t.val}>
-                            <label for={t.id}>{t.label}</label>
+                            <label for={t.id} style="display: flex; align-items: center; justify-content: center; gap: 4px;">
+                                {t.label} 
+                                {#if t.val === 1}<span class="beta-badge" style="margin: 0;">BETA</span>{/if}
+                            </label>
                             {/each}
                         </div>
                     </div>

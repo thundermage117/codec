@@ -49,6 +49,12 @@
             if (onViewerClick) onViewerClick(e as unknown as MouseEvent);
         }
     }
+
+    // comparisonPercent is in viewport-space %, but clip-path is applied inside the scaled
+    // comparison-viewer, so it needs canvas-space %. When zoom=1 this is identity.
+    let canvasClipPercent = $derived(
+        zoom > 1 ? (comparisonPercent - zoomOriginX) / zoom + zoomOriginX : comparisonPercent
+    );
 </script>
 
 <div class="zoom-viewport" id="{id}-viewport" {style} 
@@ -77,7 +83,7 @@
 
             <!-- Processed/Artifact Canvas -->
             <div class="canvas-wrap" class:visible={viewType === 'processed' || viewType === 'comparison'}
-                style={viewType === 'comparison' ? `clip-path: polygon(${comparisonPercent}% 0, 100% 0, 100% 100%, ${comparisonPercent}% 100%)` : ''}>
+                style={viewType === 'comparison' ? `clip-path: polygon(${canvasClipPercent}% 0, 100% 0, 100% 100%, ${canvasClipPercent}% 100%)` : ''}>
                 <canvas
                     bind:this={processedCanvas}
                     id="{id}-processed"

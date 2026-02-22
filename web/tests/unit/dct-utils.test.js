@@ -4,7 +4,9 @@ import {
     getFreqLabel,
     getEntropySymbols,
     estimateBlockBits,
-    ZIGZAG_INDICES
+    ZIGZAG_INDICES,
+    computeHaarBasisPattern,
+    getHaarFreqLabel
 } from '../../src/lib/dct-utils';
 
 describe('dct-utils', () => {
@@ -144,6 +146,27 @@ describe('dct-utils', () => {
 
             // DC(6) + AC(7) + EOB(4) = 17 bits
             expect(bits).toBe(17);
+        });
+    });
+
+    describe('Haar DWT utilities', () => {
+        test('computeHaarBasisPattern returns 64 elements', () => {
+            const pattern = computeHaarBasisPattern(0, 0);
+            expect(pattern).toHaveLength(64);
+        });
+
+        test('computeHaarBasisPattern(0,0) is constant 0.125', () => {
+            const pattern = computeHaarBasisPattern(0, 0);
+            // In 8x8 Haar DWT, DC basis is 1/sqrt(64) = 1/8 = 0.125 everywhere if orthonormal
+            expect(pattern[0]).toBeCloseTo(0.125, 4);
+            expect(pattern[63]).toBeCloseTo(0.125, 4);
+        });
+
+        test('getHaarFreqLabel identifies subbands', () => {
+            expect(getHaarFreqLabel(0, 0)).toBe('DC');
+            expect(getHaarFreqLabel(0, 1)).toBe('Low');
+            expect(getHaarFreqLabel(2, 2)).toBe('Mid');
+            expect(getHaarFreqLabel(4, 4)).toBe('High');
         });
     });
 });

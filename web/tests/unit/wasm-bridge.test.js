@@ -98,12 +98,18 @@ describe('initSession', () => {
 describe('processImage', () => {
     it('delegates to Module._process_image with quality and csMode', () => {
         processImage(75, 422);
-        expect(globalThis.Module._process_image).toHaveBeenCalledWith(75, 422);
+        // appState.transformType defaults to 0
+        expect(globalThis.Module._process_image).toHaveBeenCalledWith(75, 422, 0);
+    });
+
+    it('passes explicit transformType correctly', () => {
+        processImage(75, 422, 1);
+        expect(globalThis.Module._process_image).toHaveBeenCalledWith(75, 422, 1);
     });
 
     it('passes quality=0 and csMode=420 correctly', () => {
         processImage(0, 420);
-        expect(globalThis.Module._process_image).toHaveBeenCalledWith(0, 420);
+        expect(globalThis.Module._process_image).toHaveBeenCalledWith(0, 420, 0);
     });
 });
 
@@ -167,13 +173,18 @@ describe('inspectBlockData', () => {
     it('calls _inspect_block_data with blockX, blockY, channelIndex, quality, and appState.currentCsMode', () => {
         appState.currentCsMode = 420;
         inspectBlockData(3, 5, 0, 75);
-        expect(globalThis.Module._inspect_block_data).toHaveBeenCalledWith(3, 5, 0, 75, 420);
+        expect(globalThis.Module._inspect_block_data).toHaveBeenCalledWith(3, 5, 0, 75, 420, 0);
     });
 
     it('uses appState.currentCsMode=444 by default', () => {
         appState.currentCsMode = 444;
         inspectBlockData(0, 0, 1, 50);
-        expect(globalThis.Module._inspect_block_data).toHaveBeenCalledWith(0, 0, 1, 50, 444);
+        expect(globalThis.Module._inspect_block_data).toHaveBeenCalledWith(0, 0, 1, 50, 444, 0);
+    });
+
+    it('passes explicit transformType correctly', () => {
+        inspectBlockData(0, 0, 1, 50, 1);
+        expect(globalThis.Module._inspect_block_data).toHaveBeenCalledWith(0, 0, 1, 50, 444, 1);
     });
 });
 

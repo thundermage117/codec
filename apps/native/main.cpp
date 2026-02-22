@@ -42,7 +42,7 @@ int main(int argc, char** argv) {
                       << "An interactive codec laboratory to visualize image compression.\n\n"
                       << "Options:\n"
                       << "  [path_to_image]   Optional. Path to the image file to process.\n"
-                      << "                    Defaults to '../images/0.png' if not provided.\n"
+                      << "                    Defaults to '../web/public/test-images/0.png' if not provided.\n"
                       << "  show w            Display the GPL warranty disclaimer and exit.\n"
                       << "  show c            Display the GPL redistribution conditions and exit.\n"
                       << "  help, --help, -h  Show this help message and exit.\n" << std::endl
@@ -93,7 +93,7 @@ int main(int argc, char** argv) {
         }
     }
     
-    std::string imagePath = "../images/0.png";
+    std::string imagePath = "../web/public/test-images/0.png";
     auto csMode = ImageCodec::ChromaSubsampling::CS_444;
     bool imagePathSet = false;
 

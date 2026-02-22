@@ -408,7 +408,10 @@
                                 <input type="radio" id={t.id} name="i_transform_type"
                                     checked={appState.transformType === t.val}
                                     onchange={() => appState.transformType = t.val}>
-                                <label for={t.id}>{t.label}</label>
+                                <label for={t.id} style="display: flex; align-items: center; justify-content: center; gap: 4px;">
+                                    {t.label}
+                                    {#if t.val === 1}<span class="beta-badge" style="margin: 0;">BETA</span>{/if}
+                                </label>
                                 {/each}
                             </div>
                         </div>
