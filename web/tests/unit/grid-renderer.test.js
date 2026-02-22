@@ -2,13 +2,38 @@ import { expect, test, describe, beforeEach, afterEach, vi } from 'vitest';
 import {
     clearAllHighlights,
     highlightAcrossGrids,
+    highlightRunAcrossGrids,
     renderLossMeter,
     renderGrid,
     renderZigzagArray,
     renderEntropySummary,
-    startZigzagAnimation
+    startZigzagAnimation,
+    startReconstructionAnimation,
+    stopReconstructionAnimation
 } from '../../src/lib/grid-renderer';
 import { ZIGZAG_INDICES } from '../../src/lib/dct-utils';
+
+vi.mock('../../src/lib/basis-popover', () => ({
+    showBasisPopover: vi.fn(),
+    hideBasisPopover: vi.fn(),
+    getCachedGridData: vi.fn(() => ({
+        dequantizedData: new Float64Array(64).fill(10)
+    }))
+}));
+
+const { mockAppState } = vi.hoisted(() => ({
+    mockAppState: {
+        transformType: 0,
+        quality: 50,
+        appMode: 'inspector',
+        currentViewMode: 'Y'
+    }
+}));
+
+vi.mock('../../src/lib/state.svelte', () => ({
+    appState: mockAppState,
+    ViewMode: { Y: 'Y', Cr: 'Cr', Cb: 'Cb', RGB: 'RGB' }
+}));
 
 describe('grid-renderer', () => {
     beforeEach(() => {
@@ -317,6 +342,207 @@ describe('grid-renderer', () => {
 
             // Fast forward past 64 * 100ms
             vi.advanceTimersByTime(6500 + 1500); // 6.5s + 1.5s for clearAllHighlights timeout
+        });
+    });
+
+    describe('highlightRunAcrossGrids', () => {
+        test('highlights multiple indices', () => {
+            const gridOriginal = document.getElementById('gridOriginal');
+            for (let i = 0; i < 64; i += 1) {
+                const div = document.createElement('div');
+                div.className = 'grid-cell';
+                gridOriginal.appendChild(div);
+            }
+            highlightRunAcrossGrids([10, 11, 12]);
+            expect(gridOriginal.children[10].classList.contains('cell-highlight')).toBe(true);
+            expect(gridOriginal.children[11].classList.contains('cell-highlight')).toBe(true);
+            expect(gridOriginal.children[12].classList.contains('cell-highlight')).toBe(true);
+        });
+    });
+
+    describe('renderGrid additional coverage', () => {
+        test('handles click events and animate-basis event', () => {
+            const data = new Float64Array(64).fill(10);
+            renderGrid('gridOriginal', data, 'number', 'transform');
+            const grid = document.getElementById('gridOriginal');
+            const cell = grid.children[0];
+
+            const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+            cell.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+            expect(dispatchSpy).toHaveBeenCalled();
+            expect(dispatchSpy.mock.calls[0][0].type).toBe('animate-basis');
+        });
+
+        test('handles Haar transform type for frequency labels', () => {
+            mockAppState.transformType = 1; // Haar
+            const data = new Float64Array(64).fill(10);
+            renderGrid('gridDCT', data, 'frequency', 'transform');
+            // Hits getTransformFreqLabel -> getHaarFreqLabel
+            const badge = document.querySelector('.nonzero-badge');
+            badge.dispatchEvent(new MouseEvent('mouseenter'));
+            expect(badge.textContent).toBe('64');
+            mockAppState.transformType = 0; // Reset
+        });
+    });
+
+    describe('renderEntropySummary interactivity', () => {
+        test('expand and collapse all buttons work', () => {
+            const symbols = [{ type: 'DC', totalBits: 5, amplitude: 10, zIndex: 0 }];
+            renderEntropySummary(symbols);
+            const container = document.getElementById('entropySummary');
+            const expandBtn = container.querySelector('#expandAllCosts');
+            const collapseBtn = container.querySelector('#collapseAllCosts');
+            const details = container.querySelector('.cost-details');
+
+            expandBtn.click();
+            expect(details.open).toBe(true);
+
+            collapseBtn.click();
+            expect(details.open).toBe(false);
+        });
+
+        test('renders different symbol types in mini table', () => {
+            const symbols = [
+                { type: 'DC', totalBits: 5, amplitude: 10, zIndex: 0, baseBits: 3, magBits: 2 },
+                { type: 'AC', totalBits: 10, run: 2, amplitude: 5, zIndex: 1, baseBits: 6, magBits: 4 },
+                { type: 'ZRL', totalBits: 8, zIndex: 5, baseBits: 8, magBits: 0 },
+                { type: 'EOB', totalBits: 4, zIndex: 6, baseBits: 4, magBits: 0 }
+            ];
+            renderEntropySummary(symbols);
+            const summary = document.getElementById('entropySummary');
+            expect(summary.innerHTML).toContain('EOB');
+            expect(summary.innerHTML).toContain('16 Zeros'); // ZRL
+            expect(summary.innerHTML).toContain('2 Zeros'); // AC run
+        });
+    });
+
+    describe('reconstruction animation', () => {
+        beforeEach(() => {
+            document.body.innerHTML += `
+                <button class="pipeline-play-btn"><svg></svg></button>
+                <div id="reconstructionProgress"></div>
+                <div id="reconAnimBanner" style="display:none">
+                    <span id="reconBannerStep"></span>
+                    <div id="reconBannerFill"></div>
+                    <span id="reconBannerFreq"></span>
+                    <span id="reconBannerCoeff"></span>
+                    <span id="reconBannerDesc"></span>
+                    <canvas id="reconBasisCanvas" width="64" height="64"></canvas>
+                </div>
+                <div id="gridReconstructed"></div>
+            `;
+            const grid = document.getElementById('gridReconstructed');
+            for (let i = 0; i < 64; i += 1) {
+                const div = document.createElement('div');
+                div.className = 'grid-cell';
+                grid.appendChild(div);
+            }
+
+            vi.stubGlobal('requestAnimationFrame', vi.fn(cb => setTimeout(() => cb(Date.now()), 16)));
+            vi.stubGlobal('cancelAnimationFrame', vi.fn());
+
+            vi.useFakeTimers();
+        });
+
+        afterEach(() => {
+            vi.useRealTimers();
+            vi.restoreAllMocks();
+            stopReconstructionAnimation(); // Cleanup global state
+        });
+
+        test('starts, pause/resume and stops reconstruction animation', async () => {
+            startReconstructionAnimation();
+            const progress = document.getElementById('reconstructionProgress');
+            expect(progress.style.display).not.toBe('none');
+
+            // Wait for one frame
+            await vi.advanceTimersByTimeAsync(100);
+
+            // Pause
+            startReconstructionAnimation();
+            // Resume
+            startReconstructionAnimation();
+
+            stopReconstructionAnimation();
+            expect(progress.style.display).toBe('none');
+        });
+
+        test('runs reconstruction animation frames', async () => {
+            startReconstructionAnimation();
+
+            // Advance time in many steps to allow multiple frames of requestAnimationFrame
+            for (let i = 0; i < 100; i++) {
+                await vi.advanceTimersByTimeAsync(100);
+            }
+
+            const progress = document.getElementById('reconstructionProgress');
+            expect(progress.textContent).toBe('64/64');
+        });
+
+        test('showBannerForCell works', () => {
+            // Setup a grid that can be clicked
+            const data = new Float64Array(64).fill(10);
+            document.body.innerHTML += '<div id="gridDequantized"></div>';
+            renderGrid('gridDequantized', data, 'frequency', 'dequantized');
+
+            const dqGrid = document.getElementById('gridDequantized');
+            dqGrid.children[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+            const banner = document.getElementById('reconAnimBanner');
+            expect(banner.style.display).not.toBe('none');
+            // Check that it shows step 1 (1-based index)
+            expect(document.getElementById('reconBannerStep').textContent).toBe('1');
+        });
+
+        test('handles starts when already playing', () => {
+            startReconstructionAnimation();
+            const spy = vi.spyOn(window, 'cancelAnimationFrame');
+            startReconstructionAnimation(); // Should pause
+            expect(spy).toHaveBeenCalled();
+        });
+    });
+
+    describe('renderGrid corner cases', () => {
+        test('renders negative zero correctly', () => {
+            const data = new Float64Array(64).fill(-0.0);
+            renderGrid('gridOriginal', data, 'number', 'original');
+            const firstCell = document.getElementById('gridOriginal').children[0];
+            expect(firstCell.textContent).toBe('0');
+        });
+
+        test('renders error colors and opacities', () => {
+            const data = new Float64Array(64).fill(0);
+            data[0] = 50; // Above visualMax 30
+            data[1] = -5;
+            renderGrid('gridError', data, 'error', 'error');
+            const grid = document.getElementById('gridError');
+            // JSDOM might return rgb() for opaque colors
+            expect(grid.children[0].style.backgroundColor).toMatch(/rgb\(239, 68, 68\)/);
+            expect(grid.children[1].style.backgroundColor).toContain('rgba(59, 130, 246');
+        });
+    });
+
+    describe('renderZigzagArray corner cases', () => {
+        test('renders more than 8 dots in a run', () => {
+            const data = new Float64Array(64).fill(0);
+            renderZigzagArray(data); // EOB will handle it, but let's put a value at the end
+            data[63] = 10;
+            renderZigzagArray(data);
+            const run = document.querySelector('.zz-run');
+            expect(run.innerHTML).toContain('run-more');
+        });
+    });
+
+    describe('highlightAcrossGrids additional', () => {
+        test('highlights zz-run in gridZigzag', () => {
+            const data = new Float64Array(64).fill(0);
+            data[0] = 10;
+            data[63] = 10;
+            renderZigzagArray(data); // indices 1-62 is a run
+            highlightAcrossGrids(Math.floor(ZIGZAG_INDICES[1] / 8), ZIGZAG_INDICES[1] % 8);
+            const run = document.querySelector('.zz-run');
+            expect(run.classList.contains('cell-highlight')).toBe(true);
         });
     });
 });

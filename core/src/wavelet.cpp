@@ -30,7 +30,8 @@ static const double INV_SQRT2 = 0.70710678118654752440; // 1.0 / sqrt(2)
  *   det[k] = (data[2k] - data[2k+1]) / sqrt(2)
  */
 static void haar1d_fwd(double* data, int n) {
-    double tmp[8];
+    if (n > 8) return; // Basic safety check
+    double tmp[8] = {0};
     int half = n / 2;
     for (int k = 0; k < half; ++k) {
         tmp[k]        = (data[2*k] + data[2*k+1]) * INV_SQRT2;
@@ -47,7 +48,8 @@ static void haar1d_fwd(double* data, int n) {
  *   x[2k+1] = (avg[k] - det[k]) / sqrt(2)
  */
 static void haar1d_inv(double* data, int n) {
-    double tmp[8];
+    if (n > 8) return; // Basic safety check
+    double tmp[8] = {0};
     int half = n / 2;
     for (int k = 0; k < half; ++k) {
         tmp[2*k]     = (data[k] + data[k + half]) * INV_SQRT2;
@@ -279,9 +281,13 @@ void idwtImage(double* data, int width, int height, int levels) {
 }
 
 double dwtQuantStep(int x, int y, int width, int height, int levels, double baseStep) {
-    // Replay the forward pass dimensions (levels capped at 6, so fixed arrays suffice).
-    // fwdW[lev] / fwdH[lev] = even dimension of the subimage transformed at forward level `lev`.
-    int fwdW[6], fwdH[6];
+    if (levels <= 0) return baseStep;
+    
+    // Safety cap to prevent buffer overflow and integer shift overflow.
+    // 16 levels is enough for any image up to 65536x65536.
+    if (levels > 16) levels = 16;
+
+    int fwdW[16], fwdH[16];
     {
         int fw = width, fh = height;
         for (int lev = 0; lev < levels; ++lev) {

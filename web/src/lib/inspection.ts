@@ -26,8 +26,8 @@ export function inspectBlock(blockX: number, blockY: number): void {
     const qualitySlider = document.getElementById('qualitySlider') as HTMLInputElement | null;
 
     const quality = (appState.appMode === 'inspector' && inspQualitySlider)
-        ? parseInt(inspQualitySlider.value)
-        : (qualitySlider ? parseInt(qualitySlider.value) : appState.quality);
+        ? Number.parseInt(inspQualitySlider.value)
+        : (qualitySlider ? Number.parseInt(qualitySlider.value) : appState.quality);
 
     const ptr = inspectBlockData(blockX, blockY, channelIndex, quality);
     if (!ptr) {

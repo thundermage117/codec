@@ -143,8 +143,8 @@ export function renderGrid(
             const cell = target.closest('.grid-cell') as HTMLElement;
             if (!cell) return;
 
-            const row = parseInt(cell.dataset.row || '0');
-            const col = parseInt(cell.dataset.col || '0');
+            const row = Number.parseInt(cell.dataset.row || '0');
+            const col = Number.parseInt(cell.dataset.col || '0');
             const valStr = cell.dataset.val || '';
             const desc = cell.dataset.desc || '';
             const isBasis = cell.dataset.isBasis === 'true';
@@ -177,8 +177,8 @@ export function renderGrid(
             const isBasis = cell.dataset.isBasis === 'true';
             if (!isBasis) return;
 
-            const row = parseInt(cell.dataset.row || '0');
-            const col = parseInt(cell.dataset.col || '0');
+            const row = Number.parseInt(cell.dataset.row || '0');
+            const col = Number.parseInt(cell.dataset.col || '0');
             const targetGridId = el.dataset.target || '';
 
             window.dispatchEvent(new CustomEvent('animate-basis', {
@@ -295,7 +295,7 @@ export function renderGrid(
                     badge.style.cursor = 'help';
                     badge.addEventListener('mouseenter', (e) => {
                         const target = e.currentTarget as HTMLElement;
-                        const count = parseInt(target.textContent || '0');
+                        const count = Number.parseInt(target.textContent || '0');
                         showTooltip(e, `${count}/64`, '-', '-', 'Non-zero coefficients (|value| ≥ 0.5)');
                     });
                     badge.addEventListener('mouseleave', () => hideTooltip());
@@ -527,10 +527,10 @@ function applyPartialReconToGrid(row: number, col: number): void {
             const t = Math.min(1, Math.abs(contrib) / maxContrib) * 0.75;
             if (contrib > 0) {
                 r = Math.round(r + (239 - r) * t);
-                g = Math.round(g + (68  - g) * t);
-                b = Math.round(b + (68  - b) * t);
+                g = Math.round(g + (68 - g) * t);
+                b = Math.round(b + (68 - b) * t);
             } else if (contrib < 0) {
-                r = Math.round(r + (59  - r) * t);
+                r = Math.round(r + (59 - r) * t);
                 g = Math.round(g + (130 - g) * t);
                 b = Math.round(b + (246 - b) * t);
             }
@@ -580,7 +580,7 @@ export function startReconstructionAnimation(): void {
 
     // Resume if paused mid-animation
     if (reconState !== null) {
-        reconState.startTime = performance.now() - reconState.currentIndex * RECON_STEP_MS;
+        reconState.startTime = Date.now() - reconState.currentIndex * RECON_STEP_MS;
         setReconstructionButtonIcon(true);
         reconstructionAnimationId = requestAnimationFrame(runReconFrame);
         return;
@@ -603,7 +603,7 @@ export function startReconstructionAnimation(): void {
         currentIndex: 0,
         lastBasisPattern: null,
         lastBasisCoeff: 0,
-        startTime: performance.now(),
+        startTime: Date.now(),
         lastZigzagIdx: 0,
         lastRawCoeff: 0,
     };
@@ -705,7 +705,7 @@ function updateReconstructionProgress(index: number): void {
     if (!el) return;
 
     if (index < 0) { el.style.display = 'none'; return; }
-    if (index === 0) { el.textContent = ''; el.style.display = 'none'; return; }
+    if (index === 0) { el.textContent = '0/64'; el.style.display = ''; return; }
 
     if (index >= 64) {
         el.textContent = '64/64';
@@ -744,16 +744,16 @@ function showBannerForCell(row: number, col: number): void {
 }
 
 const FREQ_DESCRIPTIONS: Record<string, string> = {
-    'DC':   'Sets the average brightness across the whole block',
-    'Low':  'Broad shapes and gentle gradients',
-    'Mid':  'Edges and moderate detail',
+    'DC': 'Sets the average brightness across the whole block',
+    'Low': 'Broad shapes and gentle gradients',
+    'Mid': 'Edges and moderate detail',
     'High': 'Sharp edges and fine texture',
 };
 
 const FREQ_COLORS: Record<string, string> = {
-    'DC':   '#8b5cf6',
-    'Low':  '#10b981',
-    'Mid':  '#f59e0b',
+    'DC': '#8b5cf6',
+    'Low': '#10b981',
+    'Mid': '#f59e0b',
     'High': '#ef4444',
 };
 
@@ -768,16 +768,16 @@ function updateReconAnimBanner(
 
     if (processedCount >= 64) {
         // Done state
-        const stepEl  = document.getElementById('reconBannerStep');
-        const fillEl  = document.getElementById('reconBannerFill') as HTMLElement | null;
-        const freqEl  = document.getElementById('reconBannerFreq');
+        const stepEl = document.getElementById('reconBannerStep');
+        const fillEl = document.getElementById('reconBannerFill') as HTMLElement | null;
+        const freqEl = document.getElementById('reconBannerFreq');
         const coeffEl = document.getElementById('reconBannerCoeff');
-        const descEl  = document.getElementById('reconBannerDesc');
-        if (stepEl)  stepEl.textContent  = '64';
-        if (fillEl)  fillEl.style.width  = '100%';
-        if (freqEl)  { freqEl.textContent = 'Complete'; freqEl.style.background = '#10b981'; freqEl.style.color = 'white'; }
+        const descEl = document.getElementById('reconBannerDesc');
+        if (stepEl) stepEl.textContent = '64';
+        if (fillEl) fillEl.style.width = '100%';
+        if (freqEl) { freqEl.textContent = 'Complete'; freqEl.style.background = '#10b981'; freqEl.style.color = 'white'; }
         if (coeffEl) { coeffEl.textContent = ''; coeffEl.style.color = ''; }
-        if (descEl)  descEl.textContent  = 'All 64 coefficients applied — reconstruction complete';
+        if (descEl) descEl.textContent = 'All 64 coefficients applied — reconstruction complete';
         // Clear the canvas
         const canvas = document.getElementById('reconBasisCanvas') as HTMLCanvasElement | null;
         if (canvas) { const ctx = canvas.getContext('2d'); if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height); }
@@ -787,19 +787,19 @@ function updateReconAnimBanner(
 
     banner.style.display = '';
 
-    const row   = Math.floor(zigzagIdx / 8);
-    const col   = zigzagIdx % 8;
+    const row = Math.floor(zigzagIdx / 8);
+    const col = zigzagIdx % 8;
     const label = getTransformFreqLabel(row, col);
     const isZero = Math.abs(coeff) < 0.0001;
 
-    const stepEl  = document.getElementById('reconBannerStep');
-    const fillEl  = document.getElementById('reconBannerFill') as HTMLElement | null;
-    const freqEl  = document.getElementById('reconBannerFreq');
+    const stepEl = document.getElementById('reconBannerStep');
+    const fillEl = document.getElementById('reconBannerFill') as HTMLElement | null;
+    const freqEl = document.getElementById('reconBannerFreq');
     const coeffEl = document.getElementById('reconBannerCoeff');
-    const descEl  = document.getElementById('reconBannerDesc');
+    const descEl = document.getElementById('reconBannerDesc');
 
-    if (stepEl)  stepEl.textContent = String(processedCount);
-    if (fillEl)  fillEl.style.width = `${(processedCount / 64) * 100}%`;
+    if (stepEl) stepEl.textContent = String(processedCount);
+    if (fillEl) fillEl.style.width = `${(processedCount / 64) * 100}%`;
 
     if (freqEl) {
         freqEl.textContent = label;

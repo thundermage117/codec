@@ -4,18 +4,24 @@
 
 An interactive codec laboratory to visualize how transform-based image compression works. The C++ core is compiled to WebAssembly, allowing for real-time, in-browser experimentation.
 
-This project demonstrates:
+## ✨ Key Features
 
-- 8x8 block splitting
-- Color space transformation (RGB → YCbCr)
-- Discrete Cosine Transform (DCT)
-- Quantization
-- Inverse DCT (reconstruction)
-- PSNR computation
-- Visual difference and artifact analysis
-- Block-level coefficient inspection
+- Real-time transform-based compression in the browser
+- C++ codec core compiled to WebAssembly
+- DCT and Wavelet transform comparison
+- Interactive block inspector
+- Zig-zag and zero-run visualization
+- Artifact analysis maps
+- PSNR-based quality metrics
 
----
+## 🛠 Technologies
+
+- C++17
+- WebAssembly (Emscripten)
+- Svelte 5
+- TypeScript
+- Vite
+- OpenCV (native testing)
 
 ## 🏗 Project Structure
 
@@ -128,16 +134,18 @@ Run `./build/codec_app --help` to see available options.
 - [x] DWT-specific artifact analysis in Inspector
 - [x] Multi-transform bitrate estimation & comparison
 
-### Phase 4: Motion Estimation
+### Phase 4: Future Work
 
 - [ ] Two-frame video input
 - [ ] Block matching (SAD/MSE)
 - [ ] Motion vector visualization
 - [ ] Temporal bitrate comparison vs. static frames
 
-## ▶️ Why This Project Exists
+## ▶️ Motivation
 
-Transform-based compression is often treated as a black box.
+Modern image and video codecs rely heavily on transform-based compression, but the internal mechanisms are often hidden behind opaque implementations.
+
+Codec Explorer makes these algorithms visible and interactive.
 
 This project aims to:
 - Build intuition for energy compaction
