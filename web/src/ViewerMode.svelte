@@ -404,6 +404,7 @@
             appState.inspectedBlock = { ...appState.highlightBlock };
             appState.appMode = 'inspector';
             appState.isInspectMode = true;
+            appState.transformType = 0;
         }
     }
 
@@ -411,6 +412,7 @@
     function enterInspectorMode() {
         appState.appMode = 'inspector';
         appState.isInspectMode = true;
+        appState.transformType = 0;
     }
 
     function onViewerMouseLeave() {
