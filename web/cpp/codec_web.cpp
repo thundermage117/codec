@@ -9,6 +9,7 @@
 #include "colorspace.h"
 #include "transform.h"
 #include "wavelet.h"
+#include "MotionEstimator.h"
 
 // A global session to hold the state between calls from JavaScript.
 struct CodecSession {
@@ -25,6 +26,11 @@ struct CodecSession {
 
 static CodecSession g_session;
 static double g_artifact_gain = 5.0;
+
+// Motion estimation global state
+static MotionEstimator g_me;
+static std::vector<MotionVector> g_mvs;
+static std::vector<std::pair<int,int>> g_search_steps;
 
 // Enum to match view modes in JavaScript.
 enum ViewMode {
@@ -387,6 +393,113 @@ double* inspect_block_data(int blockX, int blockY, int channelIndex, int quality
     debugData = codec.inspectBlock(*blockSourcePtr, targetBx, targetBy, isChroma);
 
     return (double*)&debugData;
+}
+
+// ---------------------------------------------------------------------------
+// Motion Estimation bindings
+// ---------------------------------------------------------------------------
+
+// Helper: convert RGBA uint8 canvas buffer → 3-channel RGB Image
+static Image rgbaToRgbImage(uint8_t* rgba, int w, int h) {
+    Image img(w, h, 3);
+    const size_t n = static_cast<size_t>(w) * h;
+    for (size_t i = 0; i < n; ++i) {
+        img.at(static_cast<int>(i % w), static_cast<int>(i / w), 0) = rgba[i * 4 + 0]; // R
+        img.at(static_cast<int>(i % w), static_cast<int>(i / w), 1) = rgba[i * 4 + 1]; // G
+        img.at(static_cast<int>(i % w), static_cast<int>(i / w), 2) = rgba[i * 4 + 2]; // B
+    }
+    return img;
+}
+
+EMSCRIPTEN_KEEPALIVE
+void init_me_session(uint8_t* ref_ptr, int ref_w, int ref_h,
+                     uint8_t* cur_ptr, int cur_w, int cur_h) {
+    if (!ref_ptr || !cur_ptr) return;
+    Image ref = rgbaToRgbImage(ref_ptr, ref_w, ref_h);
+    Image cur = rgbaToRgbImage(cur_ptr, cur_w, cur_h);
+    g_me.loadFrames(ref, cur);
+    g_mvs.clear();
+    g_search_steps.clear();
+}
+
+// Returns a malloc'd buffer of numBlocks × [int32 dx, int32 dy, float64 mad].
+// Layout per entry: 4B dx | 4B dy | 8B mad = 16 bytes.
+// Caller must free the pointer.
+EMSCRIPTEN_KEEPALIVE
+int run_motion_estimation(int block_size, int search_range, int algorithm) {
+    if (g_me.frameWidth() == 0) return 0;
+    g_mvs = (algorithm == 1)
+        ? g_me.threeStepSearch(block_size, search_range)
+        : g_me.fullSearch(block_size, search_range);
+
+    const size_t n = g_mvs.size();
+    // 4B dx + 4B dy + 8B mad = 16 bytes per vector
+    uint8_t* buf = (uint8_t*)malloc(n * 16);
+    if (!buf) return 0;
+
+    for (size_t i = 0; i < n; ++i) {
+        int32_t dx  = static_cast<int32_t>(g_mvs[i].dx);
+        int32_t dy  = static_cast<int32_t>(g_mvs[i].dy);
+        double  mad = g_mvs[i].mad;
+        memcpy(buf + i * 16 + 0, &dx,  4);
+        memcpy(buf + i * 16 + 4, &dy,  4);
+        memcpy(buf + i * 16 + 8, &mad, 8);
+    }
+    return static_cast<int>(reinterpret_cast<uintptr_t>(buf));
+}
+
+EMSCRIPTEN_KEEPALIVE
+int get_mv_count() {
+    return static_cast<int>(g_mvs.size());
+}
+
+// Returns a malloc'd RGBA buffer (width × height × 4 bytes) of the residual.
+// Caller must free.
+EMSCRIPTEN_KEEPALIVE
+int get_me_residual_ptr(int block_size) {
+    if (g_mvs.empty() || g_me.frameWidth() == 0) return 0;
+
+    Image residual = g_me.computeResidual(block_size, g_mvs);
+    const int w = residual.width();
+    const int h = residual.height();
+    const size_t n = static_cast<size_t>(w) * h;
+
+    uint8_t* buf = (uint8_t*)malloc(n * 4);
+    if (!buf) return 0;
+
+    for (size_t i = 0; i < n; ++i) {
+        uint8_t v = static_cast<uint8_t>(
+            std::max(0.0, std::min(residual.at(static_cast<int>(i % w),
+                                               static_cast<int>(i / w), 0), 255.0)));
+        buf[i * 4 + 0] = v;
+        buf[i * 4 + 1] = v;
+        buf[i * 4 + 2] = v;
+        buf[i * 4 + 3] = 255;
+    }
+    return static_cast<int>(reinterpret_cast<uintptr_t>(buf));
+}
+
+// Returns a malloc'd int32 array [x0,y0, x1,y1, ...] of candidates for one block.
+// Caller must free.
+EMSCRIPTEN_KEEPALIVE
+int get_search_steps(int bx, int by, int block_size, int search_range) {
+    if (g_me.frameWidth() == 0) return 0;
+    g_search_steps = g_me.getSearchSteps(bx, by, block_size, search_range);
+
+    const size_t n = g_search_steps.size();
+    int32_t* buf = (int32_t*)malloc(n * 2 * sizeof(int32_t));
+    if (!buf) return 0;
+
+    for (size_t i = 0; i < n; ++i) {
+        buf[i * 2 + 0] = static_cast<int32_t>(g_search_steps[i].first);
+        buf[i * 2 + 1] = static_cast<int32_t>(g_search_steps[i].second);
+    }
+    return static_cast<int>(reinterpret_cast<uintptr_t>(buf));
+}
+
+EMSCRIPTEN_KEEPALIVE
+int get_search_step_count() {
+    return static_cast<int>(g_search_steps.size());
 }
 
 } // extern "C"
