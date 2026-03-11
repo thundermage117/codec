@@ -580,7 +580,7 @@ export function startReconstructionAnimation(): void {
 
     // Resume if paused mid-animation
     if (reconState !== null) {
-        reconState.startTime = Date.now() - reconState.currentIndex * RECON_STEP_MS;
+        reconState.startTime = performance.now() - reconState.currentIndex * RECON_STEP_MS;
         setReconstructionButtonIcon(true);
         reconstructionAnimationId = requestAnimationFrame(runReconFrame);
         return;
@@ -603,7 +603,7 @@ export function startReconstructionAnimation(): void {
         currentIndex: 0,
         lastBasisPattern: null,
         lastBasisCoeff: 0,
-        startTime: Date.now(),
+        startTime: performance.now(),
         lastZigzagIdx: 0,
         lastRawCoeff: 0,
     };
