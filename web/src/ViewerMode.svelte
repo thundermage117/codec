@@ -1,20 +1,22 @@
 <script lang="ts">
     import { onDestroy, onMount } from 'svelte';
     import { appState, ViewMode, type ViewModeValue } from './lib/state.svelte.js';
-    import { processImage, getViewPtr, getStats, free, setViewTint, inspectBlockData, getCoeffHistogram, getLastBitEstimate } from './lib/wasm-bridge.js';
+    import { processImage, getViewPtr, getStats, free, setViewTint, getLastBitEstimate } from './lib/wasm-bridge.js';
     import { handleFileSelect, loadImageFromUrl } from './lib/image-manager.js';
     import { inspectBlock } from './lib/inspection.js';
+    import { formatBytes } from './lib/format.js';
     import ImageViewer from './lib/components/ImageViewer.svelte';
+    import AppHeader from './lib/components/viewer/AppHeader.svelte';
+    import RdChart, { type RdPoint } from './lib/components/viewer/RdChart.svelte';
+    import CoeffHistogram from './lib/components/viewer/CoeffHistogram.svelte';
+    import ImageSourcePanel from './lib/components/viewer/ImageSourcePanel.svelte';
+    import CodecControls from './lib/components/viewer/CodecControls.svelte';
+    import MetricsPanel from './lib/components/viewer/MetricsPanel.svelte';
+    import ToolsPanel from './lib/components/viewer/ToolsPanel.svelte';
 
-    let originalCanvas: HTMLCanvasElement;
-    let processedCanvas: HTMLCanvasElement;
+    let originalCanvas: HTMLCanvasElement | undefined = $state();
+    let processedCanvas: HTMLCanvasElement | undefined = $state();
     let dropZoneVisible = $state(!appState.originalImageData);
-    type RdPoint = {
-        quality: number;
-        psnr: number;
-        bitrate: number;
-        estimatedBytes: number;
-    };
     let rdPointsDct = $state<RdPoint[]>([]);
     let rdPointsDwt = $state<RdPoint[]>([]);
     let rdLoading = $state(false);
@@ -33,8 +35,6 @@
     let pendingOverlayBlock: BlockCoord = null;
     let rdDeferTimer: ReturnType<typeof setTimeout> | null = null;
     let rdIdleHandle: number | null = null;
-    let qualitySliderValue = $state(appState.quality);
-    let isQualitySliderInteracting = false;
 
     // ===== Zoom =====
     const ZOOM_LEVEL = 3;
@@ -69,7 +69,6 @@
         }
     });
 
-
     function toggleZoomMode() {
         isZoomMode = !isZoomMode;
         if (!isZoomMode) { zoom = 1; }
@@ -78,7 +77,6 @@
     function resetZoom() {
         zoom = 1;
     }
-
 
     onMount(() => {
         // Ensure we're in a view mode supported by the viewer UI
@@ -96,7 +94,6 @@
 
             // Render to the new canvas elements
             render();
-
 
             // Update UI state
             updateFileSizeEstimate();
@@ -229,12 +226,6 @@
         }
     });
 
-    // Keep slider UI in sync with committed quality changes from non-slider actions.
-    $effect(() => {
-        const q = appState.quality;
-        if (!isQualitySliderInteracting) qualitySliderValue = q;
-    });
-
     // Just re-render on view mode change (no reprocessing)
     $effect(() => {
         const _vm = appState.currentViewMode;
@@ -259,6 +250,7 @@
 
     function loadFile(file: File) {
         if (!file || !file.type.startsWith('image/')) return;
+        if (!originalCanvas || !processedCanvas) return;
         handleFileSelect(file, originalCanvas, processedCanvas, () => {
             activeTestImageIndex = null;
             appState.quality = 50;
@@ -270,35 +262,10 @@
         });
     }
 
-    function onFileInput(e: Event) {
-        const file = (e.target as HTMLInputElement).files?.[0];
-        if (file) loadFile(file);
-    }
-
-    function onDrop(e: DragEvent) {
-        e.preventDefault();
-        dropZoneVisible = false;
-        const file = e.dataTransfer?.files[0];
-        if (file) loadFile(file);
-    }
-
-    function openFilePicker() {
-        document.getElementById('fileInput')?.click();
-    }
-
-    function onDropZoneKeyDown(e: KeyboardEvent) {
-        if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            openFilePicker();
-        }
-    }
-
-    const TEST_IMAGE_COUNT = 20; // 0 to 24 (Kodak dataset)
-    let testImagesOpen = $state(false);
     let activeTestImageIndex = $state<number | null>(null);
 
     function loadTestImage(index: number) {
-        if (!appState.wasmReady) return;
+        if (!appState.wasmReady || !originalCanvas || !processedCanvas) return;
         loadImageFromUrl(`/test-images/${index}.png`, originalCanvas, processedCanvas, () => {
             activeTestImageIndex = index;
             appState.quality = 50;
@@ -310,26 +277,11 @@
         });
     }
 
-
     // ===== Comparison slider =====
 
     function updateComparisonView(percent: number) {
         appState.comparisonPercent = Math.max(0, Math.min(100, percent));
     }
-
-    function onQualitySliderInput(event: Event): void {
-        const nextValue = Number((event.target as HTMLInputElement).value);
-        qualitySliderValue = nextValue;
-        isQualitySliderInteracting = true;
-    }
-
-    function commitQualitySlider(): void {
-        isQualitySliderInteracting = false;
-        if (appState.quality !== qualitySliderValue) {
-            appState.quality = qualitySliderValue;
-        }
-    }
-
 
     let isDraggingComparison = false;
     // Track whether the pointer moved enough to count as a drag vs. a click
@@ -408,7 +360,6 @@
         }
     }
 
-
     function enterInspectorMode() {
         appState.appMode = 'inspector';
         appState.isInspectMode = true;
@@ -421,78 +372,7 @@
         if (appState.isInspectMode) scheduleOverlayDraw(null);
     }
 
-    // ===== Inspect toggle =====
-
-    function onInspectToggle(e: Event) {
-        const checked = (e.target as HTMLInputElement).checked;
-        if (checked) {
-            appState.isInspectMode = true;
-            drawOriginalBaseImage(true);
-            applyOverlayBlock(appState.highlightBlock);
-        } else {
-            appState.isInspectMode = false;
-            appState.highlightBlock = null;
-            appState.inspectedBlock = null;
-            cancelOverlayDraw();
-            drawOriginalBaseImage(true);
-        }
-    }
-
     // ===== File size estimate =====
-
-    function formatBytes(bytes: number): string {
-        if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-        if (bytes >= 1024) return (bytes / 1024).toFixed(1) + ' KB';
-        return bytes + ' B';
-    }
-
-    function estimateFileSizeBytesForQuality(quality: number, transformType?: number): number | null {
-        if (!appState.wasmReady || !appState.originalImageData) return null;
-
-        const w = appState.imgWidth;
-        const h = appState.imgHeight;
-        const blocksX = Math.floor(w / 8);
-        const blocksY = Math.floor(h / 8);
-        const totalBlocks = blocksX * blocksY;
-        if (totalBlocks === 0) return null;
-
-        const sampleCount = Math.min(16, totalBlocks);
-        let totalZeros = 0;
-        const sampledIndices = new Set<number>();
-
-        for (let i = 0; i < sampleCount; i++) {
-            const idx = Math.floor((i / sampleCount) * totalBlocks);
-            if (sampledIndices.has(idx)) continue;
-            sampledIndices.add(idx);
-            try {
-                const ptr = inspectBlockData(idx % blocksX, Math.floor(idx / blocksX), 0, quality, transformType);
-                if (!ptr) continue;
-                const blockSize = 64;
-                const startBytes = ptr + (3 * blockSize * 8);
-                const dataView = new DataView(Module.HEAPU8.buffer);
-                let zeros = 0;
-                for (let j = 0; j < blockSize; j++) {
-                    if (Math.abs(dataView.getFloat64(startBytes + (j * 8), true)) < 0.5) zeros++;
-                }
-                totalZeros += zeros;
-            } catch { /* skip */ }
-        }
-
-        const actualSampled = sampledIndices.size;
-        if (actualSampled === 0) return null;
-
-        const avgZeroRatio = totalZeros / (actualSampled * 64);
-        const bitsPerNonZero = 4.5;
-        const totalCoefficients = totalBlocks * 64 * 3;
-        const estimatedBits = totalCoefficients * (1 - avgZeroRatio) * bitsPerNonZero;
-        const headerOverhead = 600;
-        let estimatedBytes = Math.round(estimatedBits / 8) + headerOverhead;
-
-        if (appState.currentCsMode === 422) estimatedBytes = Math.round(estimatedBytes * 0.75);
-        else if (appState.currentCsMode === 420) estimatedBytes = Math.round(estimatedBytes * 0.6);
-        estimatedBytes = Math.max(estimatedBytes, headerOverhead + 100);
-        return estimatedBytes;
-    }
 
     function updateFileSizeEstimate() {
         if (!appState.wasmReady || !appState.originalImageData) return;
@@ -614,78 +494,6 @@
         rdError = '';
     });
 
-    type MetricState = 'good' | 'moderate' | 'poor';
-
-    function getPsnrState(value: number): MetricState {
-        if (value >= 40) return 'good';
-        if (value >= 30) return 'moderate';
-        return 'poor';
-    }
-
-    function getSsimState(value: number): MetricState {
-        if (value >= 0.95) return 'good';
-        if (value >= 0.9) return 'moderate';
-        return 'poor';
-    }
-
-    function getStateLabel(state: MetricState): string {
-        if (state === 'good') return 'Strong';
-        if (state === 'moderate') return 'Fair';
-        return 'Weak';
-    }
-
-    function getStateTrend(state: MetricState): string {
-        if (state === 'good') return '↑';
-        if (state === 'moderate') return '→';
-        return '↓';
-    }
-
-    function smoothSvgPath(pts: {x: number, y: number}[]): string {
-        if (pts.length < 2) return pts.length === 1 ? `M ${pts[0].x},${pts[0].y}` : '';
-        let d = `M ${pts[0].x},${pts[0].y}`;
-        for (let i = 1; i < pts.length; i++) {
-            const p0 = pts[i - 1];
-            const p1 = pts[i];
-            const cpx = (p0.x + p1.x) / 2;
-            d += ` C ${cpx},${p0.y} ${cpx},${p1.y} ${p1.x},${p1.y}`;
-        }
-        return d;
-    }
-
-    // ===== Coefficient Histogram =====
-
-    const HIST_BINS = 32;
-    const HIST_MAX = 512.0;
-
-    type HistData = { dct: number[]; dwt: number[] };
-    let histData = $state<HistData | null>(null);
-    let histLoading = $state(false);
-    let histJobId = 0;
-
-    function generateHistogram() {
-        if (!appState.wasmReady || !appState.originalImageData) return;
-        const jobId = ++histJobId;
-        histLoading = true;
-        // Yield one frame so "Computing…" appears before the synchronous WASM call
-        setTimeout(() => {
-            if (jobId !== histJobId) return;
-            try {
-                histData = getCoeffHistogram(HIST_BINS, HIST_MAX);
-            } finally {
-                if (jobId === histJobId) histLoading = false;
-            }
-        }, 0);
-    }
-
-    // Clear histogram when image changes
-    $effect(() => {
-        const _ready = appState.wasmReady;
-        const _image = appState.originalImageData;
-        histJobId++;
-        histData = null;
-        histLoading = false;
-    });
-
     // ===== Keyboard shortcuts =====
 
     function onDocumentKeyDown(e: KeyboardEvent) {
@@ -695,23 +503,6 @@
         }
     }
 
-    // ===== Theme toggle =====
-
-    let isDarkTheme = $state(
-        typeof document !== 'undefined' &&
-        document.documentElement.getAttribute('data-theme') === 'dark'
-    );
-
-    function toggleTheme() {
-        if (isDarkTheme) {
-            document.documentElement.removeAttribute('data-theme');
-            localStorage.setItem('theme', 'light');
-        } else {
-            document.documentElement.setAttribute('data-theme', 'dark');
-            localStorage.setItem('theme', 'dark');
-        }
-        isDarkTheme = !isDarkTheme;
-    }
 </script>
 
 <svelte:document onmousemove={onDocumentMouseMove} onmouseup={onDocumentMouseUp} onkeydown={onDocumentKeyDown} />
@@ -719,39 +510,7 @@
 <!-- ===== VIEWER MODE ===== -->
 <div id="viewerMode">
 
-    <header>
-        <h1>WASM Codec Explorer</h1>
-        <div class="header-badges">
-            <div class="privacy-badge">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-                </svg>
-                <span>Processed locally on your device</span>
-            </div>
-            <a href="https://github.com/thundermage117/codec" class="github-link" target="_blank" rel="noopener noreferrer">
-                <img src="/assets/GitHub_Invertocat_Black.svg" alt="GitHub Logo" width="16" height="16">
-                <span>View Source on GitHub</span>
-            </a>
-            <button class="theme-toggle" id="themeToggle" aria-label="Toggle dark mode" onclick={toggleTheme}>
-                <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round"
-                    style={isDarkTheme ? 'display:none' : 'display:block'}>
-                    <circle cx="12" cy="12" r="5"></circle>
-                    <line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line>
-                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-                    <line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line>
-                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
-                </svg>
-                <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round"
-                    style={isDarkTheme ? 'display:block' : 'display:none'}>
-                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-                </svg>
-            </button>
-        </div>
-    </header>
+    <AppHeader />
 
     <div class="container">
         <div class="main-column">
@@ -837,589 +596,26 @@
             </div>
         </div>
 
-        <div class="card rd-card">
-            <section class="rd-chart-panel" aria-live="polite">
-                <div class="rd-chart-header">
-                    <div>
-                        <h3>Rate-Distortion Curve</h3>
-                        <p>Quality tradeoff: higher bitrate usually improves PSNR.</p>
-                    </div>
-                    {#if rdLoading}
-                    <span class="rd-chart-status">Sampling…</span>
-                    {:else if rdPointsDct.length > 0 || rdPointsDwt.length > 0}
-                    <span class="rd-chart-status">{rdPointsDct.length + rdPointsDwt.length} points</span>
-                    {/if}
-                    {#if appState.originalImageData && !rdLoading}
-                    <button class="tool-btn rd-generate-btn" onclick={() => void rebuildRdCurve()} style="margin-left: auto;">
-                        {rdPointsDct.length > 0 ? 'Regenerate' : 'Generate'}
-                    </button>
-                    {/if}
-                </div>
+        <RdChart {rdPointsDct} {rdPointsDwt} {rdLoading} {rdError}
+            sampleCount={RD_QUALITIES.length}
+            onGenerate={() => void rebuildRdCurve()} />
 
-                {#if !appState.originalImageData}
-                <div class="rd-chart-empty">Load an image to generate an RD plot.</div>
-                {:else if rdError}
-                <div class="rd-chart-empty">{rdError}</div>
-                {:else if rdLoading && rdPointsDct.length === 0 && rdPointsDwt.length === 0}
-                <div class="rd-chart-empty">Sampling {RD_QUALITIES.length} quality levels…</div>
-                {:else if rdPointsDct.length === 0 && rdPointsDwt.length === 0}
-                <div class="rd-chart-empty">Click Generate to compute the rate-distortion curve.</div>
-                {:else if rdPointsDct.length >= 2 || rdPointsDwt.length >= 2}
-                {@const svgW = 700}
-                {@const svgH = 280}
-                {@const padL = 64}
-                {@const padR = 20}
-                {@const padT = 18}
-                {@const padB = 52}
-                {@const allPoints = [...rdPointsDct, ...rdPointsDwt]}
-                {@const xMinRaw = Math.min(...allPoints.map((p) => p.bitrate))}
-                {@const xMaxRaw = Math.max(...allPoints.map((p) => p.bitrate))}
-                {@const yMinRaw = Math.min(...allPoints.map((p) => p.psnr))}
-                {@const yMaxRaw = Math.max(...allPoints.map((p) => p.psnr))}
-                {@const xPad = Math.max(0.05, (xMaxRaw - xMinRaw) * 0.08)}
-                {@const yPad = Math.max(0.5, (yMaxRaw - yMinRaw) * 0.12)}
-                {@const xMin = xMinRaw - xPad}
-                {@const xMax = xMaxRaw + xPad}
-                {@const yMin = yMinRaw - yPad}
-                {@const yMax = yMaxRaw + yPad}
-                {@const chartW = svgW - padL - padR}
-                {@const chartH = svgH - padT - padB}
-                {@const mapX = (v: number) => padL + ((v - xMin) / (xMax - xMin || 1)) * chartW}
-                {@const mapY = (v: number) => svgH - padB - ((v - yMin) / (yMax - yMin || 1)) * chartH}
-                {@const xTicks = Array.from({length: 5}, (_, i) => xMinRaw + i * (xMaxRaw - xMinRaw) / 4)}
-                {@const yTicks = Array.from({length: 5}, (_, i) => yMinRaw + i * (yMaxRaw - yMinRaw) / 4)}
-                
-                {@const ptsDct = rdPointsDct.map(p => ({ x: mapX(p.bitrate), y: mapY(p.psnr) }))}
-                {@const curvePathDct = smoothSvgPath(ptsDct)}
-                {@const fillPathDct = ptsDct.length > 0 ? curvePathDct + ` L ${ptsDct[ptsDct.length - 1].x},${svgH - padB} L ${ptsDct[0].x},${svgH - padB} Z` : ''}
-                
-                {@const ptsDwt = rdPointsDwt.map(p => ({ x: mapX(p.bitrate), y: mapY(p.psnr) }))}
-                {@const curvePathDwt = smoothSvgPath(ptsDwt)}
-                {@const fillPathDwt = ptsDwt.length > 0 ? curvePathDwt + ` L ${ptsDwt[ptsDwt.length - 1].x},${svgH - padB} L ${ptsDwt[0].x},${svgH - padB} Z` : ''}
-
-                {@const targetPoints = appState.transformType === 0 ? rdPointsDct : rdPointsDwt}
-                {@const currentPoint = targetPoints.length > 0 
-                    ? targetPoints.reduce((best, p) => Math.abs(p.quality - appState.quality) < Math.abs(best.quality - appState.quality) ? p : best)
-                    : (allPoints.reduce((best, p) => Math.abs(p.quality - appState.quality) < Math.abs(best.quality - appState.quality) ? p : best))}
-                {@const cpx = mapX(currentPoint.bitrate)}
-                {@const cpy = mapY(currentPoint.psnr)}
-                <div class="rd-chart-svg-wrap">
-                    <svg viewBox={`0 0 ${svgW} ${svgH}`} role="img" aria-label="Rate-distortion curve">
-                        <defs>
-                            <linearGradient id="rdFillGrad" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" style="stop-color: var(--primary); stop-opacity: 0.15;"/>
-                                <stop offset="100%" style="stop-color: var(--primary); stop-opacity: 0.01;"/>
-                            </linearGradient>
-                            <linearGradient id="rdFillGradDwt" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" style="stop-color: #f59e0b; stop-opacity: 0.15;"/>
-                                <stop offset="100%" style="stop-color: #f59e0b; stop-opacity: 0.01;"/>
-                            </linearGradient>
-                            <clipPath id="rdClip">
-                                <rect x={padL} y={padT} width={chartW} height={chartH + 1}/>
-                            </clipPath>
-                        </defs>
-                        {#each yTicks as tick}
-                        <line x1={padL} y1={mapY(tick)} x2={svgW - padR} y2={mapY(tick)} class="rd-grid-line"/>
-                        {/each}
-                        {#each xTicks as tick}
-                        <line x1={mapX(tick)} y1={padT} x2={mapX(tick)} y2={svgH - padB} class="rd-grid-line"/>
-                        {/each}
-                        <line x1={padL} y1={svgH - padB} x2={svgW - padR} y2={svgH - padB} class="rd-axis-line"/>
-                        <line x1={padL} y1={padT} x2={padL} y2={svgH - padB} class="rd-axis-line"/>
-                        
-                        <!-- DCT Curve -->
-                        {#if ptsDct.length > 0}
-                        <path d={fillPathDct} class="rd-fill" clip-path="url(#rdClip)"/>
-                        <path d={curvePathDct} class="rd-curve-path" clip-path="url(#rdClip)"/>
-                        {/if}
-
-                        <!-- DWT Curve -->
-                        {#if ptsDwt.length > 0}
-                        <path d={fillPathDwt} class="rd-fill-dwt" clip-path="url(#rdClip)"/>
-                        <path d={curvePathDwt} class="rd-curve-path rd-curve-path-dwt" clip-path="url(#rdClip)"/>
-                        {/if}
-
-                        <line x1={cpx} y1={padT} x2={cpx} y2={svgH - padB} class="rd-crosshair" style="stroke: {appState.transformType === 0 ? 'var(--primary)' : '#f59e0b'}"/>
-                        <line x1={padL} y1={cpy} x2={svgW - padR} y2={cpy} class="rd-crosshair" style="stroke: {appState.transformType === 0 ? 'var(--primary)' : '#f59e0b'}"/>
-                        
-                        {#each rdPointsDct as point}
-                        <circle
-                            cx={mapX(point.bitrate)}
-                            cy={mapY(point.psnr)}
-                            r={point.quality === appState.quality && appState.transformType === 0 ? 5.5 : 3.5}
-                            class="rd-point"
-                            class:rd-point-current={point.quality === appState.quality && appState.transformType === 0}
-                            role="button"
-                            tabindex="0"
-                            aria-label="Set quality to {point.quality}"
-                            onclick={() => { appState.quality = point.quality; appState.transformType = 0; }}
-                            onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { appState.quality = point.quality; appState.transformType = 0; } }}>
-                            <title>DCT: Q{point.quality} · {point.psnr.toFixed(2)} dB · {point.bitrate.toFixed(2)} bpp</title>
-                        </circle>
-                        {/each}
-
-                        {#each rdPointsDwt as point}
-                        <circle
-                            cx={mapX(point.bitrate)}
-                            cy={mapY(point.psnr)}
-                            r={point.quality === appState.quality && appState.transformType === 1 ? 5.5 : 3.5}
-                            class="rd-point rd-point-dwt"
-                            class:rd-point-current-dwt={point.quality === appState.quality && appState.transformType === 1}
-                            role="button"
-                            tabindex="0"
-                            aria-label="Set quality to {point.quality}"
-                            onclick={() => { appState.quality = point.quality; appState.transformType = 1; }}
-                            onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { appState.quality = point.quality; appState.transformType = 1; } }}>
-                            <title>DWT: Q{point.quality} · {point.psnr.toFixed(2)} dB · {point.bitrate.toFixed(2)} bpp</title>
-                        </circle>
-                        {/each}
-
-                        <text x={cpx} y={Math.max(padT + 12, cpy - 10)} class="rd-point-label rd-axis-text-middle" style="fill: {appState.transformType === 0 ? 'var(--primary)' : '#f59e0b'}">Q{currentPoint.quality}</text>
-                        
-                        <!-- Legend -->
-                        <rect x={padL + 10} y={padT + 5} width={10} height={3} class="rd-curve-path" style="stroke-width: 2;"/>
-                        <text x={padL + 25} y={padT + 9} class="rd-axis-text">DCT</text>
-                        <rect x={padL + 60} y={padT + 5} width={10} height={3} class="rd-curve-path rd-curve-path-dwt" style="stroke-width: 2;"/>
-                        <text x={padL + 75} y={padT + 9} class="rd-axis-text">DWT (Haar)</text>
-                        {#each xTicks as tick}
-                        <text x={mapX(tick)} y={svgH - padB + 14} class="rd-axis-text rd-axis-text-middle">{tick.toFixed(2)}</text>
-                        {/each}
-                        {#each yTicks as tick}
-                        <text x={padL - 6} y={mapY(tick) + 4} class="rd-axis-text rd-axis-text-end">{tick.toFixed(1)}</text>
-                        {/each}
-                        <text x={(padL + svgW - padR) / 2} y={svgH - 4} class="rd-axis-title rd-axis-text-middle">Bitrate (bits per pixel)</text>
-                        <text x={14} y={(padT + svgH - padB) / 2} transform={`rotate(-90 14 ${(padT + svgH - padB) / 2})`} class="rd-axis-title rd-axis-text-middle">PSNR Y (dB)</text>
-                    </svg>
-                </div>
-
-                <div class="rd-current-callout">
-                    <div class="rd-callout-item">
-                        <span class="rd-callout-label">Quality</span>
-                        <span class="rd-callout-value">Q{currentPoint.quality}</span>
-                    </div>
-                    <div class="rd-callout-sep"></div>
-                    <div class="rd-callout-item">
-                        <span class="rd-callout-label">Bitrate</span>
-                        <span class="rd-callout-value">{currentPoint.bitrate.toFixed(2)} bpp</span>
-                    </div>
-                    <div class="rd-callout-sep"></div>
-                    <div class="rd-callout-item">
-                        <span class="rd-callout-label">PSNR Y</span>
-                        <span class="rd-callout-value">{currentPoint.psnr.toFixed(2)} dB</span>
-                    </div>
-                    <div class="rd-callout-sep"></div>
-                    <div class="rd-callout-item">
-                        <span class="rd-callout-label">Est. size</span>
-                        <span class="rd-callout-value">~{formatBytes(currentPoint.estimatedBytes)}</span>
-                    </div>
-                </div>
-                {:else}
-                <div class="rd-chart-empty">Need more samples to render an RD curve.</div>
-                {/if}
-            </section>
-        </div>
-
-        <div class="card hist-card">
-            <section class="rd-chart-panel" aria-live="polite">
-                <div class="rd-chart-header">
-                    <div>
-                        <h3>Coefficient Histogram <span class="beta-badge">Beta</span></h3>
-                        <p>AC coefficient magnitude distribution — DWT concentrates more energy near zero, explaining its advantage at low bitrates.</p>
-                    </div>
-                    {#if histLoading}
-                    <span class="rd-chart-status">Computing…</span>
-                    {:else if histData}
-                    <span class="rd-chart-status">{appState.imgWidth / 8 | 0}×{appState.imgHeight / 8 | 0} blocks</span>
-                    {/if}
-                    {#if appState.originalImageData && !histLoading}
-                    <button class="tool-btn rd-generate-btn" onclick={generateHistogram} style="margin-left: auto;">
-                        {histData ? 'Regenerate' : 'Generate'}
-                    </button>
-                    {/if}
-                </div>
-
-                {#if !appState.originalImageData}
-                <div class="rd-chart-empty">Load an image to generate a coefficient histogram.</div>
-                {:else if histLoading}
-                <div class="rd-chart-empty">Computing transform coefficients for all blocks…</div>
-                {:else if !histData}
-                <div class="rd-chart-empty">Click Generate to compare DCT vs DWT coefficient sparsity.</div>
-                {:else}
-                {@const svgW = 700}
-                {@const svgH = 240}
-                {@const padL = 52}
-                {@const padR = 24}
-                {@const padT = 18}
-                {@const padB = 48}
-                {@const chartW = svgW - padL - padR}
-                {@const chartH = svgH - padT - padB}
-                {@const maxY = Math.max(...histData.dct, ...histData.dwt) * 1.15}
-                {@const groupW = chartW / HIST_BINS}
-                {@const barW = (groupW - 2) / 2}
-                {@const binWidth = HIST_MAX / HIST_BINS}
-                {@const mapBarY = (v: number) => padT + chartH - (v / maxY) * chartH}
-                <div class="rd-chart-svg-wrap">
-                    <svg viewBox={`0 0 ${svgW} ${svgH}`} role="img" aria-label="DCT vs DWT coefficient histogram">
-                        <defs>
-                            <clipPath id="histClip">
-                                <rect x={padL} y={padT} width={chartW} height={chartH + 1}/>
-                            </clipPath>
-                        </defs>
-                        <!-- Grid lines -->
-                        {#each [0.25, 0.5, 0.75, 1.0] as frac}
-                        {@const gy = padT + chartH * (1 - frac)}
-                        <line x1={padL} y1={gy} x2={svgW - padR} y2={gy} class="rd-grid-line"/>
-                        <text x={padL - 5} y={gy + 4} class="rd-axis-text rd-axis-text-end">{(maxY * frac * 100).toFixed(1)}%</text>
-                        {/each}
-                        <!-- Axes -->
-                        <line x1={padL} y1={padT} x2={padL} y2={padT + chartH} class="rd-axis-line"/>
-                        <line x1={padL} y1={padT + chartH} x2={svgW - padR} y2={padT + chartH} class="rd-axis-line"/>
-
-                        <!-- DCT bars (left of each group) -->
-                        {#each histData.dct as val, i}
-                        {@const x = padL + i * groupW + 1}
-                        {@const barH = Math.max(0, (val / maxY) * chartH)}
-                        <rect x={x} y={padT + chartH - barH} width={barW} height={barH} class="hist-bar-dct" clip-path="url(#histClip)"/>
-                        {/each}
-
-                        <!-- DWT bars (right of each group) -->
-                        {#each histData.dwt as val, i}
-                        {@const x = padL + i * groupW + 1 + barW}
-                        {@const barH = Math.max(0, (val / maxY) * chartH)}
-                        <rect x={x} y={padT + chartH - barH} width={barW} height={barH} class="hist-bar-dwt" clip-path="url(#histClip)"/>
-                        {/each}
-
-                        <!-- X axis labels every 8 bins -->
-                        {#each {length: Math.floor(HIST_BINS / 8) + 1} as _, k}
-                        {@const binIdx = k * 8}
-                        {#if binIdx <= HIST_BINS}
-                        <text x={padL + binIdx * groupW} y={padT + chartH + 14} class="rd-axis-text rd-axis-text-middle">
-                            {binIdx === HIST_BINS ? `${Math.round(HIST_MAX)}+` : Math.round(binIdx * binWidth)}
-                        </text>
-                        {/if}
-                        {/each}
-
-                        <!-- Axis titles -->
-                        <text x={(padL + svgW - padR) / 2} y={svgH - 2} class="rd-axis-title rd-axis-text-middle">AC Coefficient Magnitude</text>
-                        <text x={11} y={(padT + padT + chartH) / 2} transform={`rotate(-90 11 ${(padT + padT + chartH) / 2})`} class="rd-axis-title rd-axis-text-middle">Fraction</text>
-
-                        <!-- Legend -->
-                        <rect x={svgW - padR - 90} y={padT + 2} width={9} height={9} class="hist-bar-dct"/>
-                        <text x={svgW - padR - 77} y={padT + 10} class="rd-axis-text">DCT</text>
-                        <rect x={svgW - padR - 90} y={padT + 17} width={9} height={9} class="hist-bar-dwt"/>
-                        <text x={svgW - padR - 77} y={padT + 25} class="rd-axis-text">DWT (Haar)</text>
-                    </svg>
-                </div>
-
-                <!-- Sparsity callout — bin 0 = |coeff| < binWidth -->
-                {@const dctNZ = (histData.dct[0] * 100)}
-                {@const dwtNZ = (histData.dwt[0] * 100)}
-                {@const gain = dwtNZ - dctNZ}
-                <div class="rd-current-callout">
-                    <div class="rd-callout-item">
-                        <span class="rd-callout-label">DCT near-zero (&lt;{Math.round(binWidth)})</span>
-                        <span class="rd-callout-value hist-dct-value">{dctNZ.toFixed(1)}%</span>
-                    </div>
-                    <div class="rd-callout-sep"></div>
-                    <div class="rd-callout-item">
-                        <span class="rd-callout-label">DWT near-zero (&lt;{Math.round(binWidth)})</span>
-                        <span class="rd-callout-value hist-dwt-value">{dwtNZ.toFixed(1)}%</span>
-                    </div>
-                    <div class="rd-callout-sep"></div>
-                    <div class="rd-callout-item">
-                        <span class="rd-callout-label">DWT sparsity gain</span>
-                        <span class="rd-callout-value" class:stat-good={gain > 0} class:stat-poor={gain < 0}>
-                            {gain >= 0 ? '+' : ''}{gain.toFixed(1)} pp
-                        </span>
-                    </div>
-                </div>
-                {/if}
-            </section>
-        </div>
+        <CoeffHistogram />
         </div>
         <div class="card controls controls-card">
             <!-- Drop Zone / Onboarding -->
-            <input type="file" id="fileInput" accept="image/*"
-                disabled={!appState.wasmReady}
-                onchange={onFileInput}
-                style="display:none">
             <details class="viewer-section" open>
                 <summary class="viewer-section-title">Basic</summary>
                 <div class="viewer-section-body">
-                    {#if !appState.wasmReady}
-                    <div class="stats">
-                        <span id="status">{appState.status}</span>
-                    </div>
-                    {/if}
-
-                    {#if dropZoneVisible}
-                    <div class="drop-zone" id="dropZone"
-                        role="button"
-                        tabindex="0"
-                        aria-label="Upload image"
-                        onclick={openFilePicker}
-                        onkeydown={onDropZoneKeyDown}
-                        ondragover={(e) => { e.preventDefault(); (e.currentTarget as HTMLElement).classList.add('drag-over'); }}
-                        ondragleave={(e) => (e.currentTarget as HTMLElement).classList.remove('drag-over')}
-                        ondrop={onDrop}>
-                        <svg class="drop-zone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
-                            stroke-linecap="round" stroke-linejoin="round">
-                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                            <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                            <path d="M21 15l-5-5L5 21"></path>
-                        </svg>
-                        <div class="drop-zone-text">Drop an image here</div>
-                        <div class="drop-zone-hint">or <span class="browse-link">browse to upload</span></div>
-                    </div>
-                    {:else}
-                    <button class="tool-btn" onclick={openFilePicker}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                            stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="16 16 12 12 8 16"></polyline>
-                            <line x1="12" y1="12" x2="12" y2="21"></line>
-                            <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"></path>
-                        </svg>
-                        Load new image
-                    </button>
-                    {/if}
-
-                    <!-- Sample / built-in test images -->
-                    <div class="test-images-section">
-                        <button
-                            class="test-images-toggle"
-                            class:has-active={activeTestImageIndex !== null}
-                            onclick={() => testImagesOpen = !testImagesOpen}
-                            disabled={!appState.wasmReady}
-                            aria-expanded={testImagesOpen}>
-                            <!-- Mini preview strip: 3 sample thumbnails -->
-                            <div class="test-images-preview-strip" aria-hidden="true">
-                                {#each [1, 8, 15] as n}
-                                <img src="/test-images/{n}.png" alt="" />
-                                {/each}
-                            </div>
-                            <span class="test-images-toggle-label">
-                                Sample Images
-                                {#if activeTestImageIndex !== null}
-                                <span class="test-images-active-dot"></span>
-                                {/if}
-                            </span>
-                            <span class="test-images-count">{TEST_IMAGE_COUNT}</span>
-                            <svg class="chevron" class:open={testImagesOpen} width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                                <polyline points="6 9 12 15 18 9"></polyline>
-                            </svg>
-                        </button>
-                        {#if testImagesOpen}
-                        <div class="test-images-panel">
-                            <div class="test-images-scroll">
-                                <div class="test-images-grid">
-                                    {#each {length: TEST_IMAGE_COUNT} as _, i}
-                                    <button
-                                        class="test-img-btn"
-                                        class:active={activeTestImageIndex === i}
-                                        onclick={() => loadTestImage(i)}
-                                        title="Kodak #{i}"
-                                        aria-label="Load Kodak test image {i}">
-                                        <img src="/test-images/{i}.png" alt="" loading="lazy" />
-                                        <span class="test-img-label">{i}</span>
-                                        {#if activeTestImageIndex === i}
-                                        <span class="test-img-active-check" aria-hidden="true">
-                                            <svg width="8" height="8" viewBox="0 0 12 12" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                                                <polyline points="2 6 5 9 10 3"></polyline>
-                                            </svg>
-                                        </span>
-                                        {/if}
-                                    </button>
-                                    {/each}
-                                </div>
-                            </div>
-                            <p class="test-images-credit">Kodak Lossless True Color Image Suite</p>
-                        </div>
-                        {/if}
-                    </div>
-
-                    <div class="control-group">
-                        <label for="qualitySlider">
-                            Quality <span id="qualityValue">{qualitySliderValue}</span>
-                        </label>
-                        <div class="preset-group">
-                            {#each [{ q: 10, label: 'Low', desc: 'Thumbnails' }, { q: 50, label: 'Medium', desc: 'Web / Social' }, { q: 90, label: 'High', desc: 'Print / Archive' }] as preset}
-                            <button class="preset-btn" data-quality={preset.q}
-                                class:active={appState.quality === preset.q}
-                                disabled={!appState.wasmReady}
-                                onclick={() => { appState.quality = preset.q; }}>
-                                <span class="preset-label">{preset.label}</span>
-                                <span class="preset-desc">{preset.desc}</span>
-                            </button>
-                            {/each}
-                        </div>
-                        <input type="range" id="qualitySlider" min="1" max="100"
-                            value={qualitySliderValue}
-                            oninput={onQualitySliderInput}
-                            onchange={commitQualitySlider}
-                            onblur={commitQualitySlider}
-                            disabled={!appState.wasmReady}>
-                    </div>
-
-                    <div class="control-group">
-                        <div class="group-label">View Mode</div>
-                        <div class="toggle-group">
-                            {#each [
-                                { id: 'view_rgb', val: ViewMode.RGB, label: 'RGB' },
-                                { id: 'view_artifacts', val: ViewMode.Artifacts, label: 'Error' },
-                                { id: 'view_y', val: ViewMode.Y, label: 'Y' },
-                                { id: 'view_cr', val: ViewMode.Cr, label: 'Cr' },
-                                { id: 'view_cb', val: ViewMode.Cb, label: 'Cb' }
-                            ] as mode}
-                            <input type="radio" id={mode.id} name="view_mode"
-                                checked={appState.currentViewMode === mode.val}
-                                onchange={() => appState.currentViewMode = mode.val}>
-                            <label for={mode.id}>{mode.label}</label>
-                            {/each}
-                        </div>
-                        {#if appState.currentViewMode === ViewMode.Cr || appState.currentViewMode === ViewMode.Cb}
-                        <div style="display: flex; align-items: center; gap: 6px;">
-                            <div class="toggle-group tint-toggle-group" style="flex: 1;">
-                                <input type="radio" id="tint_color" name="tint_mode"
-                                    checked={appState.tintEnabled}
-                                    onchange={() => appState.tintEnabled = true}>
-                                <label for="tint_color">Color</label>
-                                <input type="radio" id="tint_gray" name="tint_mode"
-                                    checked={!appState.tintEnabled}
-                                    onchange={() => appState.tintEnabled = false}>
-                                <label for="tint_gray">Grayscale</label>
-                            </div>
-                            <div class="tooltip-container">
-                                <span class="info-icon">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <circle cx="12" cy="12" r="10"></circle>
-                                        <line x1="12" y1="16" x2="12" y2="12"></line>
-                                        <line x1="12" y1="8" x2="12.01" y2="8"></line>
-                                    </svg>
-                                </span>
-                                <div class="tooltip-content">
-                                    <strong>Why remove the tint?</strong><br>
-                                    The human eye is biologically wired to detect changes in brightness (Luminance) far
-                                    better than changes in color (Chrominance). Viewing these channels in grayscale
-                                    helps you see fine details and artifacts that get lost in the color tint.
-                                </div>
-                            </div>
-                        </div>
-                        {/if}
-                    </div>
-
-                    <div class="control-group">
-                        <div class="group-label">Chroma Subsampling</div>
-                        <div class="toggle-group">
-                            {#each [{ id: 'cs_444', val: 444, label: '4:4:4' }, { id: 'cs_422', val: 422, label: '4:2:2' }, { id: 'cs_420', val: 420, label: '4:2:0' }] as cs}
-                            <input type="radio" id={cs.id} name="chroma_subsampling"
-                                checked={appState.currentCsMode === cs.val}
-                                onchange={() => appState.currentCsMode = cs.val}>
-                            <label for={cs.id}>{cs.label}</label>
-                            {/each}
-                        </div>
-                    </div>
-
-                    <div class="control-group">
-                        <div class="group-label">Transform</div>
-                        <div class="toggle-group">
-                            {#each [{ id: 'v_transform_dct', val: 0, label: 'DCT' }, { id: 'v_transform_dwt', val: 1, label: 'DWT' }] as t}
-                            <input type="radio" id={t.id} name="v_transform_type"
-                                checked={appState.transformType === t.val}
-                                onchange={() => appState.transformType = t.val}>
-                            <label for={t.id} style="display: flex; align-items: center; justify-content: center; gap: 4px;">
-                                {t.label} 
-                                {#if t.val === 1}<span class="beta-badge" style="margin: 0;">BETA</span>{/if}
-                            </label>
-                            {/each}
-                        </div>
-                    </div>
+                    <ImageSourcePanel bind:dropZoneVisible {activeTestImageIndex}
+                        onFile={loadFile} onTestImage={loadTestImage} />
+                    <CodecControls />
                 </div>
             </details>
 
-            <details class="viewer-section" open>
-                <summary class="viewer-section-title">Analysis</summary>
-                <div class="viewer-section-body">
-                    {#if appState.originalImageData}
-                    <div class="compact-metrics-grid">
-                        <div class="metric-header-row">
-                            <div class="metric-col-label">Channel</div>
-                            <div class="metric-col-label">PSNR (dB)</div>
-                            <div class="metric-col-label">SSIM</div>
-                        </div>
-                        {#each [
-                            { channel: 'Y', psnr: appState.psnr.y, ssim: appState.ssim.y },
-                            { channel: 'Cr', psnr: appState.psnr.cr, ssim: appState.ssim.cr },
-                            { channel: 'Cb', psnr: appState.psnr.cb, ssim: appState.ssim.cb }
-                        ] as metric}
-                        {@const psnrState = getPsnrState(metric.psnr)}
-                        {@const ssimState = getSsimState(metric.ssim)}
-                        <div class="metric-row">
-                            <div class="metric-channel-name">{metric.channel}</div>
-                            <div class="metric-cell psnr-cell" class:stat-good={psnrState === 'good'} class:stat-moderate={psnrState === 'moderate'} class:stat-poor={psnrState === 'poor'}>
-                                {metric.psnr.toFixed(2)}
-                            </div>
-                            <div class="metric-cell ssim-cell" class:stat-good={ssimState === 'good'} class:stat-moderate={ssimState === 'moderate'} class:stat-poor={ssimState === 'poor'}>
-                                {metric.ssim.toFixed(4)}
-                            </div>
-                        </div>
-                        {/each}
-                    </div>
+            <MetricsPanel />
 
-                    {:else}
-                    <div class="analysis-placeholder">Load an image to see quality metrics and compression analysis.</div>
-                    {/if}
-
-                    {#if appState.fileSizeInfo}
-                    <div class="file-size-bar-container" id="fileSizeContainer">
-                        <div class="file-size-header">
-                            <span class="file-size-title">File Size Comparison</span>
-                            <span class="reduction-badge">-{appState.fileSizeInfo.reduction}%</span>
-                        </div>
-                        <div class="file-size-main">
-                            <div class="size-comparison-flow">
-                                <span class="size-val secondary">{appState.fileSizeInfo.original}</span>
-                                <span class="size-arrow">→</span>
-                                <span class="size-val primary highlight">~{appState.fileSizeInfo.estimated}</span>
-                            </div>
-                        </div>
-                        <div class="file-size-track">
-                            <div class="file-size-fill" id="fileSizeFill" style="width: {appState.fileSizeInfo.fillPercent}%"></div>
-                        </div>
-                        <div class="file-size-footer">
-                            <span class="compression-ratio-label">{appState.fileSizeInfo.ratio}× compression ratio</span>
-                        </div>
-                    </div>
-                    {/if}
-                </div>
-            </details>
-
-            <details class="viewer-section" open>
-                <summary class="viewer-section-title">Advanced</summary>
-                <div class="viewer-section-body">
-                    <div class="control-group">
-                        <div class="group-label">Tools</div>
-                        <button id="inspect_mode_btn" class="tool-btn"
-                            class:active={appState.isInspectMode}
-                            onclick={enterInspectorMode}>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <circle cx="11" cy="11" r="8"></circle>
-                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                            </svg>
-                            Inspect Block
-                        </button>
-                        <button id="artifact_inspector_btn" class="tool-btn"
-                            onclick={() => appState.appMode = 'artifact_inspector'}
-                            disabled={!appState.originalImageData}>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                                <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                            </svg>
-                            Artifact Inspector
-                        </button>
-                        <p class="advanced-hint">Dive deep into compression artifacts, error heatmaps, and edge distortion analysis.</p>
-                    </div>
-                </div>
-            </details>
+            <ToolsPanel onEnterInspector={enterInspectorMode} />
         </div>
 
     </div>
