@@ -3,7 +3,6 @@
     import { appState, ViewMode, type ViewModeValue } from './lib/state.svelte.js';
     import { processImage, getViewPtr, getStats, free, setViewTint, getLastBitEstimate } from './lib/wasm-bridge.js';
     import { handleFileSelect, loadImageFromUrl } from './lib/image-manager.js';
-    import { inspectBlock } from './lib/inspection.js';
     import { formatBytes } from './lib/format.js';
     import ImageViewer from './lib/components/ImageViewer.svelte';
     import AppHeader from './lib/components/viewer/AppHeader.svelte';
@@ -221,9 +220,6 @@
         processImage(q, cs);
         render();
         updateFileSizeEstimate();
-        if (appState.inspectedBlock && appState.appMode === 'inspector') {
-            inspectBlock(appState.inspectedBlock.x, appState.inspectedBlock.y);
-        }
     });
 
     // Just re-render on view mode change (no reprocessing)
@@ -231,9 +227,6 @@
         const _vm = appState.currentViewMode;
         if (appState.wasmReady && appState.originalImageData) {
             render();
-            if (appState.inspectedBlock && appState.appMode === 'inspector') {
-                inspectBlock(appState.inspectedBlock.x, appState.inspectedBlock.y);
-            }
         }
     });
 

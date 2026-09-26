@@ -117,9 +117,9 @@
     {/if}
 
     {#if zoom > 1}
-    <div class="zoom-badge" onclick={() => zoom = 1}>
+    <button type="button" class="zoom-badge" title="Reset zoom" onclick={() => zoom = 1}>
         {zoom.toFixed(0)}×
-    </div>
+    </button>
     {/if}
 
 </div>

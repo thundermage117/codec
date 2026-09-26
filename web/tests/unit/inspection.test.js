@@ -32,7 +32,6 @@ describe('inspection.js - inspectBlock', () => {
             <span id="blockCoords"></span>
             <span id="qTableType"></span>
             <span id="qTableType2"></span>
-            <input id="inspQualitySlider" value="75" />
             <canvas id="processedCanvas"></canvas>
             <div class="stat-item"><span id="statMSE"></span></div>
             <div class="stat-item"><span id="statPeakError"></span></div>
@@ -47,6 +46,7 @@ describe('inspection.js - inspectBlock', () => {
         // Reset state
         appState.currentViewMode = ViewMode.Y;
         appState.appMode = 'inspector';
+        appState.quality = 75;
         appState.originalImageData = {
             data: new Uint8ClampedArray(400 * 4), // enough for 10x10 RGB
             width: 10,
@@ -77,7 +77,7 @@ describe('inspection.js - inspectBlock', () => {
 
     it('calls inspectBlockData with correct args', () => {
         inspectBlock(3, 4);
-        // channelIndex 0 for Y, quality 75 from DOM mock
+        // channelIndex 0 for Y, quality 75 from appState
         expect(inspectBlockData).toHaveBeenCalledWith(3, 4, 0, 75);
     });
 

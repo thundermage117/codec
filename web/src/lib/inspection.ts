@@ -22,14 +22,7 @@ export function inspectBlock(blockX: number, blockY: number): void {
     if (qTableType) qTableType.innerText = tableLabel;
     if (qTableType2) qTableType2.innerText = tableLabel;
 
-    const inspQualitySlider = document.getElementById('inspQualitySlider') as HTMLInputElement | null;
-    const qualitySlider = document.getElementById('qualitySlider') as HTMLInputElement | null;
-
-    const quality = (appState.appMode === 'inspector' && inspQualitySlider)
-        ? Number.parseInt(inspQualitySlider.value)
-        : (qualitySlider ? Number.parseInt(qualitySlider.value) : appState.quality);
-
-    const ptr = inspectBlockData(blockX, blockY, channelIndex, quality);
+    const ptr = inspectBlockData(blockX, blockY, channelIndex, appState.quality);
     if (!ptr) {
         console.error('Failed to inspect block: Ptr is null');
         return;

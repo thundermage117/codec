@@ -377,44 +377,21 @@ describe('inspectBlock - null WASM pointer', () => {
 
 // ─── Quality Slider Selection ─────────────────────────────────────────────
 
-describe('inspectBlock - quality slider selection', () => {
-    function spyOnQuality(callback) {
+describe('inspectBlock - quality', () => {
+    it('passes appState.quality to inspect_block_data regardless of slider DOM values', () => {
         const orig = window.Module._inspect_block_data;
         let captured = null;
         window.Module._inspect_block_data = (_bx, _by, _ch, q) => { captured = q; return 256; };
-        callback();
-        window.Module._inspect_block_data = orig;
-        return captured;
-    }
-
-    it('uses inspQualitySlider value in inspector mode', () => {
-        document.getElementById('inspQualitySlider').value = '75';
-        appState.appMode = 'inspector';
-        const q = spyOnQuality(() => inspectBlock(0, 0));
-        expect(q).toBe(75);
-    });
-
-    it('uses qualitySlider value in viewer mode', () => {
         document.getElementById('qualitySlider').value = '30';
-        appState.appMode = 'viewer';
-        const q = spyOnQuality(() => inspectBlock(0, 0));
-        expect(q).toBe(30);
-    });
-
-    it('falls back to appState.quality when no slider element exists', () => {
-        // Remove both sliders temporarily
-        const insp = document.getElementById('inspQualitySlider');
-        const qual = document.getElementById('qualitySlider');
-        insp.remove();
-        qual.remove();
-
+        document.getElementById('inspQualitySlider').value = '75';
         appState.quality = 42;
-        appState.appMode = 'viewer';
-        const q = spyOnQuality(() => inspectBlock(0, 0));
-        expect(q).toBe(42);
-
-        document.body.appendChild(insp);
-        document.body.appendChild(qual);
+        for (const mode of ['viewer', 'inspector']) {
+            appState.appMode = mode;
+            captured = null;
+            inspectBlock(0, 0);
+            expect(captured).toBe(42);
+        }
+        window.Module._inspect_block_data = orig;
     });
 });
 

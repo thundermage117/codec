@@ -5,8 +5,8 @@
     import { processImage, getViewPtr, getStats, free, setArtifactGain } from './lib/wasm-bridge.js';
     import ImageViewer from './lib/components/ImageViewer.svelte';
 
-    let artifactCanvas: HTMLCanvasElement;
-    let originalCanvas: HTMLCanvasElement;
+    let artifactCanvas: HTMLCanvasElement | undefined = $state();
+    let originalCanvas: HTMLCanvasElement | undefined = $state();
     let artifactCtx: CanvasRenderingContext2D | null = null;
     let originalCtx: CanvasRenderingContext2D | null = null;
     let artifactImageData: ImageData | null = null;
@@ -124,8 +124,8 @@
     }
 
     onMount(() => {
-        artifactCtx = artifactCanvas.getContext('2d');
-        originalCtx = originalCanvas.getContext('2d');
+        artifactCtx = artifactCanvas?.getContext('2d') ?? null;
+        originalCtx = originalCanvas?.getContext('2d') ?? null;
         if (!ARTIFACT_MODES.some(m => m.val === appState.currentViewMode)) {
             appState.currentViewMode = ViewMode.Artifacts;
         }
@@ -136,14 +136,14 @@
     onDestroy(stopBlink);
 
     function renderOriginal() {
-        if (!originalCtx || !appState.originalImageData) return;
+        if (!originalCtx || !originalCanvas || !appState.originalImageData) return;
         originalCanvas.width = appState.imgWidth;
         originalCanvas.height = appState.imgHeight;
         originalCtx.putImageData(appState.originalImageData, 0, 0);
     }
 
     function renderArtifact() {
-        if (!artifactCtx || !appState.originalImageData || !appState.wasmReady) return;
+        if (!artifactCtx || !artifactCanvas || !appState.originalImageData || !appState.wasmReady) return;
         const w = appState.imgWidth;
         const h = appState.imgHeight;
         if (artifactCanvas.width !== w || artifactCanvas.height !== h) {
@@ -341,7 +341,7 @@
                     <summary class="sidebar-section-title"><span>Controls</span></summary>
                     <div class="sidebar-section-body">
                         <div class="control-group">
-                            <label>
+                            <label for="artifactQualitySlider">
                                 Quality
                                 <span>{qualitySliderValue}</span>
                             </label>
@@ -354,7 +354,7 @@
                                 </button>
                                 {/each}
                             </div>
-                            <input type="range" min="1" max="100" value={qualitySliderValue}
+                            <input type="range" id="artifactQualitySlider" min="1" max="100" value={qualitySliderValue}
                                 oninput={onQualityInput}
                                 onchange={commitQuality}
                                 onblur={commitQuality}>
@@ -782,7 +782,7 @@
         border: 1px solid var(--border-subtle);
     }
 
-    [data-theme="dark"] .heatmap-scale-container {
+    :global([data-theme="dark"]) .heatmap-scale-container {
         background: rgba(0, 0, 0, 0.3);
     }
 
@@ -843,10 +843,6 @@
         font-size: 0.72rem;
         line-height: 1.45;
         color: var(--text);
-    }
-
-    .info-box strong {
-        color: var(--primary);
     }
 
     /* ===== Pixel hover tooltip ===== */
