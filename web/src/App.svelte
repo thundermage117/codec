@@ -9,6 +9,9 @@
     setupWasm(() => {
         appState.wasmReady = true;
         appState.status = 'WASM Module Ready!';
+    }, (message) => {
+        appState.status = message;
+        console.error(message);
     });
 
     // Global keyboard handler

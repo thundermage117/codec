@@ -1,10 +1,17 @@
 import { appState } from './state.svelte.js';
 
-export function setupWasm(onReady: () => void): void {
-    if (typeof Module !== 'undefined' && Module.calledRun) {
+export function setupWasm(onReady: () => void, onError?: (message: string) => void): void {
+    // codec.js is loaded via a classic <script> tag; if it is missing (e.g. the
+    // WASM was never built) the Module global is never defined.
+    if (typeof Module === 'undefined') {
+        onError?.('Failed to load codec.js. Rebuild the WASM with `make web`.');
+        return;
+    }
+    if (Module.calledRun) {
         onReady();
     } else {
         Module.onRuntimeInitialized = onReady;
+        Module.onAbort = (reason: unknown) => onError?.(`WASM failed to initialize: ${String(reason)}`);
     }
 }
 

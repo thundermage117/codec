@@ -49,6 +49,29 @@ describe('setupWasm', () => {
         // restore for subsequent tests (unit.setup.js also resets this in beforeEach)
         globalThis.Module.calledRun = true;
     });
+
+    it('reports an error instead of throwing when codec.js never loaded', () => {
+        const saved = globalThis.Module;
+        delete globalThis.Module;
+        try {
+            const onReady = vi.fn();
+            const onError = vi.fn();
+            expect(() => setupWasm(onReady, onError)).not.toThrow();
+            expect(onReady).not.toHaveBeenCalled();
+            expect(onError).toHaveBeenCalledWith(expect.stringContaining('codec.js'));
+        } finally {
+            globalThis.Module = saved;
+        }
+    });
+
+    it('reports runtime aborts through onError', () => {
+        globalThis.Module.calledRun = false;
+        const onError = vi.fn();
+        setupWasm(vi.fn(), onError);
+        globalThis.Module.onAbort('fetch failed');
+        expect(onError).toHaveBeenCalledWith(expect.stringContaining('fetch failed'));
+        globalThis.Module.calledRun = true;
+    });
 });
 
 describe('initSession', () => {

@@ -1,6 +1,6 @@
 <script lang="ts">
     import { onDestroy, onMount } from 'svelte';
-    import { appState, ViewMode } from './lib/state.svelte.js';
+    import { appState, ViewMode, type ViewModeValue } from './lib/state.svelte.js';
     import { processImage, getViewPtr, getStats, free, setViewTint, inspectBlockData, getCoeffHistogram, getLastBitEstimate } from './lib/wasm-bridge.js';
     import { handleFileSelect, loadImageFromUrl } from './lib/image-manager.js';
     import { inspectBlock } from './lib/inspection.js';
@@ -82,7 +82,7 @@
 
     onMount(() => {
         // Ensure we're in a view mode supported by the viewer UI
-        const viewerModes = [ViewMode.RGB, ViewMode.Artifacts, ViewMode.Y, ViewMode.Cr, ViewMode.Cb];
+        const viewerModes: ViewModeValue[] = [ViewMode.RGB, ViewMode.Artifacts, ViewMode.Y, ViewMode.Cr, ViewMode.Cb];
         if (!viewerModes.includes(appState.currentViewMode)) {
             appState.currentViewMode = ViewMode.RGB;
         }

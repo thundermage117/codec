@@ -6,6 +6,7 @@ export interface WasmModule {
     HEAPU8: Uint8Array;
     calledRun: boolean;
     onRuntimeInitialized: () => void;
+    onAbort?: (reason: unknown) => void;
 
     _malloc(size: number): number;
     _free(ptr: number): void;
