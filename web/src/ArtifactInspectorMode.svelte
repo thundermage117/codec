@@ -318,9 +318,9 @@
                 </svg>
                 Artifact Analyzer
             </h2>
-            <div class="artifact-chips">
+            <div class="mode-chips">
                 {#each ARTIFACT_MODES as mode}
-                <button class="artifact-chip" class:active={appState.currentViewMode === mode.val}
+                <button class="mode-chip" class:active={appState.currentViewMode === mode.val}
                     onclick={() => appState.currentViewMode = mode.val}
                     onmouseenter={(e) => onChipMouseEnter(e, mode.desc)}
                     onmouseleave={onChipMouseLeave}>
@@ -411,7 +411,7 @@
                         <span>Visual Tools</span>
                     </summary>
                     <div class="sidebar-section-body">
-                        <div class="tools-grid">
+                        <div class="mode-tools-grid">
                             <button class="tool-btn" class:active={isBlinking} onclick={toggleBlink} title="Blink Test">
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
                                     stroke-linecap="round" stroke-linejoin="round">
@@ -453,7 +453,7 @@
                         </div>
                         {/if}
 
-                        <div class="info-box">
+                        <div class="mode-info-box">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                                 <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
                             </svg>
@@ -497,11 +497,11 @@
             </aside>
 
             <!-- Main Content Area -->
-            <main class="artifact-content">
+            <main class="mode-content">
 
                 <!-- View Toggle + Zoom Controls (single row) -->
-                <div class="view-toggle-container">
-                    <div class="view-toggle">
+                <div class="mode-toggle-row">
+                    <div class="mode-view-toggle">
                         <button class:active={viewType === 'original'}
                             onclick={() => viewType = 'original'}>
                             Original
@@ -511,7 +511,7 @@
                             {currentMode.label}
                         </button>
                     </div>
-                    <div class="art-zoom-controls">
+                    <div class="mode-zoom-controls">
                         {#if zoom > 1}
                         <span class="zoom-level-chip">{zoom.toFixed(0)}×</span>
                         <button class="zoom-ctrl-btn zoom-out-btn" onclick={resetArtZoom} title="Reset zoom (Esc)">
@@ -538,7 +538,7 @@
                     </div>
                 </div>
 
-                <div class="artifact-viewer-wrap">
+                <div class="mode-viewer-wrap">
                     <ImageViewer
                         id="artifact"
                         bind:originalCanvas
@@ -592,124 +592,6 @@
     /* Scoped to this component only.
        Shell, sidebar, controls, and metrics use global CSS classes shared with Block Inspector. */
 
-    /* ===== Topbar mode chips ===== */
-
-    .artifact-chips {
-        display: flex;
-        gap: 0.4rem;
-        margin-left: auto;
-        flex-wrap: wrap;
-    }
-
-    .artifact-chip {
-        padding: 0.35rem 0.9rem;
-        border-radius: 99px;
-        border: 1px solid var(--border);
-        background: var(--card-bg);
-        font-size: 0.78rem;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.2s;
-        color: var(--text-muted);
-        white-space: nowrap;
-    }
-
-    .artifact-chip:hover {
-        background: var(--primary-subtle);
-        color: var(--text);
-        border-color: var(--primary);
-    }
-
-    .artifact-chip.active {
-        background: var(--primary);
-        color: white;
-        border-color: var(--primary);
-        box-shadow: 0 2px 8px rgba(59, 130, 246, 0.35);
-    }
-
-
-
-    /* ===== Canvas split view ===== */
-
-    .artifact-content {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        padding: 1.25rem;
-        background: var(--viewer-bg, #0d0d0d);
-        overflow: hidden;
-        min-width: 0;
-        min-height: 0;
-        gap: 1rem;
-    }
-
-    /* Wrapper that stretches to fill remaining flex space after the toggle row */
-    .artifact-viewer-wrap {
-        flex: 1;
-        width: 100%;
-        min-height: 0;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-    }
-
-    /* Canvas fits within the constrained height while maintaining aspect ratio */
-    .artifact-viewer-wrap :global(.canvas-wrap canvas) {
-        display: block;
-    }
-
-    /* ===== View Toggle ===== */
-    .view-toggle-container {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-shrink: 0;
-        gap: 12px;
-        position: relative;
-    }
-
-    .art-zoom-controls {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        position: absolute;
-        right: 0;
-    }
-
-    .view-toggle {
-        display: flex;
-        background: rgba(255, 255, 255, 0.05);
-        padding: 3px;
-        border-radius: 8px;
-        border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
-        gap: 2px;
-    }
-
-    .view-toggle button {
-        padding: 0.45rem 1.25rem;
-        border-radius: 6px;
-        border: none;
-        background: transparent;
-        color: var(--text-muted);
-        font-size: 0.78rem;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-        min-width: 100px;
-    }
-
-    .view-toggle button:hover {
-        color: var(--text);
-        background: rgba(255, 255, 255, 0.03);
-    }
-
-    .view-toggle button.active {
-        background: var(--primary);
-        color: white;
-        box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
-    }
-
     /* ===== Error Gain slider ===== */
 
     .gain-label {
@@ -745,104 +627,6 @@
         font-size: 0.72rem;
         line-height: 1.45;
         color: var(--text-muted);
-    }
-
-    /* ===== Visual Tools Improvements ===== */
-    .tools-grid {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 6px;
-        margin-bottom: 12px;
-    }
-
-    .tools-grid .tool-btn {
-        flex-direction: column;
-        padding: 8px 4px;
-        height: auto;
-        gap: 4px;
-    }
-
-    .tools-grid .tool-btn span {
-        font-size: 0.65rem;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.02em;
-    }
-
-    .tools-grid .tool-btn svg {
-        width: 14px;
-        height: 14px;
-    }
-
-    .heatmap-scale-container {
-        margin: 12px 0;
-        padding: 10px;
-        background: rgba(0, 0, 0, 0.15);
-        border-radius: var(--radius-md);
-        border: 1px solid var(--border-subtle);
-    }
-
-    :global([data-theme="dark"]) .heatmap-scale-container {
-        background: rgba(0, 0, 0, 0.3);
-    }
-
-    .heatmap-scale-label {
-        font-size: 0.65rem;
-        font-weight: 700;
-        color: var(--text-muted);
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        margin-bottom: 8px;
-    }
-
-    .heatmap-scale-bar {
-        height: 10px;
-        width: 100%;
-        border-radius: 4px;
-        background: linear-gradient(to right,
-            rgb(0,0,0),
-            rgb(68,1,84),
-            rgb(59,82,139),
-            rgb(33,145,140),
-            rgb(94,201,98),
-            rgb(253,231,37),
-            rgb(255,255,255)
-        );
-        box-shadow: inset 0 1px 2px rgba(0,0,0,0.3);
-        margin-bottom: 5px;
-    }
-
-    .heatmap-scale-range {
-        display: flex;
-        justify-content: space-between;
-        font-size: 0.6rem;
-        font-weight: 600;
-        color: var(--text-muted);
-        font-family: var(--font-mono);
-    }
-
-    .info-box {
-        margin-top: 12px;
-        padding: 10px 12px;
-        background: var(--primary-subtle);
-        border-radius: var(--radius-md);
-        border: 1px solid color-mix(in srgb, var(--primary) 15%, transparent);
-        display: flex;
-        gap: 10px;
-        align-items: flex-start;
-    }
-
-    .info-box svg {
-        flex-shrink: 0;
-        color: var(--primary);
-        margin-top: 2px;
-    }
-
-    .info-box p {
-        margin: 0;
-        font-size: 0.72rem;
-        line-height: 1.45;
-        color: var(--text);
     }
 
     /* ===== Pixel hover tooltip ===== */
