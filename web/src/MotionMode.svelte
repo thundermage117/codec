@@ -7,13 +7,14 @@
     import { defaultScenario, type ScenarioKind } from './lib/motion/synthetic.js';
     import { blockVerdict } from './lib/motion/metrics.js';
     import {
-        drawVectorField, drawBlockFill, sadHeatColor, VERDICT_COLORS,
+        drawVectorField, drawBlockFill, drawBlockOutline, sadHeatColor, VERDICT_COLORS,
     } from './lib/motion/mv-render.js';
     import ImageViewer from './lib/components/ImageViewer.svelte';
     import ScenarioControls from './lib/components/motion/ScenarioControls.svelte';
     import SearchControls from './lib/components/motion/SearchControls.svelte';
     import OverlayControls from './lib/components/motion/OverlayControls.svelte';
     import MotionMetrics from './lib/components/motion/MotionMetrics.svelte';
+    import BlockSearchPanel from './lib/components/motion/BlockSearchPanel.svelte';
 
     const SCENARIOS: { kind: ScenarioKind; label: string }[] = [
         { kind: 'pan', label: 'Camera pan' },
@@ -175,6 +176,7 @@
         const showVectors = motionState.showVectors;
         const showCost = motionState.showCost;
         const showAccuracy = motionState.showAccuracy;
+        const selected = motionState.selectedBlock;
         if (!overlayCanvas || !frames) return;
 
         sizeCanvas(overlayCanvas, frames.current.width * OVERLAY_SCALE, frames.current.height * OVERLAY_SCALE);
@@ -196,6 +198,23 @@
         if (showVectors) {
             const maxLength = mvs.reduce((m, mv) => Math.max(m, Math.hypot(mv.dx, mv.dy)), 0);
             drawVectorField(ctx, grid, mvs, OVERLAY_SCALE, maxLength);
+        }
+        if (selected && selected.col < grid.cols && selected.row < grid.rows) {
+            // Selected block (solid) and the reference block it is predicted from (dashed).
+            const mv = mvs[selected.row * grid.cols + selected.col];
+            const x = selected.col * grid.blockSize;
+            const y = selected.row * grid.blockSize;
+            drawBlockOutline(ctx, x + mv.dx, y + mv.dy, grid.blockSize, OVERLAY_SCALE, '#22c55e', true);
+            drawBlockOutline(ctx, x, y, grid.blockSize, OVERLAY_SCALE, '#facc15');
+        }
+    });
+
+    // Drop a selection that no longer fits the grid (e.g. after a block size change).
+    $effect(() => {
+        const run = motionState.run;
+        const sel = motionState.selectedBlock;
+        if (run && sel && (sel.col >= run.grid.cols || sel.row >= run.grid.rows)) {
+            motionState.selectedBlock = null;
         }
     });
 
@@ -236,7 +255,11 @@
     }
 
     function onViewerClick(e: MouseEvent): void {
-        if (!isZoomMode || !viewCanvas) return;
+        if (!viewCanvas) return;
+        if (!isZoomMode) {
+            selectBlockAt(e);
+            return;
+        }
         if (zoom > 1) {
             zoom = 1;
         } else {
@@ -245,6 +268,18 @@
             zoomOriginY = ((e.clientY - rect.top) / rect.height) * 100;
             zoom = ZOOM_LEVEL;
         }
+    }
+
+    function selectBlockAt(e: MouseEvent): void {
+        const run = motionState.run;
+        if (!run || !viewCanvas) return;
+        const rect = viewCanvas.getBoundingClientRect();
+        const x = ((e.clientX - rect.left) / rect.width) * viewCanvas.width;
+        const y = ((e.clientY - rect.top) / rect.height) * viewCanvas.height;
+        const col = Math.floor(x / run.grid.blockSize);
+        const row = Math.floor(y / run.grid.blockSize);
+        if (col < 0 || row < 0 || col >= run.grid.cols || row >= run.grid.rows) return;
+        motionState.selectedBlock = { col, row };
     }
 
     function toggleZoomMode(): void {
@@ -359,12 +394,15 @@
                     />
                 </div>
 
+                <BlockSearchPanel />
+
                 <div class="me-caption" aria-live="polite">
                     {#if motionState.error}
                     <span class="me-error">{motionState.error}</span>
                     {:else}
                     <strong>{activeView.label}.</strong> {activeView.caption}
                     {#if motionState.compareWithCurrent}<em>Left of the split: current frame.</em>{/if}
+                    {#if !motionState.selectedBlock}<em>Click a block to see how it was searched.</em>{/if}
                     {#if motionState.computing}<span class="me-busy">Estimating…</span>{/if}
                     {/if}
                 </div>
