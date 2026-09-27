@@ -31,7 +31,16 @@
                 </svg>
                 Artifact Inspector
             </button>
-            <p class="advanced-hint">Dive deep into compression artifacts, error heatmaps, and edge distortion analysis.</p>
+            <button id="motion_explorer_btn" class="tool-btn"
+                onclick={() => appState.appMode = 'motion'}
+                disabled={!appState.originalImageData}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M5 12h14M13 6l6 6-6 6"></path>
+                    <path d="M3 6h4M3 18h4"></path>
+                </svg>
+                Motion Explorer
+            </button>
+            <p class="advanced-hint">Dive deep into compression artifacts, error heatmaps, and edge distortion analysis — or see how video codecs predict frames with motion vectors.</p>
         </div>
     </div>
 </details>

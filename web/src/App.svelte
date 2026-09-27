@@ -4,6 +4,7 @@
     import ViewerMode from './ViewerMode.svelte';
     import InspectorMode from './InspectorMode.svelte';
     import ArtifactInspectorMode from './ArtifactInspectorMode.svelte';
+    import MotionMode from './MotionMode.svelte';
 
     // WASM init
     setupWasm(() => {
@@ -61,5 +62,7 @@
         <InspectorMode />
     {:else if appState.appMode === 'artifact_inspector'}
         <ArtifactInspectorMode />
+    {:else if appState.appMode === 'motion'}
+        <MotionMode />
     {/if}
 {/if}

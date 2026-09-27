@@ -17,6 +17,8 @@
         showInspectorBanner = false,
         showQuickstart = false,
         showBlockGrid = false,
+        gridSize = 8,
+        overlay = null,
         zoomHint = null,
         onViewerClick = null,
         onViewerMouseDown = null,
@@ -90,8 +92,13 @@
                 ></canvas>
             </div>
 
+            {#if overlay}
+                <!-- Inside the scaled container so overlays zoom with the image -->
+                <div class="overlay-layer">{@render overlay()}</div>
+            {/if}
+
             {#if showBlockGrid}
-                <div class="grid-overlay" aria-hidden="true"></div>
+                <div class="grid-overlay" aria-hidden="true" style:--grid-size={gridSize}></div>
             {/if}
         </div>
 
@@ -191,6 +198,12 @@
     }
 
 
+    .overlay-layer {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+    }
+
     .grid-overlay {
         position: absolute;
         inset: 0;
@@ -198,8 +211,10 @@
         background-image:
             linear-gradient(to right, rgba(255, 255, 255, 0.1) 1px, transparent 1px),
             linear-gradient(to bottom, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
-        /* Use percentage based on image dimensions to ensure it stays locked to 8x8 blocks regardless of scaling */
-        background-size: calc(800% / max(1, var(--img-w, 1))) calc(800% / max(1, var(--img-h, 1)));
+        /* Percentage of the image size keeps the grid locked to blocks at any scale */
+        background-size:
+            calc(var(--grid-size, 8) * 100% / max(1, var(--img-w, 1)))
+            calc(var(--grid-size, 8) * 100% / max(1, var(--img-h, 1)));
     }
 
     :global(.zoom-hint-bar) {

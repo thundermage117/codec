@@ -39,7 +39,7 @@ class AppState {
     highlightBlock = $state<{ x: number; y: number } | null>(null);
     inspectedBlock = $state<{ x: number; y: number } | null>(null);
     isDragging = $state(false);
-    appMode = $state<'viewer' | 'inspector' | 'artifact_inspector'>('viewer');
+    appMode = $state<'viewer' | 'inspector' | 'artifact_inspector' | 'motion'>('viewer');
     suggestedBlocks = $state<SuggestedBlock[]>([]);
 
     // Shared quality (synced between viewer and inspector sliders)
