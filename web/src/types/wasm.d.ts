@@ -24,6 +24,16 @@ export interface WasmModule {
     _get_ssim_cr(): number;
     _get_ssim_cb(): number;
     _get_last_bit_estimate(): number;
+
+    // Motion estimation (see web/cpp/codec_web.cpp)
+    _init_me_session(refPtr: number, refW: number, refH: number, curPtr: number, curW: number, curH: number): number;
+    _run_motion_estimation(blockSize: number, searchRange: number, algorithm: number): number;
+    _get_mv_count(): number;
+    _get_me_stats(): number;
+    _get_me_view_ptr(kind: number): number;
+    _get_me_trace(col: number, row: number, algorithm: number): number;
+    _get_me_trace_count(): number;
+    _get_me_cost_surface(col: number, row: number): number;
 }
 
 export { };
