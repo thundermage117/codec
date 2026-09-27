@@ -10,6 +10,7 @@
 #include "transform.h"
 #include "wavelet.h"
 #include "MotionEstimator.h"
+#include "BitEstimator.h"
 
 // A global session to hold the state between calls from JavaScript.
 struct CodecSession {
@@ -559,6 +560,34 @@ int32_t* get_me_cost_surface(int col, int row) {
     const std::vector<int> surface = g_me.costSurface(
         col, row, g_me_result.blockSize, g_me_result.searchRange);
     return copyToHeap(std::vector<int32_t>(surface.begin(), surface.end()));
+}
+
+// Bit cost of coding the current luma frame on its own (I frame) versus as
+// the motion-compensated residual plus vectors (P frame), at a JPEG-style
+// quality. Static storage, 5 doubles:
+// [intra bits, residual bits, vector bits, skipped residual blocks, blocks].
+EMSCRIPTEN_KEEPALIVE
+double* estimate_me_bits(int quality) {
+    static double out[5];
+    std::fill(std::begin(out), std::end(out), 0.0);
+    if (!meHasResult()) return out;
+
+    const int w = g_me.frameWidth();
+    const int h = g_me.frameHeight();
+    const std::vector<uint8_t>& cur = g_me.currentLuma();
+    std::vector<int> intra(cur.size());
+    for (size_t i = 0; i < cur.size(); ++i) intra[i] = static_cast<int>(cur[i]) - 128;
+
+    const std::vector<int16_t> res = g_me.residual(g_me_result.mvs, g_me_result.blockSize);
+    const std::vector<int> residual(res.begin(), res.end());
+
+    int skipped = 0;
+    out[0] = BitEstimator::planeBits(intra, w, h, quality);
+    out[1] = BitEstimator::planeBits(residual, w, h, quality, &skipped);
+    out[2] = BitEstimator::motionVectorBits(g_me_result.mvs, g_me_result.cols, g_me_result.rows);
+    out[3] = skipped;
+    out[4] = static_cast<double>(w / 8) * (h / 8);
+    return out;
 }
 
 } // extern "C"

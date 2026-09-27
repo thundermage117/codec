@@ -24,6 +24,7 @@ add_executable(codec_core_tests
   test_imagecodec.cpp
   test_codecanalysis.cpp
   motion_estimator_test.cpp
+  bit_estimator_test.cpp
 )
 
 target_link_libraries(codec_core_tests

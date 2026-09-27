@@ -129,3 +129,25 @@ export function getCostSurface(col: number, row: number, searchRange: number): I
     const side = 2 * searchRange + 1;
     return withFree(ptr, (p) => copyInt32(p, side * side));
 }
+
+export interface FrameBits {
+    intraBits: number;      // current frame coded on its own (I frame)
+    residualBits: number;   // motion-compensated residual (P frame)
+    vectorBits: number;     // motion vectors, median-predicted (P frame)
+    skippedBlocks: number;  // residual 8x8 blocks that quantize to all zeros
+    blocks: number;         // 8x8 blocks counted
+}
+
+// Luma-only bit estimates for the last run at a JPEG-style quality (1-100).
+// Static storage in WASM; nothing to free.
+export function estimateFrameBits(quality: number): FrameBits {
+    const ptr = Module._estimate_me_bits(quality);
+    const v = new Float64Array(Module.HEAPU8.buffer, ptr, 5);
+    return {
+        intraBits: v[0],
+        residualBits: v[1],
+        vectorBits: v[2],
+        skippedBlocks: v[3],
+        blocks: v[4],
+    };
+}

@@ -59,31 +59,34 @@ ImageCodec::ImageCodec(double quality, bool enableQuantization, ChromaSubsamplin
 }
 
 /*
+* Scales a standard JPEG base table by the quality factor (1-100; higher means
+* finer quantization), using the libjpeg formula. Entries are at least 1.
+*/
+void ImageCodec::scaledQuantTable(double quality, bool chroma, double out[8][8])
+{
+    double scale;
+
+    if (quality < 50.0)
+        scale = 5000.0 / quality;
+    else
+        scale = 200.0 - 2.0 * quality;
+
+    scale /= 100.0;
+
+    const int (&base)[8][8] = chroma ? BASE_CHROMA : BASE_LUMA;
+    for (int i = 0; i < 8; ++i)
+        for (int j = 0; j < 8; ++j)
+            out[i][j] = std::max(1.0, std::round(base[i][j] * scale));
+}
+
+/*
 * Generates quantization tables based on the specified quality factor.
-* The quality factor should be in the range [1, 100], where higher values mean better quality (less compression).
 * The quantization tables are derived from the standard JPEG tables and scaled according to the quality factor.
 */
 void ImageCodec::generateQuantizationTables()
 {
-    double scale;
-
-    if (m_quality < 50.0)
-        scale = 5000.0 / m_quality;
-    else
-        scale = 200.0 - 2.0 * m_quality;
-
-    scale /= 100.0;
-
-    for (int i = 0; i < 8; ++i) {
-        for (int j = 0; j < 8; ++j) {
-
-            double lq = std::round(BASE_LUMA[i][j] * scale);
-            double cq = std::round(BASE_CHROMA[i][j] * scale);
-
-            m_lumaQuantTable[i][j]   = std::max(1.0, lq);
-            m_chromaQuantTable[i][j] = std::max(1.0, cq);
-        }
-    }
+    scaledQuantTable(m_quality, false, m_lumaQuantTable);
+    scaledQuantTable(m_quality, true, m_chromaQuantTable);
 }
 
 /*

@@ -53,6 +53,9 @@ public:
 
     Image process(const Image& bgrImage);
 
+    // Standard JPEG luma or chroma table scaled for a quality factor (1-100).
+    static void scaledQuantTable(double quality, bool chroma, double out[8][8]);
+
 private:
     double m_quality;
     bool   m_enableQuantization;

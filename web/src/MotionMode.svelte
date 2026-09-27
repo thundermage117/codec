@@ -15,6 +15,7 @@
     import OverlayControls from './lib/components/motion/OverlayControls.svelte';
     import MotionMetrics from './lib/components/motion/MotionMetrics.svelte';
     import BlockSearchPanel from './lib/components/motion/BlockSearchPanel.svelte';
+    import FrameBitsCard from './lib/components/motion/FrameBitsCard.svelte';
 
     const SCENARIOS: { kind: ScenarioKind; label: string }[] = [
         { kind: 'pan', label: 'Camera pan' },
@@ -349,6 +350,13 @@
                     <summary class="sidebar-section-title"><span>Metrics</span></summary>
                     <div class="sidebar-section-body">
                         <MotionMetrics {onCompare} />
+                    </div>
+                </details>
+
+                <details class="sidebar-section sidebar-controls" open>
+                    <summary class="sidebar-section-title"><span>Bits: P frame vs I frame</span></summary>
+                    <div class="sidebar-section-body">
+                        <FrameBitsCard />
                     </div>
                 </details>
             </aside>

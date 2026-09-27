@@ -34,6 +34,7 @@ export interface WasmModule {
     _get_me_trace(col: number, row: number, algorithm: number): number;
     _get_me_trace_count(): number;
     _get_me_cost_surface(col: number, row: number): number;
+    _estimate_me_bits(quality: number): number;
 }
 
 export { };

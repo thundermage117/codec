@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
     SearchAlgorithm, MotionView, initMotionSession, runMotionEstimation,
-    getMotionStats, readMotionView, getSearchTrace, getCostSurface,
+    getMotionStats, readMotionView, getSearchTrace, getCostSurface, estimateFrameBits,
 } from '../../src/lib/motion/me-bridge.js';
 
 const M = globalThis.Module;
@@ -28,6 +28,7 @@ beforeEach(() => {
     M._get_me_trace = vi.fn(() => PTR);
     M._get_me_trace_count = vi.fn(() => 2);
     M._get_me_cost_surface = vi.fn(() => PTR);
+    M._estimate_me_bits = vi.fn(() => PTR);
 });
 
 describe('initMotionSession', () => {
@@ -121,5 +122,16 @@ describe('getCostSurface', () => {
         M.HEAPU8.fill(0);
         expect(Array.from(surface)).toEqual(values);
         expect(M._free).toHaveBeenCalledWith(PTR);
+    });
+});
+
+describe('estimateFrameBits', () => {
+    it('reads the five bit statistics for the given quality', () => {
+        new Float64Array(M.HEAPU8.buffer, PTR, 5).set([90000, 12000, 3000, 4000, 6144]);
+        expect(estimateFrameBits(50)).toEqual({
+            intraBits: 90000, residualBits: 12000, vectorBits: 3000, skippedBlocks: 4000, blocks: 6144,
+        });
+        expect(M._estimate_me_bits).toHaveBeenCalledWith(50);
+        expect(M._free).not.toHaveBeenCalled();
     });
 });
