@@ -17,55 +17,107 @@
  */
 #pragma once
 #include "Image.h"
+#include <cstdint>
 #include <vector>
-#include <utility>
+
+/*
+ * Block-matching motion estimation on 8-bit luma.
+ *
+ * Convention: a motion vector (dx, dy) for the block whose top-left corner is
+ * (x, y) in the current frame means the block is predicted from the block at
+ * (x + dx, y + dy) in the reference frame.
+ *
+ * Only full blocks are searched (cols = width / blockSize, rows likewise).
+ * Pixels in the right/bottom remainder strips are predicted with a zero vector.
+ */
+
+enum class SearchAlgorithm {
+    Full = 0,       // Exhaustive search of every candidate in the window
+    ThreeStep = 1,  // Three-step search: 8 neighbours at halving step sizes
+    Diamond = 2     // Diamond search: large diamond until centred, then small diamond
+};
 
 struct MotionVector {
     int dx;
     int dy;
-    double mad;  // Mean Absolute Difference — match quality metric
+    int sad;  // Sum of Absolute Differences of the chosen match
+};
+
+// One evaluated candidate, recorded in evaluation order by traceBlock().
+struct SearchCandidate {
+    int dx;
+    int dy;
+    int sad;
+    int iteration;  // 0 = starting point; then search step / diamond iteration
+};
+
+struct SearchResult {
+    std::vector<MotionVector> mvs;     // raster order, cols * rows entries
+    long long candidatesEvaluated = 0; // unique SAD evaluations over all blocks
+    int blockSize = 0;
+    int searchRange = 0;
+    int cols = 0;
+    int rows = 0;
+    SearchAlgorithm algorithm = SearchAlgorithm::Full;
 };
 
 class MotionEstimator {
 public:
-    // Load reference (previous) and current frames.
-    // Internally extracts luma (Y) channel for matching.
-    void loadFrames(const Image& reference, const Image& current);
+    static bool isValidBlockSize(int blockSize);  // 4, 8, 16 or 32
+    static bool isValidSearchRange(int range);    // 1..64
 
-    // Full exhaustive search over all candidate positions in search window.
-    // blockSize: pixels per block side (8, 16, or 32)
-    // searchRange: max displacement in each direction (e.g. 16)
-    // Returns one MotionVector per block, in raster order (left-to-right, top-to-bottom).
-    std::vector<MotionVector> fullSearch(int blockSize, int searchRange) const;
+    // ITU-R BT.601 luma, rounded to 8 bits. Accepts 1-channel (copied) or
+    // >= 3-channel images interpreted as R, G, B.
+    static std::vector<uint8_t> extractLuma(const Image& src);
+    static std::vector<uint8_t> lumaFromRgba(const uint8_t* rgba, int width, int height);
 
-    // Three-step search — hierarchical, much faster than full search.
-    std::vector<MotionVector> threeStepSearch(int blockSize, int searchRange) const;
+    // Returns false (and leaves the estimator unloaded) if the frames are
+    // empty or their dimensions differ.
+    bool loadFrames(const Image& reference, const Image& current);
+    bool loadLuma(std::vector<uint8_t> reference, std::vector<uint8_t> current,
+                  int width, int height);
 
-    // Build residual frame: current minus the motion-compensated prediction.
-    // Values are shifted to [0,255] for display (0 error → 128 grey).
-    Image computeResidual(int blockSize, const std::vector<MotionVector>& mvs) const;
-
-    // Returns the candidate (refX, refY) positions checked during full search
-    // for a single block identified by its top-left position (bx, by) in the
-    // current frame. Useful for step-by-step animation.
-    std::vector<std::pair<int,int>> getSearchSteps(int bx, int by,
-                                                   int blockSize,
-                                                   int searchRange) const;
-
+    bool isLoaded() const { return m_width > 0; }
     int frameWidth()  const { return m_width; }
     int frameHeight() const { return m_height; }
+    const std::vector<uint8_t>& referenceLuma() const { return m_ref; }
+    const std::vector<uint8_t>& currentLuma()   const { return m_cur; }
+
+    // Estimate one vector per full block. Returns an empty result (no mvs)
+    // if frames are not loaded or the parameters are invalid.
+    SearchResult search(SearchAlgorithm algorithm, int blockSize, int searchRange) const;
+
+    // Candidates evaluated for a single block (col, row), in evaluation order.
+    std::vector<SearchCandidate> traceBlock(SearchAlgorithm algorithm, int col, int row,
+                                            int blockSize, int searchRange) const;
+
+    // SAD for every displacement in the window, row-major over
+    // dy = -R..R, dx = -R..R ((2R+1)^2 entries). -1 marks candidates that
+    // fall outside the reference frame.
+    std::vector<int> costSurface(int col, int row, int blockSize, int searchRange) const;
+
+    // Motion-compensated prediction of the current frame (8-bit luma).
+    std::vector<uint8_t> predict(const std::vector<MotionVector>& mvs, int blockSize) const;
+
+    // Signed residual: current - prediction, in [-255, 255].
+    // Passing all-zero vectors gives the plain frame difference.
+    std::vector<int16_t> residual(const std::vector<MotionVector>& mvs, int blockSize) const;
 
 private:
-    Image m_refLuma;  // Y-channel of reference frame
-    Image m_curLuma;  // Y-channel of current frame
+    std::vector<uint8_t> m_ref;
+    std::vector<uint8_t> m_cur;
     int m_width  = 0;
     int m_height = 0;
 
-    // Extract single-channel luma image from an RGB/YCrCb image (channel 0).
-    static Image extractLuma(const Image& src);
+    bool validParams(int blockSize, int searchRange) const;
 
-    // Mean Absolute Difference between a block in ref and a block in cur.
-    // (refX, refY) — top-left of block in reference frame
-    // (curX, curY) — top-left of block in current frame
-    double computeMAD(int refX, int refY, int curX, int curY, int blockSize) const;
+    // SAD between the current block at (curX, curY) and the reference block
+    // displaced by (dx, dy). Returns -1 if the reference block leaves the
+    // frame. Stops early and returns a value > limit once the partial sum
+    // exceeds limit.
+    int blockSad(int curX, int curY, int dx, int dy, int blockSize, int limit) const;
+
+    MotionVector searchBlock(SearchAlgorithm algorithm, int col, int row, int blockSize,
+                             int searchRange, long long& evaluated,
+                             std::vector<SearchCandidate>* trace) const;
 };

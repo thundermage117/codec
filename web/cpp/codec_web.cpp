@@ -27,10 +27,11 @@ struct CodecSession {
 static CodecSession g_session;
 static double g_artifact_gain = 5.0;
 
-// Motion estimation global state
+// Motion estimation global state. g_me_result remembers the block size,
+// range and algorithm it was computed with, so later getters can never be
+// called with parameters that disagree with the stored vectors.
 static MotionEstimator g_me;
-static std::vector<MotionVector> g_mvs;
-static std::vector<std::pair<int,int>> g_search_steps;
+static SearchResult g_me_result;
 
 // Enum to match view modes in JavaScript.
 enum ViewMode {
@@ -397,109 +398,167 @@ double* inspect_block_data(int blockX, int blockY, int channelIndex, int quality
 
 // ---------------------------------------------------------------------------
 // Motion Estimation bindings
+//
+// None of these throw: the WASM build has no exception support, so a throw
+// would abort the whole module. Invalid input returns 0 / a null pointer.
+// Buffers returned as pointers are malloc'd and must be freed by the caller,
+// except get_me_stats which points at static storage.
 // ---------------------------------------------------------------------------
 
-// Helper: convert RGBA uint8 canvas buffer → 3-channel RGB Image
-static Image rgbaToRgbImage(uint8_t* rgba, int w, int h) {
-    Image img(w, h, 3);
-    const size_t n = static_cast<size_t>(w) * h;
-    for (size_t i = 0; i < n; ++i) {
-        img.at(static_cast<int>(i % w), static_cast<int>(i / w), 0) = rgba[i * 4 + 0]; // R
-        img.at(static_cast<int>(i % w), static_cast<int>(i / w), 1) = rgba[i * 4 + 1]; // G
-        img.at(static_cast<int>(i % w), static_cast<int>(i / w), 2) = rgba[i * 4 + 2]; // B
-    }
-    return img;
+static bool meHasResult() {
+    return g_me.isLoaded() && !g_me_result.mvs.empty();
 }
 
-EMSCRIPTEN_KEEPALIVE
-void init_me_session(uint8_t* ref_ptr, int ref_w, int ref_h,
-                     uint8_t* cur_ptr, int cur_w, int cur_h) {
-    if (!ref_ptr || !cur_ptr) return;
-    Image ref = rgbaToRgbImage(ref_ptr, ref_w, ref_h);
-    Image cur = rgbaToRgbImage(cur_ptr, cur_w, cur_h);
-    g_me.loadFrames(ref, cur);
-    g_mvs.clear();
-    g_search_steps.clear();
+static SearchAlgorithm toAlgorithm(int algorithm) {
+    switch (algorithm) {
+        case 1:  return SearchAlgorithm::ThreeStep;
+        case 2:  return SearchAlgorithm::Diamond;
+        default: return SearchAlgorithm::Full;
+    }
 }
 
-// Returns a malloc'd buffer of numBlocks × [int32 dx, int32 dy, float64 mad].
-// Layout per entry: 4B dx | 4B dy | 8B mad = 16 bytes.
-// Caller must free the pointer.
+static int32_t* copyToHeap(const std::vector<int32_t>& values) {
+    if (values.empty()) return nullptr;
+    int32_t* buf = (int32_t*)malloc(values.size() * sizeof(int32_t));
+    if (buf) std::copy(values.begin(), values.end(), buf);
+    return buf;
+}
+
+// Returns 1 on success, 0 if the frames are missing or their sizes differ.
 EMSCRIPTEN_KEEPALIVE
-int run_motion_estimation(int block_size, int search_range, int algorithm) {
-    if (g_me.frameWidth() == 0) return 0;
-    g_mvs = (algorithm == 1)
-        ? g_me.threeStepSearch(block_size, search_range)
-        : g_me.fullSearch(block_size, search_range);
-
-    const size_t n = g_mvs.size();
-    // 4B dx + 4B dy + 8B mad = 16 bytes per vector
-    uint8_t* buf = (uint8_t*)malloc(n * 16);
-    if (!buf) return 0;
-
-    for (size_t i = 0; i < n; ++i) {
-        int32_t dx  = static_cast<int32_t>(g_mvs[i].dx);
-        int32_t dy  = static_cast<int32_t>(g_mvs[i].dy);
-        double  mad = g_mvs[i].mad;
-        memcpy(buf + i * 16 + 0, &dx,  4);
-        memcpy(buf + i * 16 + 4, &dy,  4);
-        memcpy(buf + i * 16 + 8, &mad, 8);
+int init_me_session(uint8_t* ref_ptr, int ref_w, int ref_h,
+                    uint8_t* cur_ptr, int cur_w, int cur_h) {
+    g_me_result = SearchResult{};
+    if (!ref_ptr || !cur_ptr || ref_w != cur_w || ref_h != cur_h) {
+        g_me.loadLuma({}, {}, 0, 0);
+        return 0;
     }
-    return static_cast<int>(reinterpret_cast<uintptr_t>(buf));
+    return g_me.loadLuma(MotionEstimator::lumaFromRgba(ref_ptr, ref_w, ref_h),
+                         MotionEstimator::lumaFromRgba(cur_ptr, cur_w, cur_h),
+                         ref_w, ref_h) ? 1 : 0;
+}
+
+// Runs the search and returns an int32 array of [dx, dy, sad] per block in
+// raster order (get_mv_count() entries). Caller must free.
+EMSCRIPTEN_KEEPALIVE
+int32_t* run_motion_estimation(int block_size, int search_range, int algorithm) {
+    g_me_result = g_me.search(toAlgorithm(algorithm), block_size, search_range);
+    if (g_me_result.mvs.empty()) return nullptr;
+
+    std::vector<int32_t> out;
+    out.reserve(g_me_result.mvs.size() * 3);
+    for (const MotionVector& mv : g_me_result.mvs) {
+        out.push_back(mv.dx);
+        out.push_back(mv.dy);
+        out.push_back(mv.sad);
+    }
+    return copyToHeap(out);
 }
 
 EMSCRIPTEN_KEEPALIVE
 int get_mv_count() {
-    return static_cast<int>(g_mvs.size());
+    return static_cast<int>(g_me_result.mvs.size());
 }
 
-// Returns a malloc'd RGBA buffer (width × height × 4 bytes) of the residual.
-// Caller must free.
+// Statistics for the last run, as 4 doubles:
+// [candidates evaluated, mean |residual| with MC, mean |frame difference|,
+//  PSNR of the MC prediction against the current frame (dB, 99 if exact)].
 EMSCRIPTEN_KEEPALIVE
-int get_me_residual_ptr(int block_size) {
-    if (g_mvs.empty() || g_me.frameWidth() == 0) return 0;
+double* get_me_stats() {
+    static double stats[4];
+    std::fill(std::begin(stats), std::end(stats), 0.0);
+    if (!meHasResult()) return stats;
 
-    Image residual = g_me.computeResidual(block_size, g_mvs);
-    const int w = residual.width();
-    const int h = residual.height();
-    const size_t n = static_cast<size_t>(w) * h;
+    const int bs = g_me_result.blockSize;
+    const std::vector<MotionVector> zero(g_me_result.mvs.size(), MotionVector{0, 0, 0});
+    const std::vector<int16_t> res = g_me.residual(g_me_result.mvs, bs);
+    const std::vector<int16_t> diff = g_me.residual(zero, bs);
 
-    uint8_t* buf = (uint8_t*)malloc(n * 4);
-    if (!buf) return 0;
+    double absRes = 0.0, absDiff = 0.0, sq = 0.0;
+    for (size_t i = 0; i < res.size(); ++i) {
+        absRes += std::abs(res[i]);
+        absDiff += std::abs(diff[i]);
+        sq += static_cast<double>(res[i]) * res[i];
+    }
+    const double n = static_cast<double>(res.size());
+    const double mse = sq / n;
 
-    for (size_t i = 0; i < n; ++i) {
-        uint8_t v = static_cast<uint8_t>(
-            std::max(0.0, std::min(residual.at(static_cast<int>(i % w),
-                                               static_cast<int>(i / w), 0), 255.0)));
-        buf[i * 4 + 0] = v;
-        buf[i * 4 + 1] = v;
-        buf[i * 4 + 2] = v;
+    stats[0] = static_cast<double>(g_me_result.candidatesEvaluated);
+    stats[1] = absRes / n;
+    stats[2] = absDiff / n;
+    stats[3] = mse > 0.0 ? 10.0 * std::log10(255.0 * 255.0 / mse) : 99.0;
+    return stats;
+}
+
+// Grey RGBA view of the last run (width x height x 4). Caller must free.
+// kind 0: MC prediction, 1: MC residual + 128, 2: frame difference + 128.
+EMSCRIPTEN_KEEPALIVE
+uint8_t* get_me_view_ptr(int kind) {
+    if (!meHasResult()) return nullptr;
+
+    const int bs = g_me_result.blockSize;
+    std::vector<uint8_t> grey;
+    if (kind == 0) {
+        grey = g_me.predict(g_me_result.mvs, bs);
+    } else {
+        std::vector<MotionVector> mvs = g_me_result.mvs;
+        if (kind == 2) std::fill(mvs.begin(), mvs.end(), MotionVector{0, 0, 0});
+        const std::vector<int16_t> res = g_me.residual(mvs, bs);
+        grey.resize(res.size());
+        for (size_t i = 0; i < res.size(); ++i)
+            grey[i] = static_cast<uint8_t>(std::clamp(res[i] + 128, 0, 255));
+    }
+    if (grey.empty()) return nullptr;
+
+    uint8_t* buf = (uint8_t*)malloc(grey.size() * 4);
+    if (!buf) return nullptr;
+    for (size_t i = 0; i < grey.size(); ++i) {
+        buf[i * 4 + 0] = grey[i];
+        buf[i * 4 + 1] = grey[i];
+        buf[i * 4 + 2] = grey[i];
         buf[i * 4 + 3] = 255;
     }
-    return static_cast<int>(reinterpret_cast<uintptr_t>(buf));
+    return buf;
 }
 
-// Returns a malloc'd int32 array [x0,y0, x1,y1, ...] of candidates for one block.
+static int g_me_trace_count = 0;
+
+// Candidates evaluated for block (col, row) with the last run's block size
+// and range: int32 [dx, dy, sad, iteration] per candidate, in evaluation
+// order (get_me_trace_count() entries). Caller must free.
+EMSCRIPTEN_KEEPALIVE
+int32_t* get_me_trace(int col, int row, int algorithm) {
+    g_me_trace_count = 0;
+    if (!meHasResult()) return nullptr;
+    const std::vector<SearchCandidate> trace = g_me.traceBlock(
+        toAlgorithm(algorithm), col, row, g_me_result.blockSize, g_me_result.searchRange);
+
+    std::vector<int32_t> out;
+    out.reserve(trace.size() * 4);
+    for (const SearchCandidate& c : trace) {
+        out.push_back(c.dx);
+        out.push_back(c.dy);
+        out.push_back(c.sad);
+        out.push_back(c.iteration);
+    }
+    g_me_trace_count = static_cast<int>(trace.size());
+    return copyToHeap(out);
+}
+
+EMSCRIPTEN_KEEPALIVE
+int get_me_trace_count() {
+    return g_me_trace_count;
+}
+
+// SAD for every displacement of block (col, row): int32, (2R+1)^2 entries,
+// row-major over dy then dx, -1 where the candidate leaves the frame.
 // Caller must free.
 EMSCRIPTEN_KEEPALIVE
-int get_search_steps(int bx, int by, int block_size, int search_range) {
-    if (g_me.frameWidth() == 0) return 0;
-    g_search_steps = g_me.getSearchSteps(bx, by, block_size, search_range);
-
-    const size_t n = g_search_steps.size();
-    int32_t* buf = (int32_t*)malloc(n * 2 * sizeof(int32_t));
-    if (!buf) return 0;
-
-    for (size_t i = 0; i < n; ++i) {
-        buf[i * 2 + 0] = static_cast<int32_t>(g_search_steps[i].first);
-        buf[i * 2 + 1] = static_cast<int32_t>(g_search_steps[i].second);
-    }
-    return static_cast<int>(reinterpret_cast<uintptr_t>(buf));
-}
-
-EMSCRIPTEN_KEEPALIVE
-int get_search_step_count() {
-    return static_cast<int>(g_search_steps.size());
+int32_t* get_me_cost_surface(int col, int row) {
+    if (!meHasResult()) return nullptr;
+    const std::vector<int> surface = g_me.costSurface(
+        col, row, g_me_result.blockSize, g_me_result.searchRange);
+    return copyToHeap(std::vector<int32_t>(surface.begin(), surface.end()));
 }
 
 } // extern "C"

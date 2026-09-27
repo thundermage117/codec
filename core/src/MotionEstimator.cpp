@@ -16,250 +16,329 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 #include "../inc/MotionEstimator.h"
-#include <cmath>
 #include <algorithm>
-#include <stdexcept>
-#include <limits>
+#include <climits>
+#include <cmath>
+#include <cstdlib>
 
 // ---------------------------------------------------------------------------
-// Internal helpers
+// Luma extraction
 // ---------------------------------------------------------------------------
 
-Image MotionEstimator::extractLuma(const Image& src) {
-    // Expects an image with at least 1 channel.
-    // If channels >= 3, treat as RGB and compute standard luma:
-    //   Y = 0.299*R + 0.587*G + 0.114*B
-    // If single-channel, just copy.
-    if (src.empty())
-        throw std::invalid_argument("MotionEstimator: cannot extract luma from empty image");
+static uint8_t toLuma(double r, double g, double b) {
+    double y = 0.299 * r + 0.587 * g + 0.114 * b;
+    return static_cast<uint8_t>(std::clamp(std::lround(y), 0L, 255L));
+}
 
-    Image luma(src.width(), src.height(), 1);
+std::vector<uint8_t> MotionEstimator::extractLuma(const Image& src) {
+    std::vector<uint8_t> luma;
+    if (src.empty() || src.channels() < 1) return luma;
 
-    if (src.channels() == 1) {
-        for (int y = 0; y < src.height(); ++y)
-            for (int x = 0; x < src.width(); ++x)
-                luma.at(x, y, 0) = src.at(x, y, 0);
-    } else {
-        // channels >= 3: treat as R=0, G=1, B=2
-        for (int y = 0; y < src.height(); ++y) {
-            for (int x = 0; x < src.width(); ++x) {
-                double r = src.at(x, y, 0);
-                double g = src.at(x, y, 1);
-                double b = src.at(x, y, 2);
-                luma.at(x, y, 0) = 0.299 * r + 0.587 * g + 0.114 * b;
+    const int w = src.width();
+    const int h = src.height();
+    luma.resize(static_cast<size_t>(w) * h);
+
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            size_t i = static_cast<size_t>(y) * w + x;
+            if (src.channels() >= 3) {
+                luma[i] = toLuma(src.at(x, y, 0), src.at(x, y, 1), src.at(x, y, 2));
+            } else {
+                luma[i] = static_cast<uint8_t>(std::clamp(std::lround(src.at(x, y, 0)), 0L, 255L));
             }
         }
     }
     return luma;
 }
 
-double MotionEstimator::computeMAD(int refX, int refY,
-                                   int curX, int curY,
-                                   int blockSize) const {
-    double sum = 0.0;
-    for (int dy = 0; dy < blockSize; ++dy) {
-        for (int dx = 0; dx < blockSize; ++dx) {
-            double ref = m_refLuma.at(refX + dx, refY + dy, 0);
-            double cur = m_curLuma.at(curX + dx, curY + dy, 0);
-            sum += std::abs(ref - cur);
-        }
-    }
-    return sum / static_cast<double>(blockSize * blockSize);
+std::vector<uint8_t> MotionEstimator::lumaFromRgba(const uint8_t* rgba, int width, int height) {
+    std::vector<uint8_t> luma;
+    if (!rgba || width <= 0 || height <= 0) return luma;
+
+    const size_t n = static_cast<size_t>(width) * height;
+    luma.resize(n);
+    for (size_t i = 0; i < n; ++i)
+        luma[i] = toLuma(rgba[i * 4 + 0], rgba[i * 4 + 1], rgba[i * 4 + 2]);
+    return luma;
 }
 
 // ---------------------------------------------------------------------------
-// Public API
+// Loading and validation
 // ---------------------------------------------------------------------------
 
-void MotionEstimator::loadFrames(const Image& reference, const Image& current) {
-    if (reference.width() != current.width() ||
-        reference.height() != current.height())
-        throw std::invalid_argument("MotionEstimator: frame dimensions must match");
-
-    m_refLuma = extractLuma(reference);
-    m_curLuma = extractLuma(current);
-    m_width  = reference.width();
-    m_height = reference.height();
+bool MotionEstimator::isValidBlockSize(int blockSize) {
+    return blockSize == 4 || blockSize == 8 || blockSize == 16 || blockSize == 32;
 }
 
-std::vector<MotionVector> MotionEstimator::fullSearch(int blockSize,
-                                                      int searchRange) const {
-    if (m_refLuma.empty())
-        throw std::runtime_error("MotionEstimator: frames not loaded");
+bool MotionEstimator::isValidSearchRange(int range) {
+    return range >= 1 && range <= 64;
+}
 
-    int cols = m_width  / blockSize;
-    int rows = m_height / blockSize;
+bool MotionEstimator::loadFrames(const Image& reference, const Image& current) {
+    if (reference.width() != current.width() || reference.height() != current.height())
+        return false;
+    return loadLuma(extractLuma(reference), extractLuma(current),
+                    reference.width(), reference.height());
+}
 
-    std::vector<MotionVector> mvs;
-    mvs.reserve(static_cast<size_t>(cols * rows));
+bool MotionEstimator::loadLuma(std::vector<uint8_t> reference, std::vector<uint8_t> current,
+                               int width, int height) {
+    const size_t n = static_cast<size_t>(width) * height;
+    if (width <= 0 || height <= 0 || reference.size() != n || current.size() != n) {
+        m_ref.clear();
+        m_cur.clear();
+        m_width = m_height = 0;
+        return false;
+    }
+    m_ref = std::move(reference);
+    m_cur = std::move(current);
+    m_width = width;
+    m_height = height;
+    return true;
+}
+
+bool MotionEstimator::validParams(int blockSize, int searchRange) const {
+    return isLoaded() && isValidBlockSize(blockSize) && isValidSearchRange(searchRange) &&
+           blockSize <= m_width && blockSize <= m_height;
+}
+
+// ---------------------------------------------------------------------------
+// Matching
+// ---------------------------------------------------------------------------
+
+int MotionEstimator::blockSad(int curX, int curY, int dx, int dy, int blockSize, int limit) const {
+    const int refX = curX + dx;
+    const int refY = curY + dy;
+    if (refX < 0 || refY < 0 || refX + blockSize > m_width || refY + blockSize > m_height)
+        return -1;
+
+    int sum = 0;
+    for (int y = 0; y < blockSize; ++y) {
+        const uint8_t* c = &m_cur[static_cast<size_t>(curY + y) * m_width + curX];
+        const uint8_t* r = &m_ref[static_cast<size_t>(refY + y) * m_width + refX];
+        for (int x = 0; x < blockSize; ++x)
+            sum += std::abs(static_cast<int>(c[x]) - static_cast<int>(r[x]));
+        if (sum > limit) return sum;  // cannot beat (or tie) the current best
+    }
+    return sum;
+}
+
+namespace {
+
+// Tracks the best candidate for one block and which displacements have
+// already been evaluated, so fast searches never pay for a point twice.
+class BlockSearch {
+public:
+    BlockSearch(int range) : m_range(range), m_side(2 * range + 1),
+        m_visited(static_cast<size_t>(m_side) * m_side, 0) {}
+
+    bool inRange(int dx, int dy) const {
+        return std::abs(dx) <= m_range && std::abs(dy) <= m_range;
+    }
+
+    bool visited(int dx, int dy) const { return m_visited[slot(dx, dy)] != 0; }
+    void markVisited(int dx, int dy) { m_visited[slot(dx, dy)] = 1; }
+
+    // Prefer lower SAD; break ties towards the shorter vector so flat or
+    // repetitive areas settle on (0,0) instead of an arbitrary scan position.
+    void offer(int dx, int dy, int sad) {
+        if (sad < 0) return;
+        const int len = dx * dx + dy * dy;
+        if (!m_hasBest || sad < m_best.sad || (sad == m_best.sad && len < m_bestLen)) {
+            m_best = {dx, dy, sad};
+            m_bestLen = len;
+            m_hasBest = true;
+        }
+    }
+
+    bool hasBest() const { return m_hasBest; }
+    const MotionVector& best() const { return m_best; }
+    int limit() const { return m_hasBest ? m_best.sad : INT_MAX; }
+
+private:
+    size_t slot(int dx, int dy) const {
+        return static_cast<size_t>(dy + m_range) * m_side + (dx + m_range);
+    }
+
+    int m_range;
+    int m_side;
+    std::vector<char> m_visited;
+    MotionVector m_best{0, 0, 0};
+    int m_bestLen = 0;
+    bool m_hasBest = false;
+};
+
+}  // namespace
+
+MotionVector MotionEstimator::searchBlock(SearchAlgorithm algorithm, int col, int row,
+                                          int blockSize, int searchRange,
+                                          long long& evaluated,
+                                          std::vector<SearchCandidate>* trace) const {
+    const int curX = col * blockSize;
+    const int curY = row * blockSize;
+    BlockSearch state(searchRange);
+
+    // Evaluate one displacement (once). Returns its SAD, or -1 if it is out of
+    // range/frame or was already visited.
+    auto evaluate = [&](int dx, int dy, int iteration) -> int {
+        if (!state.inRange(dx, dy) || state.visited(dx, dy)) return -1;
+        state.markVisited(dx, dy);
+        // Traced searches need exact SADs for every candidate (for display).
+        const int limit = trace ? INT_MAX : state.limit();
+        const int sad = blockSad(curX, curY, dx, dy, blockSize, limit);
+        if (sad < 0) return -1;
+        ++evaluated;
+        if (trace) trace->push_back({dx, dy, sad, iteration});
+        state.offer(dx, dy, sad);
+        return sad;
+    };
+
+    // Every algorithm starts from the zero vector.
+    evaluate(0, 0, 0);
+
+    switch (algorithm) {
+    case SearchAlgorithm::Full:
+        for (int dy = -searchRange; dy <= searchRange; ++dy)
+            for (int dx = -searchRange; dx <= searchRange; ++dx)
+                evaluate(dx, dy, 1);
+        break;
+
+    case SearchAlgorithm::ThreeStep: {
+        // Smallest power of two whose step sum (step + step/2 + ... + 1 =
+        // 2*step - 1) reaches R, so every displacement is reachable.
+        // R=7 -> 4,2,1; R=16 -> 16,8,4,2,1.
+        int step = 1;
+        while (step * 2 - 1 < searchRange) step *= 2;
+        int iteration = 1;
+        while (step >= 1) {
+            const int cx = state.best().dx;
+            const int cy = state.best().dy;
+            for (int oy = -1; oy <= 1; ++oy)
+                for (int ox = -1; ox <= 1; ++ox)
+                    if (ox != 0 || oy != 0)
+                        evaluate(cx + ox * step, cy + oy * step, iteration);
+            step /= 2;
+            ++iteration;
+        }
+        break;
+    }
+
+    case SearchAlgorithm::Diamond: {
+        static const int LDSP[8][2] = {{0, -2}, {1, -1}, {2, 0}, {1, 1},
+                                       {0, 2}, {-1, 1}, {-2, 0}, {-1, -1}};
+        static const int SDSP[4][2] = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
+        // Each move strictly lowers the SAD, so this terminates; the cap is a
+        // safety net well above the longest possible walk across the window.
+        const int maxIterations = 4 * searchRange + 4;
+        int iteration = 1;
+        for (; iteration <= maxIterations; ++iteration) {
+            const int cx = state.best().dx;
+            const int cy = state.best().dy;
+            for (const auto& o : LDSP) evaluate(cx + o[0], cy + o[1], iteration);
+            if (state.best().dx == cx && state.best().dy == cy) break;
+        }
+        const int cx = state.best().dx;
+        const int cy = state.best().dy;
+        for (const auto& o : SDSP) evaluate(cx + o[0], cy + o[1], iteration + 1);
+        break;
+    }
+    }
+
+    // (0,0) is always inside the frame for a full block, so a best exists.
+    return state.best();
+}
+
+SearchResult MotionEstimator::search(SearchAlgorithm algorithm, int blockSize,
+                                     int searchRange) const {
+    SearchResult result;
+    if (!validParams(blockSize, searchRange)) return result;
+
+    result.blockSize = blockSize;
+    result.searchRange = searchRange;
+    result.algorithm = algorithm;
+    result.cols = m_width / blockSize;
+    result.rows = m_height / blockSize;
+    result.mvs.reserve(static_cast<size_t>(result.cols) * result.rows);
+
+    for (int row = 0; row < result.rows; ++row)
+        for (int col = 0; col < result.cols; ++col)
+            result.mvs.push_back(searchBlock(algorithm, col, row, blockSize, searchRange,
+                                             result.candidatesEvaluated, nullptr));
+    return result;
+}
+
+std::vector<SearchCandidate> MotionEstimator::traceBlock(SearchAlgorithm algorithm, int col,
+                                                         int row, int blockSize,
+                                                         int searchRange) const {
+    std::vector<SearchCandidate> trace;
+    if (!validParams(blockSize, searchRange)) return trace;
+    if (col < 0 || row < 0 || col >= m_width / blockSize || row >= m_height / blockSize)
+        return trace;
+
+    long long evaluated = 0;
+    searchBlock(algorithm, col, row, blockSize, searchRange, evaluated, &trace);
+    return trace;
+}
+
+std::vector<int> MotionEstimator::costSurface(int col, int row, int blockSize,
+                                              int searchRange) const {
+    std::vector<int> surface;
+    if (!validParams(blockSize, searchRange)) return surface;
+    if (col < 0 || row < 0 || col >= m_width / blockSize || row >= m_height / blockSize)
+        return surface;
+
+    const int side = 2 * searchRange + 1;
+    surface.reserve(static_cast<size_t>(side) * side);
+    for (int dy = -searchRange; dy <= searchRange; ++dy)
+        for (int dx = -searchRange; dx <= searchRange; ++dx)
+            surface.push_back(blockSad(col * blockSize, row * blockSize, dx, dy, blockSize, INT_MAX));
+    return surface;
+}
+
+// ---------------------------------------------------------------------------
+// Compensation
+// ---------------------------------------------------------------------------
+
+std::vector<uint8_t> MotionEstimator::predict(const std::vector<MotionVector>& mvs,
+                                              int blockSize) const {
+    std::vector<uint8_t> pred;
+    if (!isLoaded() || !isValidBlockSize(blockSize)) return pred;
+
+    const int cols = m_width / blockSize;
+    const int rows = m_height / blockSize;
+    if (mvs.size() != static_cast<size_t>(cols) * rows) return pred;
+
+    // Start from the zero-motion prediction; this also covers the remainder
+    // strips that are not part of any full block.
+    pred = m_ref;
 
     for (int row = 0; row < rows; ++row) {
         for (int col = 0; col < cols; ++col) {
-            int curX = col * blockSize;
-            int curY = row * blockSize;
-
-            double bestMAD = std::numeric_limits<double>::max();
-            int bestDx = 0, bestDy = 0;
-
-            for (int dy = -searchRange; dy <= searchRange; ++dy) {
-                for (int dx = -searchRange; dx <= searchRange; ++dx) {
-                    int refX = curX + dx;
-                    int refY = curY + dy;
-
-                    // Skip candidate if it goes outside the reference frame
-                    if (refX < 0 || refY < 0 ||
-                        refX + blockSize > m_width ||
-                        refY + blockSize > m_height)
-                        continue;
-
-                    double mad = computeMAD(refX, refY, curX, curY, blockSize);
-                    if (mad < bestMAD) {
-                        bestMAD = mad;
-                        bestDx  = dx;
-                        bestDy  = dy;
-                    }
-                }
-            }
-
-            mvs.push_back({bestDx, bestDy, bestMAD});
-        }
-    }
-
-    return mvs;
-}
-
-std::vector<MotionVector> MotionEstimator::threeStepSearch(int blockSize,
-                                                           int searchRange) const {
-    if (m_refLuma.empty())
-        throw std::runtime_error("MotionEstimator: frames not loaded");
-
-    int cols = m_width  / blockSize;
-    int rows = m_height / blockSize;
-
-    std::vector<MotionVector> mvs;
-    mvs.reserve(static_cast<size_t>(cols * rows));
-
-    for (int row = 0; row < rows; ++row) {
-        for (int col = 0; col < cols; ++col) {
-            int curX = col * blockSize;
-            int curY = row * blockSize;
-
-            // Start at centre of search window
-            int cx = curX, cy = curY;
-            double bestMAD = computeMAD(cx, cy, curX, curY, blockSize);
-
-            // Step size starts at half the search range, halves each iteration
-            int step = searchRange / 2;
-            if (step < 1) step = 1;
-
-            while (step >= 1) {
-                int newCx = cx, newCy = cy;
-
-                // Check 8 neighbours at current step size + the current centre
-                static const int offsets[9][2] = {
-                    {-1,-1},{0,-1},{1,-1},
-                    {-1, 0},{0, 0},{1, 0},
-                    {-1, 1},{0, 1},{1, 1}
-                };
-
-                for (auto& off : offsets) {
-                    int rx = cx + off[0] * step;
-                    int ry = cy + off[1] * step;
-
-                    if (rx < 0 || ry < 0 ||
-                        rx + blockSize > m_width ||
-                        ry + blockSize > m_height)
-                        continue;
-
-                    // Also clamp total displacement to searchRange
-                    if (std::abs(rx - curX) > searchRange ||
-                        std::abs(ry - curY) > searchRange)
-                        continue;
-
-                    double mad = computeMAD(rx, ry, curX, curY, blockSize);
-                    if (mad < bestMAD) {
-                        bestMAD = mad;
-                        newCx   = rx;
-                        newCy   = ry;
-                    }
-                }
-
-                cx = newCx;
-                cy = newCy;
-                step /= 2;
-            }
-
-            mvs.push_back({cx - curX, cy - curY, bestMAD});
-        }
-    }
-
-    return mvs;
-}
-
-Image MotionEstimator::computeResidual(int blockSize,
-                                       const std::vector<MotionVector>& mvs) const {
-    if (m_curLuma.empty())
-        throw std::runtime_error("MotionEstimator: frames not loaded");
-
-    int cols = m_width  / blockSize;
-    int rows = m_height / blockSize;
-
-    // Output is an RGB image (3 channels) so it can be written out as RGBA
-    // later. We use 3 channels here and let the WASM layer add the alpha.
-    Image residual(m_width, m_height, 1);
-
-    for (int row = 0; row < rows; ++row) {
-        for (int col = 0; col < cols; ++col) {
-            const MotionVector& mv = mvs[static_cast<size_t>(row * cols + col)];
-            int curX = col * blockSize;
-            int curY = row * blockSize;
-            int refX = curX + mv.dx;
-            int refY = curY + mv.dy;
-
-            for (int dy = 0; dy < blockSize; ++dy) {
-                for (int dx = 0; dx < blockSize; ++dx) {
-                    double cur = m_curLuma.at(curX + dx, curY + dy, 0);
-                    double pred = 0.0;
-
-                    int rx = refX + dx;
-                    int ry = refY + dy;
-                    if (rx >= 0 && ry >= 0 && rx < m_width && ry < m_height)
-                        pred = m_refLuma.at(rx, ry, 0);
-
-                    // Shift to [0,255]: 0 error → 128 (mid-grey)
-                    double diff = (cur - pred) + 128.0;
-                    diff = std::max(0.0, std::min(255.0, diff));
-                    residual.at(curX + dx, curY + dy, 0) = diff;
-                }
+            const MotionVector& mv = mvs[static_cast<size_t>(row) * cols + col];
+            const int curX = col * blockSize;
+            const int curY = row * blockSize;
+            const int refX = curX + mv.dx;
+            const int refY = curY + mv.dy;
+            if (refX < 0 || refY < 0 || refX + blockSize > m_width || refY + blockSize > m_height)
+                continue;  // never produced by search(); keep zero-motion prediction
+            for (int y = 0; y < blockSize; ++y) {
+                const uint8_t* src = &m_ref[static_cast<size_t>(refY + y) * m_width + refX];
+                uint8_t* dst = &pred[static_cast<size_t>(curY + y) * m_width + curX];
+                std::copy(src, src + blockSize, dst);
             }
         }
     }
-
-    return residual;
+    return pred;
 }
 
-std::vector<std::pair<int,int>> MotionEstimator::getSearchSteps(
-    int bx, int by, int blockSize, int searchRange) const
-{
-    if (m_refLuma.empty())
-        throw std::runtime_error("MotionEstimator: frames not loaded");
+std::vector<int16_t> MotionEstimator::residual(const std::vector<MotionVector>& mvs,
+                                               int blockSize) const {
+    std::vector<int16_t> res;
+    const std::vector<uint8_t> pred = predict(mvs, blockSize);
+    if (pred.empty()) return res;
 
-    std::vector<std::pair<int,int>> steps;
-    steps.reserve(static_cast<size_t>((2 * searchRange + 1) * (2 * searchRange + 1)));
-
-    for (int dy = -searchRange; dy <= searchRange; ++dy) {
-        for (int dx = -searchRange; dx <= searchRange; ++dx) {
-            int refX = bx + dx;
-            int refY = by + dy;
-
-            if (refX < 0 || refY < 0 ||
-                refX + blockSize > m_width ||
-                refY + blockSize > m_height)
-                continue;
-
-            steps.emplace_back(refX, refY);
-        }
-    }
-
-    return steps;
+    res.resize(pred.size());
+    for (size_t i = 0; i < pred.size(); ++i)
+        res[i] = static_cast<int16_t>(static_cast<int>(m_cur[i]) - static_cast<int>(pred[i]));
+    return res;
 }
