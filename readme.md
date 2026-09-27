@@ -13,6 +13,7 @@ An interactive codec laboratory to visualize how transform-based image compressi
 - Zig-zag and zero-run visualization
 - Artifact analysis maps
 - PSNR-based quality metrics
+- Motion Explorer: block-matching motion estimation (full, three-step and diamond search) on synthetic frame pairs with known motion
 
 ## 🛠 Technologies
 
@@ -134,12 +135,37 @@ Run `./build/codec_app --help` to see available options.
 - [x] DWT-specific artifact analysis in Inspector
 - [x] Multi-transform bitrate estimation & comparison
 
-### Phase 4: Future Work
+### ✅ Phase 4: Motion Estimation
 
-- [ ] Two-frame video input
-- [ ] Block matching (SAD/MSE)
-- [ ] Motion vector visualization
-- [ ] Temporal bitrate comparison vs. static frames
+- [x] Two-frame input from synthetic motion (pan, zoom, rotation, moving object, sensor noise) with ground truth
+- [x] Block matching (SAD) with full, three-step and diamond search
+- [x] Motion vector visualization, match-cost heatmap and accuracy vs. true motion
+- [x] Block search drill-down: candidate animation and SAD cost surface
+- [x] Temporal bitrate comparison (P frame vs. I frame)
+
+### Phase 5: Future Work
+
+- [ ] Real video input (two frames from an uploaded clip)
+- [ ] Motion vector prediction as the search starting point
+- [ ] Sub-pixel motion estimation
+
+## 🎞️ How the Motion Explorer works
+
+Video codecs rarely code a frame from scratch. They split it into blocks and, for each block,
+search the previous frame for the best-matching block (**motion estimation**). The encoder sends
+the **motion vector** plus the **residual**: what is left after copying the match
+(**motion compensation**). A good match leaves a flat residual that costs very few bits.
+
+In the Motion Explorer, the second frame is generated from the loaded image with a known motion,
+so every estimated vector can be checked against the truth:
+
+- **Views:** reference, current, motion-compensated prediction, residual, and the plain frame
+  difference without motion compensation.
+- **Search algorithms:** full search checks every displacement in the window; three-step and
+  diamond search check a few dozen and can stop in a local minimum. Click a block to watch its
+  search and see the cost surface.
+- **Bits:** the P frame (residual + vectors) is compared with coding the frame on its own
+  (I frame), using the same luma-only symbol model for both.
 
 ## ▶️ Motivation
 
