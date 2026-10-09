@@ -58,11 +58,16 @@ web-dev: web
 # 🖥️ NATIVE WORKFLOW
 # ------------------------------------
 
+# CMake options are cached in build/, so every target states them explicitly;
+# otherwise `make coverage` would leave coverage instrumentation on for the
+# next `make test`.
+PLAIN_FLAGS = -DENABLE_COVERAGE=OFF -DENABLE_SANITIZERS=OFF
+
 # 3. Native Dev Loop
 dev:
 	@echo "🔥 Building Native App..."
 	@mkdir -p build
-	@cd build && cmake .. && make -j$(NPROCS)
+	@cd build && cmake .. $(PLAIN_FLAGS) && make -j$(NPROCS)
 	@echo "🚀 Running Native App..."
 	@cd build && ./$(NATIVE_APP_NAME)
 
@@ -70,27 +75,40 @@ dev:
 test:
 	@echo "🧪 Running Tests..."
 	@mkdir -p build
-	@cd build && cmake .. && make -j$(NPROCS)
+	@cd build && cmake .. $(PLAIN_FLAGS) && make -j$(NPROCS)
 	@cd build && ctest --output-on-failure
 
 # 5. Coverage
 coverage:
 	@echo "📊 Generating Coverage..."
 	@mkdir -p build
-	@find build -name "*.gcda" -delete 
-	@cd build && cmake .. -DENABLE_COVERAGE=ON && make -j$(NPROCS)
+	@find build -name "*.gcda" -delete
+	@cd build && cmake .. -DENABLE_COVERAGE=ON -DENABLE_SANITIZERS=OFF && make -j$(NPROCS)
 	@cd build && ctest --output-on-failure
 	@echo "📈 Generating Sonar-compatible XML report..."
 	# In gcovr 8.6, we use the search path at the end instead of --build-root
 	gcovr --sonarqube -o coverage.xml -r . --filter core/src/ -e build/ --gcov-ignore-parse-errors=all build
 
-# 6. Sanitize (ASan + UBSan)
+# 6. Sanitize (ASan + UBSan) in its own build directory
+#
+# Some toolchains ship a broken ASan runtime (Apple clang 17 on macOS 26
+# deadlocks inside __asan::InitializeShadowMemory before main). A tiny probe
+# binary is run under a 10 s watchdog first; if ASan can't start, fall back to
+# UBSan only rather than hanging. CI runs the full ASan + UBSan set on Linux.
+SANITIZE_DIR = build-sanitize
+
 sanitize:
 	@echo "🛡️ Running with Sanitizers..."
-	@mkdir -p build
-	@if [ -d build/CMakeCache.txt ]; then rm build/CMakeCache.txt; fi
-	@cd build && cmake .. -DENABLE_SANITIZERS=ON && make -j$(NPROCS)
-	@cd build && ctest --output-on-failure
+	@mkdir -p $(SANITIZE_DIR)
+	@printf 'int main(){return 0;}\n' > $(SANITIZE_DIR)/asan_probe.cpp
+	@SANITIZERS=address,undefined; \
+	if ! $(CXX) -fsanitize=address $(SANITIZE_DIR)/asan_probe.cpp -o $(SANITIZE_DIR)/asan_probe 2>/dev/null || \
+	   ! perl -e 'alarm 10; exec @ARGV' $(SANITIZE_DIR)/asan_probe; then \
+		echo "⚠️  AddressSanitizer is unavailable with this toolchain; running UndefinedBehaviorSanitizer only."; \
+		SANITIZERS=undefined; \
+	fi; \
+	cd $(SANITIZE_DIR) && cmake .. -DENABLE_SANITIZERS=ON -DSANITIZERS=$$SANITIZERS -DENABLE_COVERAGE=OFF && make -j$(NPROCS) && \
+	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 ctest --output-on-failure
 
 # ------------------------------------
 # 🌐 JS / WEB TESTS (Vitest)

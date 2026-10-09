@@ -25,11 +25,13 @@ endif()
 
 # --- Sanitizers ---
 option(ENABLE_SANITIZERS "Enable ASan and UBSan" OFF)
+set(SANITIZERS "address,undefined" CACHE STRING "Comma-separated -fsanitize= list used when ENABLE_SANITIZERS is ON")
 if(ENABLE_SANITIZERS)
     if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
-        message(STATUS "Enabling AddressSanitizer and UndefinedBehaviorSanitizer")
-        add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
-        add_link_options(-fsanitize=address,undefined)
+        message(STATUS "Enabling sanitizers: ${SANITIZERS}")
+        # Make UBSan findings fail the test run instead of only printing.
+        add_compile_options(-fsanitize=${SANITIZERS} -fno-sanitize-recover=undefined -fno-omit-frame-pointer)
+        add_link_options(-fsanitize=${SANITIZERS})
     endif()
 endif()
 
