@@ -137,17 +137,12 @@ export function renderGrid(
     // Event delegation — one-time setup per grid container
     if (!el.hasAttribute('data-events-attached')) {
         el.setAttribute('data-events-attached', 'true');
+        el.setAttribute('role', 'group');
+        el.setAttribute('aria-roledescription', '8 by 8 grid');
 
-        el.addEventListener('mousemove', (e) => {
-            const target = e.target as HTMLElement;
-            const cell = target.closest('.grid-cell') as HTMLElement;
-            if (!cell) return;
-
+        const inspectCell = (cell: HTMLElement, at: Pick<MouseEvent, 'clientX' | 'clientY'>) => {
             const row = Number.parseInt(cell.dataset.row || '0');
             const col = Number.parseInt(cell.dataset.col || '0');
-            const valStr = cell.dataset.val || '';
-            const desc = cell.dataset.desc || '';
-            const isBasis = cell.dataset.isBasis === 'true';
 
             const key = `${row},${col}`;
             if (lastHighlightedKey !== key) {
@@ -155,28 +150,15 @@ export function renderGrid(
                 lastHighlightedKey = key;
             }
 
-            if (!isBasis) {
-                showTooltip(e, valStr, row, col, desc);
+            if (cell.dataset.isBasis === 'true') {
+                showBasisPopover(at, row, col);
+            } else {
+                showTooltip(at, cell.dataset.val || '', row, col, cell.dataset.desc || '');
             }
-            if (isBasis) {
-                showBasisPopover(e, row, col);
-            }
-        });
+        };
 
-        el.addEventListener('mouseleave', () => {
-            hideTooltip();
-            hideBasisPopover();
-            clearAllHighlights();
-        });
-
-        el.addEventListener('click', (e) => {
-            const target = e.target as HTMLElement;
-            const cell = target.closest('.grid-cell') as HTMLElement;
-            if (!cell) return;
-
-            const isBasis = cell.dataset.isBasis === 'true';
-            if (!isBasis) return;
-
+        const activateCell = (cell: HTMLElement) => {
+            if (cell.dataset.isBasis !== 'true') return;
             const row = Number.parseInt(cell.dataset.row || '0');
             const col = Number.parseInt(cell.dataset.col || '0');
             const targetGridId = el.dataset.target || '';
@@ -188,8 +170,75 @@ export function renderGrid(
             if (el.id === 'gridDequantized') {
                 applyPartialReconToGrid(row, col);
             }
+        };
+
+        const dismiss = () => {
+            hideTooltip();
+            hideBasisPopover();
+            clearAllHighlights();
+        };
+
+        el.addEventListener('mousemove', (e) => {
+            const cell = (e.target as HTMLElement).closest('.grid-cell') as HTMLElement | null;
+            if (cell) inspectCell(cell, e);
+        });
+
+        el.addEventListener('mouseleave', () => {
+            if (!el.contains(document.activeElement)) dismiss();
+        });
+
+        el.addEventListener('click', (e) => {
+            const cell = (e.target as HTMLElement).closest('.grid-cell') as HTMLElement | null;
+            if (cell) activateCell(cell);
+        });
+
+        // Keyboard: one tab stop per grid (roving tabindex), arrows move between
+        // cells, Enter/Space does what a click does, Escape closes the popover.
+        el.addEventListener('focusin', (e) => {
+            const cell = (e.target as HTMLElement).closest('.grid-cell') as HTMLElement | null;
+            if (!cell) return;
+            const rect = cell.getBoundingClientRect();
+            inspectCell(cell, { clientX: rect.right, clientY: rect.top + rect.height / 2 });
+        });
+
+        el.addEventListener('focusout', (e) => {
+            if (!el.contains(e.relatedTarget as Node | null)) dismiss();
+        });
+
+        el.addEventListener('keydown', (e) => {
+            const cell = (e.target as HTMLElement).closest('.grid-cell') as HTMLElement | null;
+            if (!cell) return;
+            const idx = Number.parseInt(cell.dataset.row || '0') * 8 + Number.parseInt(cell.dataset.col || '0');
+
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                activateCell(cell);
+                return;
+            }
+            if (e.key === 'Escape') {
+                // First Escape closes the popover; the next one reaches the
+                // inspector's own handler and exits.
+                const popoverOpen = document.getElementById('basisPopover')?.classList.contains('visible');
+                const tooltipOpen = document.querySelector('.grid-cell-tooltip.visible');
+                if (popoverOpen || tooltipOpen) {
+                    e.stopPropagation();
+                    hideTooltip();
+                    hideBasisPopover();
+                }
+                return;
+            }
+
+            const next = nextCellIndex(idx, e.key);
+            if (next === null) return;
+            // Keep arrows inside the grid instead of switching blocks.
+            e.preventDefault();
+            e.stopPropagation();
+            focusGridCell(el, next);
         });
     }
+
+    const heading = (el.closest('.pipeline-block') ?? el.closest('.analysis-card'))?.querySelector('h3');
+    if (heading?.textContent) el.setAttribute('aria-label', heading.textContent.trim());
 
     const hasChildren = el.children.length === 64;
     let nonZeroCount = 0;
@@ -249,6 +298,15 @@ export function renderGrid(
         cell.dataset.val = tooltipVal;
         cell.dataset.desc = getCellDescription(row, col, gridType);
 
+        // Roving tabindex: only the grid's current cell is in the tab order.
+        cell.tabIndex = i === Number.parseInt(el.dataset.focusIdx || '0') ? 0 : -1;
+        cell.setAttribute('role', isBasis ? 'button' : 'img');
+        const desc = cell.dataset.desc;
+        const sentence = desc && !/[.!?]$/.test(desc) ? `${desc}.` : desc;
+        cell.setAttribute('aria-label',
+            `Row ${row + 1}, column ${col + 1}: ${tooltipVal}. ${sentence}` +
+            (isBasis ? ' Press Enter to animate this basis function.' : ''));
+
         if (type === 'frequency' && Math.abs(val) >= 0.5) nonZeroCount++;
 
         cell.className = 'grid-cell'; // reset classes (removes cell-zero, cell-highlight)
@@ -305,6 +363,31 @@ export function renderGrid(
             }
         }
     }
+}
+
+/** Target index for a navigation key in an 8×8 grid, or null if the key isn't one. */
+export function nextCellIndex(idx: number, key: string): number | null {
+    const row = Math.floor(idx / 8);
+    const col = idx % 8;
+    switch (key) {
+        case 'ArrowLeft': return row * 8 + Math.max(0, col - 1);
+        case 'ArrowRight': return row * 8 + Math.min(7, col + 1);
+        case 'ArrowUp': return Math.max(0, row - 1) * 8 + col;
+        case 'ArrowDown': return Math.min(7, row + 1) * 8 + col;
+        case 'Home': return row * 8;
+        case 'End': return row * 8 + 7;
+        default: return null;
+    }
+}
+
+function focusGridCell(grid: HTMLElement, idx: number): void {
+    const cell = grid.children[idx] as HTMLElement | undefined;
+    if (!cell) return;
+    const prev = grid.children[Number.parseInt(grid.dataset.focusIdx || '0')] as HTMLElement | undefined;
+    if (prev) prev.tabIndex = -1;
+    grid.dataset.focusIdx = String(idx);
+    cell.tabIndex = 0;
+    cell.focus();
 }
 
 export function renderZigzagArray(data: Float64Array): void {

@@ -9,7 +9,8 @@ function ensureTooltip(): HTMLDivElement {
     return tooltipEl;
 }
 
-export function showTooltip(e: MouseEvent, value: number | string, row: number | string, col: number | string, desc: string): void {
+// Only the pointer position is used, so a focused element's position works too.
+export function showTooltip(e: Pick<MouseEvent, 'clientX' | 'clientY'>, value: number | string, row: number | string, col: number | string, desc: string): void {
     const tip = ensureTooltip();
     let coordText = '';
     if (row !== '-' && col !== '-') {

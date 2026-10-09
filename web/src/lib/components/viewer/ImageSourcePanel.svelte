@@ -111,7 +111,7 @@
                 {#each {length: TEST_IMAGE_COUNT} as _, i}
                 <button
                     class="test-img-btn"
-                    class:active={activeTestImageIndex === i}
+                    class:active={activeTestImageIndex === i} aria-pressed={activeTestImageIndex === i}
                     onclick={() => onTestImage(i)}
                     title="Kodak #{i}"
                     aria-label="Load Kodak test image {i}">

@@ -22,7 +22,9 @@
         onViewerMouseDown = null,
         onViewerMouseLeave = null,
         onViewerMouseMove = null,
-        onEnterInspector = null
+        onEnterInspector = null,
+        originalLabel = 'Original image',
+        processedLabel = 'Compressed image'
     } = $props();
 
     type BlockCoord = { x: number; y: number } | null;
@@ -65,7 +67,11 @@
         style={`transform: scale(${zoom}); transform-origin: ${zoomOriginX}% ${zoomOriginY}%; cursor: ${isZoomMode && zoom === 1 ? 'zoom-in' : isInspectMode ? 'crosshair' : viewType === 'comparison' ? 'col-resize' : 'default'}`}
         role="button"
         tabindex="0"
-        aria-label={isInspectMode ? 'Inspector viewer. Press Enter to inspect highlighted block.' : 'Image comparison viewer. Drag to adjust split.'}
+        aria-label={isInspectMode
+            ? 'Inspector viewer. Press Enter to inspect highlighted block.'
+            : viewType === 'original' ? originalLabel
+            : viewType === 'processed' ? processedLabel
+            : `${originalLabel} compared with ${processedLabel}. Drag to adjust split.`}
         onmousedown={handleMouseDown}
         onclick={handleClick}
         onmousemove={handleMouseMove}

@@ -45,7 +45,7 @@
     <div class="preset-group">
         {#each [{ q: 10, label: 'Low', desc: 'Thumbnails' }, { q: 50, label: 'Medium', desc: 'Web / Social' }, { q: 90, label: 'High', desc: 'Print / Archive' }] as preset}
         <button class="preset-btn" data-quality={preset.q}
-            class:active={appState.quality === preset.q}
+            class:active={appState.quality === preset.q} aria-pressed={appState.quality === preset.q}
             disabled={!appState.wasmReady}
             onclick={() => { appState.quality = preset.q; }}>
             <span class="preset-label">{preset.label}</span>

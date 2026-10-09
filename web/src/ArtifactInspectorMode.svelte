@@ -361,7 +361,7 @@
             </h2>
             <div class="artifact-chips">
                 {#each artifactModes as mode}
-                <button class="artifact-chip" class:active={appState.currentViewMode === mode.val}
+                <button class="artifact-chip" class:active={appState.currentViewMode === mode.val} aria-pressed={appState.currentViewMode === mode.val}
                     onclick={() => appState.currentViewMode = mode.val}
                     onmouseenter={(e) => onChipMouseEnter(e, mode.desc)}
                     onmouseleave={onChipMouseLeave}>
@@ -388,7 +388,7 @@
                             </label>
                             <div class="preset-group">
                                 {#each QUALITY_PRESETS as p}
-                                <button class="preset-btn" class:active={appState.quality === p.q}
+                                <button class="preset-btn" class:active={appState.quality === p.q} aria-pressed={appState.quality === p.q}
                                     onclick={() => { appState.quality = p.q; }}>
                                     <span class="preset-label">{p.label}</span>
                                     <span class="preset-desc">{p.desc}</span>
@@ -450,7 +450,7 @@
                     </summary>
                     <div class="sidebar-section-body">
                         <div class="tools-grid">
-                            <button class="tool-btn" class:active={isBlinking} onclick={toggleBlink} title="Blink Test">
+                            <button class="tool-btn" class:active={isBlinking} aria-pressed={isBlinking} onclick={toggleBlink} title="Blink Test">
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
                                     stroke-linecap="round" stroke-linejoin="round">
                                     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
@@ -459,7 +459,7 @@
                                 <span>Blink</span>
                             </button>
 
-                            <button class="tool-btn" class:active={showHeatmap} onclick={() => showHeatmap = !showHeatmap} title="Toggle Heat Map">
+                            <button class="tool-btn" class:active={showHeatmap} aria-pressed={showHeatmap} onclick={() => showHeatmap = !showHeatmap} title="Toggle Heat Map">
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                                     stroke-linecap="round" stroke-linejoin="round">
                                     <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
@@ -467,7 +467,7 @@
                                 <span>Heat Map</span>
                             </button>
 
-                            <button class="tool-btn" class:active={showBlockGrid} onclick={() => showBlockGrid = !showBlockGrid} title="8×8 Block Grid">
+                            <button class="tool-btn" class:active={showBlockGrid} aria-pressed={showBlockGrid} onclick={() => showBlockGrid = !showBlockGrid} title="8×8 Block Grid">
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                                     stroke-linecap="round" stroke-linejoin="round">
                                     <rect x="3" y="3" width="7" height="7"/>
@@ -540,11 +540,11 @@
                 <!-- View Toggle + Zoom Controls (single row) -->
                 <div class="view-toggle-container">
                     <div class="view-toggle">
-                        <button class:active={viewType === 'original'}
+                        <button class:active={viewType === 'original'} aria-pressed={viewType === 'original'}
                             onclick={() => viewType = 'original'}>
                             Original
                         </button>
-                        <button class:active={viewType === 'artifact'}
+                        <button class:active={viewType === 'artifact'} aria-pressed={viewType === 'artifact'}
                             onclick={() => viewType = 'artifact'}>
                             {currentMode.label}
                         </button>
@@ -561,7 +561,7 @@
                             Zoom out
                         </button>
                         {:else}
-                        <button class="zoom-ctrl-btn" class:active={isZoomMode}
+                        <button class="zoom-ctrl-btn" class:active={isZoomMode} aria-pressed={isZoomMode}
                             onclick={toggleArtZoomMode}
                             title={isZoomMode ? 'Exit zoom mode (Esc)' : 'Zoom mode — click image to zoom in'}>
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -581,6 +581,7 @@
                         id="artifact"
                         bind:originalCanvas
                         bind:processedCanvas={artifactCanvas}
+                        processedLabel="{currentMode.label} map: {currentMode.desc}"
                         viewType={viewType === 'artifact' ? 'processed' : 'original'}
                         bind:isZoomMode
                         bind:zoom

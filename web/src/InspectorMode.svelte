@@ -344,7 +344,7 @@
                                         {#each appState.suggestedBlocks.filter(b => b.category === cat) as block}
                                             {@const isActive = appState.inspectedBlock?.x === block.x && appState.inspectedBlock?.y === block.y}
                                             {@const scoreColor = cat === 'edge' ? '#3b82f6' : cat === 'texture' ? '#f59e0b' : '#10b981'}
-                                            <button class="suggested-block-btn" class:active={isActive}
+                                            <button class="suggested-block-btn" class:active={isActive} aria-pressed={isActive}
                                                 data-bx={block.x} data-by={block.y}
                                                 onclick={() => onSuggestedBlockSelect(block.x, block.y)}>
                                                 <div class="suggested-block-icon" style="color: {scoreColor}">{block.icon}</div>
@@ -374,7 +374,7 @@
                             <div class="preset-group">
                                 {#each [{ q: 10, label: 'Low', desc: 'Thumbnails' }, { q: 50, label: 'Medium', desc: 'Web / Social' }, { q: 90, label: 'High', desc: 'Print / Archive' }] as preset}
                                 <button class="preset-btn insp-preset-btn"
-                                    class:active={appState.quality === preset.q}
+                                    class:active={appState.quality === preset.q} aria-pressed={appState.quality === preset.q}
                                     data-quality={preset.q}
                                     onclick={() => { appState.quality = preset.q; }}>
                                     <span class="preset-label">{preset.label}</span>
@@ -425,7 +425,8 @@
                 <!-- Keyboard Shortcuts -->
                 <div class="sidebar-shortcuts">
                     <div class="shortcut-row"><kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> Navigate blocks</div>
-                    <div class="shortcut-row"><kbd>Esc</kbd> Exit inspector</div>
+                    <div class="shortcut-row"><kbd>Tab</kbd> into a grid, then <kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> explore cells, <kbd>Enter</kbd> animate</div>
+                    <div class="shortcut-row"><kbd>Esc</kbd> Close popover / exit inspector</div>
                     <div class="shortcut-row"><kbd>?</kbd> Show shortcuts</div>
                 </div>
             </aside>
