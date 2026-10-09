@@ -12,6 +12,8 @@ export interface WasmModule {
     _free(ptr: number): void;
     _init_session(ptr: number, width: number, height: number): void;
     _process_image(quality: number, csMode: number, transformMode: number): void;
+    _rd_encode(quality: number, csMode: number, transformMode: number): number;
+    _get_rd_bit_estimate(): number;
     _get_view_ptr(viewMode: number): number;
     _set_view_tint(enabled: number): void;
     _set_artifact_gain(gain: number): void;

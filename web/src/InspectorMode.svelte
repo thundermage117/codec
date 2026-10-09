@@ -403,17 +403,11 @@
 
                         <div class="control-group">
                             <div class="group-label">Transform</div>
-                            <div class="toggle-group">
-                                {#each [{ id: 'i_transform_dct', val: 0, label: 'DCT' }, { id: 'i_transform_dwt', val: 1, label: 'DWT' }] as t}
-                                <input type="radio" id={t.id} name="i_transform_type"
-                                    checked={appState.transformType === t.val}
-                                    onchange={() => appState.transformType = t.val}>
-                                <label for={t.id} style="display: flex; align-items: center; justify-content: center; gap: 4px;">
-                                    {t.label}
-                                    {#if t.val === 1}<span class="beta-badge" style="margin: 0;">BETA</span>{/if}
-                                </label>
-                                {/each}
-                            </div>
+                            <p class="control-hint">
+                                The block inspector follows the 8×8 DCT used by JPEG. Wavelet
+                                transforms work on the whole image — switch to Haar or CDF 9/7
+                                in the viewer and open the Subbands view to explore them.
+                            </p>
                         </div>
                     </div>
                 </details>

@@ -4,6 +4,7 @@ import {
     setupWasm,
     initSession,
     processImage,
+    rdEncode,
     getViewPtr,
     getStats,
     setViewTint,
@@ -221,5 +222,21 @@ describe('free', () => {
     it('delegates to Module._free', () => {
         free(1024);
         expect(globalThis.Module._free).toHaveBeenCalledWith(1024);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// rdEncode
+// ---------------------------------------------------------------------------
+describe('rdEncode', () => {
+    it('encodes with the given settings and returns PSNR and bits', () => {
+        const result = rdEncode(40, 420, 2);
+        expect(globalThis.Module._rd_encode).toHaveBeenCalledWith(40, 420, 2);
+        expect(result).toEqual({ psnrY: 33.25, bits: 12345 });
+    });
+
+    it('does not touch the displayed image', () => {
+        rdEncode(40, 420, 1);
+        expect(globalThis.Module._process_image).not.toHaveBeenCalled();
     });
 });

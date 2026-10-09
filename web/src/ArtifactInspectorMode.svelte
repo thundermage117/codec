@@ -2,6 +2,7 @@
     import { onMount, onDestroy } from 'svelte';
     import { fade } from 'svelte/transition';
     import { appState, ViewMode } from './lib/state.svelte.js';
+    import { TRANSFORMS, isWavelet } from './lib/transforms.js';
     import { processImage, getViewPtr, getStats, free, setArtifactGain } from './lib/wasm-bridge.js';
     import ImageViewer from './lib/components/ImageViewer.svelte';
 
@@ -45,6 +46,12 @@
         { q: 50, label: 'Medium', desc: 'Web / Social' },
         { q: 90, label: 'High',   desc: 'Print / Archive' },
     ];
+
+    // Wavelets have no 8×8 grid, so the blocking map should stay dark — say so.
+    const artifactModes = $derived(ARTIFACT_MODES.map(m =>
+        m.val === ViewMode.BlockingMap && isWavelet(appState.transformType)
+            ? { ...m, desc: 'Detects discontinuities at 8×8 block edges. Wavelets transform the whole image at once, so this map should stay nearly dark — compare it with DCT.' }
+            : m));
 
     const currentMode = $derived(
         ARTIFACT_MODES.find(m => m.val === appState.currentViewMode) ?? ARTIFACT_MODES[0]
@@ -319,7 +326,7 @@
                 Artifact Analyzer
             </h2>
             <div class="artifact-chips">
-                {#each ARTIFACT_MODES as mode}
+                {#each artifactModes as mode}
                 <button class="artifact-chip" class:active={appState.currentViewMode === mode.val}
                     onclick={() => appState.currentViewMode = mode.val}
                     onmouseenter={(e) => onChipMouseEnter(e, mode.desc)}
@@ -389,14 +396,11 @@
                             <div class="control-group">
                                 <div class="group-label">Transform</div>
                                 <div class="toggle-group">
-                                    {#each [{ id: 'art_transform_dct', val: 0, label: 'DCT' }, { id: 'art_transform_dwt', val: 1, label: 'DWT' }] as t}
-                                    <input type="radio" id={t.id} name="art_transform_type"
-                                        checked={appState.transformType === t.val}
-                                        onchange={() => appState.transformType = t.val}>
-                                    <label for={t.id} style="display: flex; align-items: center; justify-content: center; gap: 4px;">
-                                        {t.label}
-                                        {#if t.val === 1}<span class="beta-badge" style="margin: 0;">BETA</span>{/if}
-                                    </label>
+                                    {#each TRANSFORMS as t}
+                                    <input type="radio" id="art_transform_{t.slug}" name="art_transform_type"
+                                        checked={appState.transformType === t.value}
+                                        onchange={() => appState.transformType = t.value}>
+                                    <label for="art_transform_{t.slug}" title={t.fullName}>{t.label}</label>
                                     {/each}
                                 </div>
                             </div>

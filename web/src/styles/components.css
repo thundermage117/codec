@@ -423,6 +423,29 @@ input[type="checkbox"] {
     color: var(--text-muted);
 }
 
+.control-hint {
+    margin: 6px 0 0;
+    font-size: var(--text-base-sm);
+    line-height: 1.45;
+    color: var(--text-muted);
+}
+
+.kbd-hint {
+    margin: 8px 0 0;
+    font-size: var(--text-base-sm);
+    color: var(--text-muted);
+}
+
+.kbd-hint kbd {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    padding: 1px 5px;
+    border: 1px solid var(--border);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    background: var(--bg-secondary);
+}
+
 /* Quality Presets */
 .preset-group {
     display: flex;

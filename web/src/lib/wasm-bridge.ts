@@ -34,6 +34,14 @@ export function processImage(quality: number, csMode: number, transformType?: nu
     Module._process_image(quality, csMode, t);
 }
 
+// Encodes at the given settings for a rate–distortion sample. Unlike
+// processImage this leaves the session's processed image untouched and skips
+// SSIM, so it is cheap enough to call many times in a row.
+export function rdEncode(quality: number, csMode: number, transformType: number): { psnrY: number; bits: number } {
+    const psnrY = Module._rd_encode(quality, csMode, transformType);
+    return { psnrY, bits: Module._get_rd_bit_estimate() };
+}
+
 export function getViewPtr(viewMode: number): number {
     return Module._get_view_ptr(viewMode);
 }
