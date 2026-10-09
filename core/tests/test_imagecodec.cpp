@@ -440,3 +440,40 @@ TEST(ImageCodecTest, InspectBlockPadsPartialEdgeBlocksByReplication) {
             EXPECT_DOUBLE_EQ(debug.original[i][j], channel.at(x, y, 0)) << i << "," << j;
         }
 }
+
+TEST(ImageCodecTest, CoefficientStatsAreNormalisedAndTrackQuality) {
+    Image noise = createNoiseImage(64, 48);
+    Image luma(64, 48, 1);
+    for (int y = 0; y < 48; ++y)
+        for (int x = 0; x < 64; ++x)
+            luma.at(x, y, 0) = noise.at(x, y, 0);
+
+    for (auto t : ALL_TRANSFORMS) {
+        ImageCodec low(10.0, true, ImageCodec::ChromaSubsampling::CS_444, t);
+        ImageCodec high(90.0, true, ImageCodec::ChromaSubsampling::CS_444, t);
+        const auto lo = low.coefficientStats(luma);
+        const auto hi = high.coefficientStats(luma);
+
+        double sum = 0.0;
+        for (double h : lo.histogram) sum += h;
+        EXPECT_NEAR(sum, 1.0, 1e-9) << "transform " << static_cast<int>(t);
+
+        // Same transform → same histogram; coarser quantization zeroes more.
+        for (int b = 0; b < ImageCodec::CoefficientStats::NUM_BINS; ++b)
+            EXPECT_DOUBLE_EQ(lo.histogram[b], hi.histogram[b]);
+        EXPECT_GT(lo.zeroFraction, hi.zeroFraction);
+    }
+}
+
+TEST(ImageCodecTest, CoefficientStatsWithoutQuantizationCountOnlyExactZeros) {
+    Image flat(16, 16, 1);
+    for (size_t i = 0; i < flat.size(); ++i) flat.data()[i] = 77.0;
+    ImageCodec codec(50.0, false);
+    // A flat block has all-zero AC coefficients (up to rounding).
+    EXPECT_GT(codec.coefficientStats(flat).histogram[0], 0.99);
+
+    Image noise(16, 16, 1);
+    unsigned st = 3u;
+    for (size_t i = 0; i < noise.size(); ++i) { st = st * 1103515245u + 12345u; noise.data()[i] = (st >> 16) % 256; }
+    EXPECT_LT(codec.coefficientStats(noise).zeroFraction, 0.05);
+}

@@ -237,6 +237,62 @@ Image ImageCodec::processChannelDWT(const Image& channel, bool isChroma)
     return result;
 }
 
+// Log2 magnitude bin: 0 for |c| < 1, b for 2^(b-1) <= |c| < 2^b, capped.
+static int magnitudeBin(double c) {
+    const double mag = std::abs(c);
+    if (mag < 1.0) return 0;
+    const int bin = 1 + static_cast<int>(std::floor(std::log2(mag)));
+    return std::min(bin, ImageCodec::CoefficientStats::NUM_BINS - 1);
+}
+
+ImageCodec::CoefficientStats ImageCodec::coefficientStats(const Image& channel) const
+{
+    CoefficientStats stats;
+    long long total = 0;
+    long long zeroed = 0;
+
+    auto record = [&](double coeff, double step) {
+        stats.histogram[magnitudeBin(coeff)] += 1.0;
+        const bool zero = m_enableQuantization ? std::round(coeff / step) == 0.0 : coeff == 0.0;
+        if (zero) ++zeroed;
+        ++total;
+    };
+
+    if (isWavelet()) {
+        std::vector<double> buf;
+        int W = 0, H = 0, levels = 0;
+        transformChannelDWT(channel, buf, W, H, levels);
+        const double baseStep = DWT_BASE_STEP * qualityScale(m_quality);
+        for (int y = 0; y < H; ++y)
+            for (int x = 0; x < W; ++x) {
+                if (dwtSubbandIndex(x, y, W, H, levels) == 0) continue; // LL
+                record(buf[(size_t)y * W + x], dwtQuantStep(x, y, W, H, levels, baseStep));
+            }
+    } else {
+        // Same block extraction (edge replication, level shift) as processChannel.
+        const int width = channel.width();
+        const int height = channel.height();
+        const double* data = channel.data();
+        for (int y = 0; y < height; y += 8)
+            for (int x = 0; x < width; x += 8) {
+                double block[8][8], coeffs[8][8];
+                for (int i = 0; i < 8; ++i)
+                    for (int j = 0; j < 8; ++j)
+                        block[i][j] = data[std::min(y + i, height - 1) * width + std::min(x + j, width - 1)] - 128.0;
+                dct8x8(block, coeffs);
+                for (int i = 0; i < 8; ++i)
+                    for (int j = 0; j < 8; ++j)
+                        if (i != 0 || j != 0) record(coeffs[i][j], m_lumaQuantTable[i][j]);
+            }
+    }
+
+    if (total > 0) {
+        for (double& h : stats.histogram) h /= static_cast<double>(total);
+        stats.zeroFraction = static_cast<double>(zeroed) / static_cast<double>(total);
+    }
+    return stats;
+}
+
 Image ImageCodec::subbandMap(const Image& channel) const
 {
     if (!isWavelet()) return Image();

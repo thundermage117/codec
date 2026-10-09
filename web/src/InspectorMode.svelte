@@ -588,8 +588,8 @@
                                     </div>
                                     <div class="stat-box tooltip-container">
                                         <div class="stat-value" id="statEstBits">—</div>
-                                        <div class="stat-label">Est. Bits</div>
-                                        <div class="tooltip-content-small"><strong>Estimated Bits</strong><br>Calculated via simplified Huffman simulation on Zig-zag scanned runs and symbol magnitudes.</div>
+                                        <div class="stat-label">JPEG Bits (est.)</div>
+                                        <div class="tooltip-content-small"><strong>Estimated Bits (JPEG-style)</strong><br>A simplified JPEG Huffman simulation for this block: zig-zag runs and magnitudes, with DC coded as the difference from the previous block. The viewer's file size uses a whole-image entropy estimate instead, so the two don't add up exactly.</div>
                                     </div>
                                     <div class="stat-box tooltip-container">
                                         <div class="stat-value" id="statBpp">—</div>

@@ -5,6 +5,8 @@ import {
     initSession,
     processImage,
     rdEncode,
+    getCoeffStats,
+    COEFF_BINS,
     getViewPtr,
     getStats,
     setViewTint,
@@ -238,5 +240,34 @@ describe('rdEncode', () => {
     it('does not touch the displayed image', () => {
         rdEncode(40, 420, 1);
         expect(globalThis.Module._process_image).not.toHaveBeenCalled();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// getCoeffStats
+// ---------------------------------------------------------------------------
+describe('getCoeffStats', () => {
+    it('returns null when no stats are available', () => {
+        globalThis.Module._get_coeff_stats.mockReturnValueOnce(0);
+        expect(getCoeffStats(50)).toBeNull();
+    });
+
+    it('parses one histogram + zero fraction record per transform and frees the buffer', () => {
+        const ptr = 1024;
+        const view = new DataView(globalThis.Module.HEAPU8.buffer);
+        const record = COEFF_BINS + 1;
+        for (let mode = 0; mode < 3; mode++) {
+            for (let b = 0; b < COEFF_BINS; b++) view.setFloat64(ptr + (mode * record + b) * 8, mode * 100 + b, true);
+            view.setFloat64(ptr + (mode * record + COEFF_BINS) * 8, 0.1 * (mode + 1), true);
+        }
+        globalThis.Module._get_coeff_stats.mockReturnValueOnce(ptr);
+
+        const stats = getCoeffStats(30);
+
+        expect(globalThis.Module._get_coeff_stats).toHaveBeenCalledWith(30);
+        expect(stats[2].histogram[3]).toBe(203);
+        expect(stats[0].zeroFraction).toBeCloseTo(0.1);
+        expect(stats[2].zeroFraction).toBeCloseTo(0.3);
+        expect(globalThis.Module._free).toHaveBeenCalledWith(ptr);
     });
 });

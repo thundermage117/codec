@@ -2,7 +2,7 @@
 // not the Module mock used by the other browser tests.
 import { describe, it, expect, beforeAll } from 'vitest';
 import { appState, ViewMode } from '../../src/lib/state.svelte.js';
-import { initSession, processImage, rdEncode, getStats, getLastBitEstimate, getProcessedRgba } from '../../src/lib/wasm-bridge.js';
+import { initSession, processImage, rdEncode, getStats, getLastBitEstimate, getProcessedRgba, getCoeffStats } from '../../src/lib/wasm-bridge.js';
 import { Transform, TRANSFORMS } from '../../src/lib/transforms.js';
 
 const WIDTH = 384;
@@ -122,5 +122,16 @@ describe('codec with the real WASM module', () => {
         let nonZero = 0;
         for (let i = 0; i < edges.length; i += 4) if (edges[i] > 0) nonZero++;
         expect(nonZero).toBeGreaterThan(WIDTH * HEIGHT * 0.05);
+    });
+
+    it('getCoeffStats gives normalised histograms whose zeroed share falls as quality rises', () => {
+        const low = getCoeffStats(10);
+        const high = getCoeffStats(90);
+        for (const t of TRANSFORMS) {
+            const sum = low[t.value].histogram.reduce((a, b) => a + b, 0);
+            expect(sum).toBeCloseTo(1, 6);
+            expect(low[t.value].histogram).toEqual(high[t.value].histogram);
+            expect(low[t.value].zeroFraction).toBeGreaterThan(high[t.value].zeroFraction);
+        }
     });
 });

@@ -639,21 +639,3 @@ canvas {
     background: var(--primary-hover);
     transform: translateY(-1px);
 }
-
-.hist-bar-dct {
-    fill: var(--primary);
-    opacity: 0.82;
-}
-
-.hist-bar-dwt {
-    fill: #f59e0b;
-    opacity: 0.82;
-}
-
-.hist-dct-value {
-    color: var(--primary);
-}
-
-.hist-dwt-value {
-    color: #f59e0b;
-}

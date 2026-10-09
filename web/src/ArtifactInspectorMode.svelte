@@ -104,17 +104,24 @@
     const EDGE_DISTORTION_GAIN = 4.0;
     const BLOCKING_GAIN = 8.0;
 
+    const currentGain = $derived(
+        appState.currentViewMode === ViewMode.EdgeDistortion ? EDGE_DISTORTION_GAIN
+        : appState.currentViewMode === ViewMode.BlockingMap ? BLOCKING_GAIN
+        : gainValue);
+
+    function formatLevels(v: number): string {
+        return v < 10 ? v.toFixed(1) : v.toFixed(0);
+    }
+
     const tooltipReading = $derived.by(() => {
         const mode = appState.currentViewMode;
-        const gain = mode === ViewMode.EdgeDistortion ? EDGE_DISTORTION_GAIN
-                   : mode === ViewMode.BlockingMap ? BLOCKING_GAIN
-                   : gainValue;
+        const gain = currentGain;
         const label = mode === ViewMode.EdgeDistortion ? 'Edge strength Δ'
                     : mode === ViewMode.BlockingMap ? 'Boundary step'
                     : '|Error|';
         const value = tooltip.val / gain;
         // A saturated pixel only tells us the true value is at least 255 / gain.
-        const text = `${tooltip.val >= 255 ? '≥ ' : ''}${value < 10 ? value.toFixed(1) : value.toFixed(0)}`;
+        const text = `${tooltip.val >= 255 ? '≥ ' : ''}${formatLevels(value)}`;
         return { label, text, saturated: tooltip.val >= 255 };
     });
 
@@ -474,12 +481,12 @@
 
                         {#if showHeatmap}
                         <div class="heatmap-scale-container" transition:fade={{duration: 150}}>
-                            <div class="heatmap-scale-label">Error Magnitude</div>
+                            <div class="heatmap-scale-label">{tooltipReading.label} (pixel levels)</div>
                             <div class="heatmap-scale-bar"></div>
                             <div class="heatmap-scale-range">
                                 <span>0</span>
-                                <span>127</span>
-                                <span>255</span>
+                                <span>{formatLevels(127.5 / currentGain)}</span>
+                                <span>≥ {formatLevels(255 / currentGain)}</span>
                             </div>
                         </div>
                         {/if}

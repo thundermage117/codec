@@ -4,6 +4,31 @@ import { hideBasisPopover, setCachedGridData } from './basis-popover.js';
 import { renderGrid, renderLossMeter, renderZigzagArray, renderEntropySummary, stopReconstructionAnimation } from './grid-renderer.js';
 import { estimateBlockBits, getEntropySymbols } from './dct-utils.js';
 
+// Index of the quantized grid within BlockDebugData (original, coefficients,
+// quantTable, quantized, reconstructed — 64 doubles each).
+const QUANTIZED_GRID = 3;
+
+/**
+ * The block coded just before (blockX, blockY) in a non-interleaved raster
+ * scan of this channel, in the original-image block coordinates that
+ * inspectBlockData expects; null for the first block. Subsampled chroma has
+ * its own, coarser block grid, so the step back happens in that grid.
+ */
+export function previousBlockInScan(blockX: number, blockY: number, channelIndex: number): { x: number; y: number } | null {
+    const chroma = channelIndex !== 0;
+    const scaleX = chroma && appState.currentCsMode !== 444 ? 2 : 1;
+    const scaleY = chroma && appState.currentCsMode === 420 ? 2 : 1;
+    const blocksPerRow = Math.ceil(Math.ceil(appState.imgWidth / scaleX) / 8);
+
+    const cx = Math.floor(blockX / scaleX);
+    const cy = Math.floor(blockY / scaleY);
+    let px: number, py: number;
+    if (cx > 0) { px = cx - 1; py = cy; }
+    else if (cy > 0) { px = blocksPerRow - 1; py = cy - 1; }
+    else return null;
+    return { x: px * scaleX, y: py * scaleY };
+}
+
 export function inspectBlock(blockX: number, blockY: number): void {
     hideBasisPopover();
     stopReconstructionAnimation();
@@ -22,6 +47,15 @@ export function inspectBlock(blockX: number, blockY: number): void {
     if (qTableType) qTableType.innerText = tableLabel;
     if (qTableType2) qTableType2.innerText = tableLabel;
 
+    // Read the previous block's quantized DC first: inspectBlockData returns a
+    // pointer to one shared buffer that the next call overwrites.
+    const prev = previousBlockInScan(blockX, blockY, channelIndex);
+    let prevDc = 0;
+    if (prev) {
+        const prevPtr = inspectBlockData(prev.x, prev.y, channelIndex, appState.quality);
+        if (prevPtr) prevDc = new Float64Array(Module.HEAPU8.buffer, prevPtr + QUANTIZED_GRID * 64 * 8, 1)[0];
+    }
+
     const ptr = inspectBlockData(blockX, blockY, channelIndex, appState.quality);
     if (!ptr) {
         console.error('Failed to inspect block: Ptr is null');
@@ -37,7 +71,7 @@ export function inspectBlock(blockX: number, blockY: number): void {
     const originalData = readGrid(0);
     const coeffData = readGrid(1);
     const qtData = readGrid(2);
-    const quantData = readGrid(3);
+    const quantData = readGrid(QUANTIZED_GRID);
     const reconData = readGrid(4);
 
     const errorData = new Float64Array(64);
@@ -99,7 +133,7 @@ export function inspectBlock(blockX: number, blockY: number): void {
     setStatEl('statZeros', `${zeroCount}/64`, null, null);
     setStatEl('statCompression', `${zeroPercent}%`, compClass, compClass);
 
-    const estBits = estimateBlockBits(quantData);
+    const estBits = estimateBlockBits(quantData, prevDc);
     const bpp = estBits / 64;
 
     // Good bpp is strictly less than 1.5, moderate is < 3.0, otherwise poor.
@@ -120,7 +154,7 @@ export function inspectBlock(blockX: number, blockY: number): void {
     renderLossMeter(mse, peakError);
     renderZigzagArray(quantData);
 
-    const entropySymbols = getEntropySymbols(quantData);
+    const entropySymbols = getEntropySymbols(quantData, prevDc);
     renderEntropySummary(entropySymbols);
 }
 

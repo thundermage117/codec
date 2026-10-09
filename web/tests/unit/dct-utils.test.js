@@ -170,3 +170,24 @@ describe('dct-utils', () => {
         });
     });
 });
+
+describe('differential DC coding', () => {
+    const block = (dc) => { const b = new Float64Array(64); b[0] = dc; return b; };
+
+    it('codes DC as the difference from the previous block', () => {
+        const [dcSym] = getEntropySymbols(block(20), 18);
+        expect(dcSym.type).toBe('DC');
+        expect(dcSym.amplitude).toBe(2);
+        expect(dcSym.dcValue).toBe(20);
+        expect(dcSym.dcPredictor).toBe(18);
+        expect(dcSym.size).toBe(2); // |2| needs 2 magnitude bits
+    });
+
+    it('makes a DC equal to its predictor cheap', () => {
+        expect(estimateBlockBits(block(37), 37)).toBeLessThan(estimateBlockBits(block(37), 0));
+    });
+
+    it('defaults to a zero predictor (first block of a scan)', () => {
+        expect(getEntropySymbols(block(5))[0].amplitude).toBe(5);
+    });
+});

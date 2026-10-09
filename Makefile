@@ -5,7 +5,7 @@ WEB_EXPORTS = _init_session _process_image _rd_encode _get_rd_bit_estimate \
               _get_view_ptr _set_view_tint _set_artifact_gain \
               _get_psnr_y _get_psnr_cr _get_psnr_cb \
               _get_ssim_y _get_ssim_cr _get_ssim_cb \
-              _get_last_bit_estimate _inspect_block_data _get_coeff_histogram \
+              _get_last_bit_estimate _inspect_block_data _get_coeff_stats \
               _init_me_session _run_motion_estimation _get_mv_count \
               _get_me_residual_ptr _get_search_steps _get_search_step_count \
               _malloc _free

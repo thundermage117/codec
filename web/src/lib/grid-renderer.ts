@@ -923,7 +923,8 @@ export function renderEntropySummary(symbols: any[]): void {
                 const valCellHtml = `<div class="zz-cell mini-zz">${s.amplitude}</div>`;
                 valHtml = `<div class="sym-val-wrap">${valCellHtml}${runHtml ? '<span class="sym-val-sep">and</span>' : ''}${runHtml}</div>`;
             } else if (s.type === 'DC') {
-                valHtml = `<div class="zz-cell dc-cell mini-zz">${s.amplitude}</div>`;
+                const why = `DC ${s.dcValue} minus the previous block's DC ${s.dcPredictor}`;
+                valHtml = `<div class="zz-cell dc-cell mini-zz" title="${why}">Δ${s.amplitude}</div>`;
             } else if (s.type === 'ZRL') {
                 const dots = Array.from({ length: 5 }, () => '<span class="run-dot"></span>').join('');
                 valHtml = `<div class="zz-run mini-zz"><span class="run-count">16 Zeros</span><div class="run-dots">${dots}<span class="run-more">+</span></div></div>`;

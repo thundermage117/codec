@@ -66,6 +66,22 @@ public:
     bool isWavelet() const { return m_transformType != TransformType::DCT; }
 
     /*
+    * Distribution of a channel's AC / detail coefficients (DC and LL excluded)
+    * under this codec's transform, before quantization. The channel is treated
+    * as luma (DCT uses the luma quantization table).
+    *   histogram[0]   — fraction with |c| < 1
+    *   histogram[b]   — fraction with 2^(b-1) <= |c| < 2^b; the last bin is open-ended
+    *   zeroFraction   — fraction that quantize to zero at this codec's quality
+    */
+    struct CoefficientStats {
+        static constexpr int NUM_BINS = 12;
+        double histogram[NUM_BINS] = {};
+        double zeroFraction = 0.0;
+    };
+
+    CoefficientStats coefficientStats(const Image& channel) const;
+
+    /*
     * Downsamples a chroma channel by box-averaging (2×1 for 4:2:2, 2×2 for 4:2:0).
     */
     static Image downsampleChannel(const Image& channel, ChromaSubsampling cs);
