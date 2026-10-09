@@ -696,6 +696,33 @@
     }
 
     /* ===== View Toggle ===== */
+    @media (max-width: 900px) {
+        /* Chips get their own scrollable row under the title. */
+        .artifact-chips {
+            margin-left: 0;
+            width: 100%;
+            flex-wrap: nowrap;
+            overflow-x: auto;
+        }
+
+        .artifact-chip {
+            flex-shrink: 0;
+        }
+
+        .artifact-content {
+            overflow: visible;
+            min-height: 60vh;
+        }
+
+        .view-toggle-container {
+            flex-wrap: wrap;
+        }
+
+        .art-zoom-controls {
+            position: static;
+        }
+    }
+
     .view-toggle-container {
         display: flex;
         align-items: center;

@@ -335,6 +335,29 @@ canvas {
     box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
 }
 
+/* Phones: dimensions + zoom share the first row, the view toggle spans the second. */
+@media (max-width: 600px) {
+    .viewer-canvas-header {
+        grid-template-columns: 1fr auto;
+        row-gap: 8px;
+    }
+
+    .canvas-header-center {
+        grid-column: 1 / -1;
+        grid-row: 2;
+    }
+
+    .view-mode-toggle {
+        width: 100%;
+    }
+
+    .view-mode-toggle button {
+        flex: 1;
+        min-width: 0;
+        padding: 5px 8px;
+    }
+}
+
 .viewer-zoom-controls {
     display: flex;
     align-items: center;

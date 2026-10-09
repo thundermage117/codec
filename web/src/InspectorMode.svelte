@@ -180,12 +180,21 @@
         };
     }
 
+    // In the stacked phone layout the pipeline sits below the sidebar, so a
+    // click on the navigator would otherwise change content off-screen.
+    function revealPipelineOnNarrowScreens(): void {
+        if (!window.matchMedia('(max-width: 900px)').matches) return;
+        requestAnimationFrame(() =>
+            document.getElementById('inspectorContent')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    }
+
     function onThumbnailClick(e: MouseEvent) {
         if (!appState.originalImageData) return;
         const { bx, by, valid } = getBlockFromEvent(e);
         if (valid) {
             appState.inspectedBlock = { x: bx, y: by };
             document.querySelectorAll('.suggested-block-btn').forEach(b => b.classList.remove('active'));
+            revealPipelineOnNarrowScreens();
         }
     }
 
@@ -219,6 +228,7 @@
     function onSuggestedBlockSelect(bx: number, by: number) {
         appState.inspectedBlock = { x: bx, y: by };
         highlightThumbnailBlock(bx, by);
+        revealPipelineOnNarrowScreens();
     }
 
     // ===== Back button =====

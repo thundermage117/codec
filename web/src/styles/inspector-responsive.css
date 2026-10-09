@@ -1,22 +1,38 @@
 /* ===== Inspector Responsive Overrides ===== */
 
 @media (max-width: 900px) {
+    /* Stacked layout: the whole page scrolls instead of two cramped panes. */
+    .inspector-fullpage {
+        overflow-y: auto;
+    }
+
+    .inspector-topbar {
+        height: auto;
+        min-height: 56px;
+        padding-top: 8px;
+        padding-bottom: 8px;
+        row-gap: 8px;
+    }
+
     .inspector-layout {
         flex-direction: column;
+        flex: none;
+        overflow: visible;
     }
 
     .inspector-sidebar {
         width: 100%;
         min-width: 100%;
         max-width: 100%;
+        height: auto;
         border-right: none;
         border-bottom: 1px solid var(--border);
-        max-height: 260px;
-        overflow-y: auto;
+        overflow: visible;
     }
 
     .inspector-main {
         padding: 16px;
+        overflow: visible;
     }
 
     .pipeline-row {
@@ -105,7 +121,4 @@
         display: none;
     }
 
-    .inspector-sidebar {
-        max-height: 200px;
-    }
 }
