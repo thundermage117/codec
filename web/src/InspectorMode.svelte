@@ -4,6 +4,8 @@
     import { computeSuggestedBlocks, renderBlockThumbnail } from './lib/suggested-blocks.js';
     import { processImage } from './lib/wasm-bridge.js';
     import QualityControl from './lib/components/QualityControl.svelte';
+    import { coeffEdit } from './lib/coeff-edit.svelte.js';
+    import { renderInspectedBlock, droppedNonZeroCount } from './lib/inspection.js';
     import { untrack } from 'svelte';
 
     let thumbnailCanvas: HTMLCanvasElement;
@@ -28,6 +30,8 @@
     $effect(() => {
         const block = appState.inspectedBlock;
         if (block && appState.wasmReady) {
+            // Individual toggles belong to one block; keep-first-N persists.
+            untrack(() => { coeffEdit.dropped = []; });
             inspectBlock(block.x, block.y);
             renderContextCrop(block.x, block.y);
             highlightThumbnailBlock(block.x, block.y);
@@ -60,6 +64,19 @@
             }
             computeSuggestedBlocks();
         }
+    });
+
+    // Re-render the inspected block when coefficient edits change.
+    $effect(() => {
+        const _k = coeffEdit.keepFirst;
+        const _d = coeffEdit.dropped;
+        const _e = coeffEdit.editing;
+        untrack(() => renderInspectedBlock());
+    });
+
+    const editSummary = $derived.by(() => {
+        const _v = coeffEdit.renderVersion;
+        return droppedNonZeroCount();
     });
 
     const transformName = $derived(appState.transformType === 0 ? 'DCT' : 'DWT');
@@ -481,6 +498,28 @@
                         </div>
 
                         <div class="pipeline-row-label">Decoding Pipeline</div>
+                        <div class="coeff-edit-bar" role="group" aria-label="Coefficient experiments">
+                            <button class="tool-btn coeff-edit-toggle" class:active={coeffEdit.editing} aria-pressed={coeffEdit.editing}
+                                onclick={() => coeffEdit.editing = !coeffEdit.editing}
+                                title="Click coefficients in the decoder grids to drop or restore them">
+                                ✎ Edit coefficients
+                            </button>
+                            <label class="coeff-keep">
+                                Keep first
+                                <input type="range" min="1" max="64" bind:value={coeffEdit.keepFirst}
+                                    aria-label="Number of zig-zag coefficients the decoder keeps">
+                                <span class="coeff-keep-value">{coeffEdit.keepFirst}</span>
+                                in zig-zag order
+                            </label>
+                            {#if coeffEdit.active}
+                            <span class="coeff-edit-summary" aria-live="polite">
+                                Dropping {editSummary.dropped} of {editSummary.nonZero} non-zero coefficients
+                            </span>
+                            <button class="tool-btn coeff-edit-reset" onclick={() => coeffEdit.reset()}>Reset</button>
+                            {:else if coeffEdit.editing}
+                            <span class="coeff-edit-summary">Click a coefficient in <em>Quantized</em> or <em>Dequantized</em> to drop it.</span>
+                            {/if}
+                        </div>
                         <div class="pipeline-row">
                             <div class="pipeline-block">
                                 <div class="pipeline-block-header"><h3>Quantized</h3></div>

@@ -14,6 +14,23 @@ export function computeBasisPattern(u: number, v: number): Float64Array {
     return pattern;
 }
 
+/**
+ * Inverse 8×8 DCT in JS: 128 + Σ coeff[k] · basis_k over the coefficients for
+ * which `keep(k)` is true. Index k = row * 8 + col, where row is the vertical
+ * and col the horizontal frequency (the codec's layout). With every
+ * coefficient kept this matches the codec's own reconstruction.
+ */
+export function reconstructBlock(dequantized: ArrayLike<number>, keep: (k: number) => boolean = () => true): Float64Array {
+    const out = new Float64Array(64).fill(128);
+    for (let k = 0; k < 64; k++) {
+        const c = dequantized[k];
+        if (c === 0 || !keep(k)) continue;
+        const pattern = computeBasisPattern(k % 8, Math.floor(k / 8));
+        for (let i = 0; i < 64; i++) out[i] += c * pattern[i];
+    }
+    return out;
+}
+
 export function getFreqLabel(row: number, col: number): string {
     if (row === 0 && col === 0) return 'DC';
     const level = row + col;

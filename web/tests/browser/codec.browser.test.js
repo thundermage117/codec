@@ -2,8 +2,9 @@
 // not the Module mock used by the other browser tests.
 import { describe, it, expect, beforeAll } from 'vitest';
 import { appState, ViewMode } from '../../src/lib/state.svelte.js';
-import { initSession, processImage, rdEncode, getStats, getLastBitEstimate, getProcessedRgba, getCoeffStats } from '../../src/lib/wasm-bridge.js';
+import { initSession, processImage, rdEncode, getStats, getLastBitEstimate, getProcessedRgba, getCoeffStats, inspectBlockData } from '../../src/lib/wasm-bridge.js';
 import { Transform, TRANSFORMS } from '../../src/lib/transforms.js';
+import { reconstructBlock } from '../../src/lib/dct-utils.js';
 
 const WIDTH = 384;
 const HEIGHT = 256;
@@ -132,6 +133,17 @@ describe('codec with the real WASM module', () => {
             expect(sum).toBeCloseTo(1, 6);
             expect(low[t.value].histogram).toEqual(high[t.value].histogram);
             expect(low[t.value].zeroFraction).toBeGreaterThan(high[t.value].zeroFraction);
+        }
+    });
+
+    it('JS block reconstruction matches the codec when nothing is dropped', () => {
+        appState.currentCsMode = CS_420;
+        for (const [bx, by] of [[0, 0], [17, 9], [40, 25]]) {
+            const ptr = inspectBlockData(bx, by, 0, 35, Transform.DCT);
+            const grid = (k) => new Float64Array(Module.HEAPU8.buffer, ptr + k * 64 * 8, 64).slice();
+            const quantized = grid(3), table = grid(2), recon = grid(4);
+            const js = reconstructBlock(quantized.map((q, i) => q * table[i]));
+            for (let i = 0; i < 64; i++) expect(js[i]).toBeCloseTo(recon[i], 6);
         }
     });
 });

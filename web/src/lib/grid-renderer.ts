@@ -1,5 +1,6 @@
 import { showTooltip, hideTooltip } from './tooltip.js';
 import { showBasisPopover, hideBasisPopover, getCachedGridData } from './basis-popover.js';
+import { coeffEdit } from './coeff-edit.svelte.js';
 import { ZIGZAG_INDICES, computeBasisPattern, computeHaarBasisPattern, getFreqLabel, getHaarFreqLabel } from './dct-utils.js';
 import { appState } from './state.svelte.js';
 
@@ -22,6 +23,9 @@ const ALL_GRID_IDS = [
 ];
 
 let lastHighlightedKey: string | null = null;
+
+/** Decoder-side grids whose coefficients can be dropped in edit mode. */
+const EDITABLE_GRID_IDS = ['gridQuantized2', 'gridDequantized'];
 
 export function clearAllHighlights(): void {
     lastHighlightedKey = null;
@@ -161,6 +165,12 @@ export function renderGrid(
             if (cell.dataset.isBasis !== 'true') return;
             const row = Number.parseInt(cell.dataset.row || '0');
             const col = Number.parseInt(cell.dataset.col || '0');
+
+            // Edit mode: decoder-side coefficients toggle instead of animating.
+            if (coeffEdit.editing && EDITABLE_GRID_IDS.includes(el.id)) {
+                coeffEdit.toggle(row * 8 + col);
+                return;
+            }
             const targetGridId = el.dataset.target || '';
 
             window.dispatchEvent(new CustomEvent('animate-basis', {
@@ -303,9 +313,10 @@ export function renderGrid(
         cell.setAttribute('role', isBasis ? 'button' : 'img');
         const desc = cell.dataset.desc;
         const sentence = desc && !/[.!?]$/.test(desc) ? `${desc}.` : desc;
-        cell.setAttribute('aria-label',
-            `Row ${row + 1}, column ${col + 1}: ${tooltipVal}. ${sentence}` +
-            (isBasis ? ' Press Enter to animate this basis function.' : ''));
+        const action = !isBasis ? ''
+            : coeffEdit.editing && EDITABLE_GRID_IDS.includes(elementId) ? ' Press Enter to drop or restore this coefficient.'
+            : ' Press Enter to animate this basis function.';
+        cell.setAttribute('aria-label', `Row ${row + 1}, column ${col + 1}: ${tooltipVal}. ${sentence}${action}`);
 
         if (type === 'frequency' && Math.abs(val) >= 0.5) nonZeroCount++;
 
