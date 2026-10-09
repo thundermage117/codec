@@ -1,7 +1,7 @@
 <script lang="ts">
     import { onDestroy, onMount, untrack } from 'svelte';
     import { appState, ViewMode, type ViewModeValue } from './lib/state.svelte.js';
-    import { processImage, rdEncode, getViewPtr, getStats, free, setViewTint, getLastBitEstimate } from './lib/wasm-bridge.js';
+    import { processImage, previewImage, rdEncode, getViewPtr, getStats, free, setViewTint, getLastBitEstimate } from './lib/wasm-bridge.js';
     import { TRANSFORMS, Transform, isWavelet, nextTransform, transformInfo } from './lib/transforms.js';
     import { parseUrlState, writeUrlState } from './lib/url-state.js';
     import { handleFileSelect, loadImageFromUrl } from './lib/image-manager.js';
@@ -208,6 +208,15 @@
         } finally {
             if (outputPtr) free(outputPtr);
         }
+    }
+
+    // Live preview while the quality slider is dragged: re-encode without
+    // metrics and redraw; the effect below does the full encode on release.
+    function previewQuality(q: number): void {
+        if (!appState.wasmReady || !appState.originalImageData) return;
+        previewImage(q, appState.currentCsMode);
+        render();
+        updateFileSizeEstimate();
     }
 
     // ===== Reactive effects =====
@@ -668,7 +677,7 @@
                 <div class="viewer-section-body">
                     <ImageSourcePanel bind:dropZoneVisible activeTestImageIndex={appState.activeTestImage}
                         onFile={loadFile} onTestImage={loadTestImage} />
-                    <CodecControls />
+                    <CodecControls onQualityPreview={previewQuality} />
                 </div>
             </details>
 

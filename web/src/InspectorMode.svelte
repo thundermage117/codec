@@ -3,6 +3,7 @@
     import { inspectBlock } from './lib/inspection.js';
     import { computeSuggestedBlocks, renderBlockThumbnail } from './lib/suggested-blocks.js';
     import { processImage } from './lib/wasm-bridge.js';
+    import QualityControl from './lib/components/QualityControl.svelte';
     import { untrack } from 'svelte';
 
     let thumbnailCanvas: HTMLCanvasElement;
@@ -367,24 +368,8 @@
                 <details class="sidebar-section sidebar-controls" open>
                     <summary class="sidebar-section-title"><span>Controls</span></summary>
                     <div class="sidebar-section-body">
-                        <div class="control-group">
-                            <label for="inspQualitySlider">
-                                Quality <span id="inspQualityValue">{appState.quality}</span>
-                            </label>
-                            <div class="preset-group">
-                                {#each [{ q: 10, label: 'Low', desc: 'Thumbnails' }, { q: 50, label: 'Medium', desc: 'Web / Social' }, { q: 90, label: 'High', desc: 'Print / Archive' }] as preset}
-                                <button class="preset-btn insp-preset-btn"
-                                    class:active={appState.quality === preset.q} aria-pressed={appState.quality === preset.q}
-                                    data-quality={preset.q}
-                                    onclick={() => { appState.quality = preset.q; }}>
-                                    <span class="preset-label">{preset.label}</span>
-                                    <span class="preset-desc">{preset.desc}</span>
-                                </button>
-                                {/each}
-                            </div>
-                            <input type="range" id="inspQualitySlider" min="1" max="100"
-                                bind:value={appState.quality}>
-                        </div>
+                        <!-- The inspector is block-focused and cheap to refresh, so dragging commits live. -->
+                        <QualityControl idPrefix="inspQuality" onPreview={(q) => { appState.quality = q; }} />
 
                         <div class="control-group">
                             <div class="group-label">View Mode</div>

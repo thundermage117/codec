@@ -34,6 +34,13 @@ export function processImage(quality: number, csMode: number, transformType?: nu
     Module._process_image(quality, csMode, t);
 }
 
+// Re-encodes for live preview (e.g. while a slider is dragged): updates the
+// displayed reconstruction but not PSNR/SSIM. Call processImage once settled.
+export function previewImage(quality: number, csMode: number, transformType?: number): void {
+    const t = transformType !== undefined ? transformType : appState.transformType;
+    Module._preview_image(quality, csMode, t);
+}
+
 // Encodes at the given settings for a rate–distortion sample. Unlike
 // processImage this leaves the session's processed image untouched and skips
 // SSIM, so it is cheap enough to call many times in a row.

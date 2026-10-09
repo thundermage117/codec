@@ -1,7 +1,7 @@
 # --- CONFIGURATION ---
 WEB_COMPILER = emcc
 # C functions exported to JavaScript (keep in sync with web/src/types/wasm.d.ts)
-WEB_EXPORTS = _init_session _process_image _rd_encode _get_rd_bit_estimate \
+WEB_EXPORTS = _init_session _process_image _preview_image _rd_encode _get_rd_bit_estimate \
               _get_view_ptr _set_view_tint _set_artifact_gain \
               _get_psnr_y _get_psnr_cr _get_psnr_cb \
               _get_ssim_y _get_ssim_cr _get_ssim_cb \

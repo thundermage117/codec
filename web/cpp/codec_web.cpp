@@ -95,20 +95,32 @@ void init_session(uint8_t* rgba_input, int width, int height) {
     g_session.initialized = true;
 }
 
-EMSCRIPTEN_KEEPALIVE
-void process_image(int quality, int cs_mode, int transform_mode) {
-    if (!g_session.initialized) return;
-
-    auto cs = map_cs_mode(cs_mode);
-    auto transform = map_transform_mode(transform_mode);
-    ImageCodec codec(quality, true, cs, transform);
+// Encodes the session image and stores the reconstruction (no metrics).
+static void encodeIntoSession(int quality, int cs_mode, int transform_mode) {
+    ImageCodec codec(quality, true, map_cs_mode(cs_mode), map_transform_mode(transform_mode));
     g_session.processedBgr = codec.process(g_session.originalImage);
     g_session.lastBitEstimate = codec.getLastBitEstimate();
-    g_session.metrics = CodecAnalysis::computeMetrics(g_session.originalImage, g_session.processedBgr);
     g_session.processedYCrCb = bgrToYCrCb(g_session.processedBgr);
     g_session.quality = quality;
     g_session.csMode = cs_mode;
     g_session.transformMode = transform_mode;
+}
+
+EMSCRIPTEN_KEEPALIVE
+void process_image(int quality, int cs_mode, int transform_mode) {
+    if (!g_session.initialized) return;
+
+    encodeIntoSession(quality, cs_mode, transform_mode);
+    g_session.metrics = CodecAnalysis::computeMetrics(g_session.originalImage, g_session.processedBgr);
+}
+
+// Fast path for live preview while a slider is dragged: updates the displayed
+// reconstruction and bit estimate but skips PSNR/SSIM (left from the last
+// process_image call). Follow up with process_image once the value settles.
+EMSCRIPTEN_KEEPALIVE
+void preview_image(int quality, int cs_mode, int transform_mode) {
+    if (!g_session.initialized) return;
+    encodeIntoSession(quality, cs_mode, transform_mode);
 }
 
 // Lightweight encode for rate–distortion sweeps: returns luma PSNR and records

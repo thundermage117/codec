@@ -3,7 +3,8 @@
     import { fade } from 'svelte/transition';
     import { appState, ViewMode } from './lib/state.svelte.js';
     import { TRANSFORMS, isWavelet } from './lib/transforms.js';
-    import { processImage, getViewPtr, getStats, free, setArtifactGain } from './lib/wasm-bridge.js';
+    import { processImage, previewImage, getViewPtr, getStats, free, setArtifactGain } from './lib/wasm-bridge.js';
+    import QualityControl from './lib/components/QualityControl.svelte';
     import ImageViewer from './lib/components/ImageViewer.svelte';
 
     let artifactCanvas: HTMLCanvasElement | undefined = $state();
@@ -18,8 +19,6 @@
     let viewType = $state<'artifact' | 'original'>('artifact');
     let blinkPhase = $state<'artifact' | 'original'>('artifact');
 
-    let qualitySliderValue = $state(appState.quality);
-    let isSliderInteracting = false;
 
     const DEFAULT_GAIN = 5.0;
     let gainValue = $state(DEFAULT_GAIN);
@@ -39,12 +38,6 @@
         { id: 'art_cs_444', val: 444, label: '4:4:4' },
         { id: 'art_cs_422', val: 422, label: '4:2:2' },
         { id: 'art_cs_420', val: 420, label: '4:2:0' },
-    ];
-
-    const QUALITY_PRESETS = [
-        { q: 10, label: 'Low',    desc: 'Thumbnails' },
-        { q: 50, label: 'Medium', desc: 'Web / Social' },
-        { q: 90, label: 'High',   desc: 'Print / Archive' },
     ];
 
     // Wavelets have no 8×8 grid, so the blocking map should stay dark — say so.
@@ -239,18 +232,14 @@
         const stats = getStats();
         appState.psnr = { y: stats.psnr.y, cr: stats.psnr.cr, cb: stats.psnr.cb };
         appState.ssim = { y: stats.ssim.y, cr: stats.ssim.cr, cb: stats.ssim.cb };
-        if (!isSliderInteracting) qualitySliderValue = q;
         if (artifactCtx) renderArtifact();
     });
 
-    function onQualityInput(e: Event) {
-        isSliderInteracting = true;
-        qualitySliderValue = Number((e.target as HTMLInputElement).value);
-    }
-
-    function commitQuality() {
-        isSliderInteracting = false;
-        if (appState.quality !== qualitySliderValue) appState.quality = qualitySliderValue;
+    // Live preview while the quality slider is dragged (metrics update on release).
+    function previewQuality(q: number): void {
+        if (!appState.wasmReady || !appState.originalImageData) return;
+        previewImage(q, appState.currentCsMode);
+        if (artifactCtx) renderArtifact();
     }
 
     function onGainInput(e: Event) {
@@ -381,25 +370,7 @@
                 <details class="sidebar-section sidebar-controls" open>
                     <summary class="sidebar-section-title"><span>Controls</span></summary>
                     <div class="sidebar-section-body">
-                        <div class="control-group">
-                            <label for="artifactQualitySlider">
-                                Quality
-                                <span>{qualitySliderValue}</span>
-                            </label>
-                            <div class="preset-group">
-                                {#each QUALITY_PRESETS as p}
-                                <button class="preset-btn" class:active={appState.quality === p.q} aria-pressed={appState.quality === p.q}
-                                    onclick={() => { appState.quality = p.q; }}>
-                                    <span class="preset-label">{p.label}</span>
-                                    <span class="preset-desc">{p.desc}</span>
-                                </button>
-                                {/each}
-                            </div>
-                            <input type="range" id="artifactQualitySlider" min="1" max="100" value={qualitySliderValue}
-                                oninput={onQualityInput}
-                                onchange={commitQuality}
-                                onblur={commitQuality}>
-                        </div>
+                        <QualityControl idPrefix="artifactQuality" onPreview={previewQuality} />
                         {#if appState.currentViewMode === ViewMode.Artifacts}
                         <div class="control-group" transition:fade={{duration: 150}}>
                             <label class="gain-label">
