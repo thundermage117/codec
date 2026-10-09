@@ -20,52 +20,73 @@
 
 const double PI = 3.14159265358979323846;
 
-
 /*
-* Helper function to compute the normalization factor C(u) used in DCT and IDCT.
+* Orthonormal 8-point DCT-II basis: B[u][x] = 1/2 · C(u) · cos((2x+1)uπ/16),
+* with C(0) = 1/√2 and C(u) = 1 otherwise. Computed once on first use.
+*
+* The 2D DCT is separable, F = B · f · Bᵀ, and the IDCT is f = Bᵀ · F · B.
+* Applying it as two 1D passes costs 2·8³ = 1024 multiply-adds per block,
+* instead of 8⁴ = 4096 terms with two cos() calls each for the direct formula
+* F(u,v) = 1/4 C(u) C(v) Σx Σy f(x,y) cos((2x+1)uπ/16) cos((2y+1)vπ/16).
 */
-static double C(int u) {
-    return (u == 0) ? (1.0 / std::sqrt(2.0)) : 1.0;
+struct DctBasis {
+    double m[8][8];
+    DctBasis() {
+        for (int u = 0; u < 8; ++u) {
+            const double c = (u == 0) ? (1.0 / std::sqrt(2.0)) : 1.0;
+            for (int x = 0; x < 8; ++x)
+                m[u][x] = 0.5 * c * std::cos(((2 * x + 1) * u * PI) / 16.0);
+        }
+    }
+};
+
+static const double (&dctBasis())[8][8] {
+    static const DctBasis basis; // thread-safe one-time initialisation
+    return basis.m;
 }
 
 /*
-* Performs the Discrete Cosine Transform (DCT) on an 8x8 block.
-* The input block should be of type CV_64F and the output will also be CV_64F.
-* 2D DCT is computed using the formula:
-* F(u, v) = 1/4 * C(u) * C(v) * sum_{x=0}^{7} sum_{y=0}^{7} f(x, y) * cos((2x+1)uπ/16) * cos((2y+1)vπ/16)
+* Performs the 2D Discrete Cosine Transform (DCT-II) on an 8x8 block.
+* src is indexed [x][y] (row, column); dst is indexed [u][v].
 */
 void dct8x8(const double src[8][8], double dst[8][8]) {
-    for (int u = 0; u < 8; ++u) {
+    const double (&B)[8][8] = dctBasis();
+    double tmp[8][8]; // tmp = B · src (transform along the first index)
+
+    for (int u = 0; u < 8; ++u)
+        for (int y = 0; y < 8; ++y) {
+            double sum = 0.0;
+            for (int x = 0; x < 8; ++x) sum += B[u][x] * src[x][y];
+            tmp[u][y] = sum;
+        }
+
+    for (int u = 0; u < 8; ++u)
         for (int v = 0; v < 8; ++v) {
             double sum = 0.0;
-            for (int x = 0; x < 8; ++x) {
-                for (int y = 0; y < 8; ++y) {
-                    sum += src[x][y] *
-                           std::cos(((2 * x + 1) * u * PI) / 16.0) *
-                           std::cos(((2 * y + 1) * v * PI) / 16.0);
-                }
-            }
-            dst[u][v] = 0.25 * C(u) * C(v) * sum;
+            for (int y = 0; y < 8; ++y) sum += tmp[u][y] * B[v][y];
+            dst[u][v] = sum;
         }
-    }
 }
 
 /*
 * Performs the Inverse Discrete Cosine Transform (IDCT) on an 8x8 block.
-* The input block should be of type CV_64F and the output will also be CV_64F.
+* src is indexed [u][v]; dst is indexed [x][y].
 */
 void idct8x8(const double src[8][8], double dst[8][8]) {
-    for (int x = 0; x < 8; ++x) {
+    const double (&B)[8][8] = dctBasis();
+    double tmp[8][8]; // tmp = Bᵀ · src
+
+    for (int x = 0; x < 8; ++x)
+        for (int v = 0; v < 8; ++v) {
+            double sum = 0.0;
+            for (int u = 0; u < 8; ++u) sum += B[u][x] * src[u][v];
+            tmp[x][v] = sum;
+        }
+
+    for (int x = 0; x < 8; ++x)
         for (int y = 0; y < 8; ++y) {
             double sum = 0.0;
-            for (int u = 0; u < 8; ++u) {
-                for (int v = 0; v < 8; ++v) {
-                    sum += C(u) * C(v) * src[u][v] *
-                           std::cos(((2 * x + 1) * u * PI) / 16.0) *
-                           std::cos(((2 * y + 1) * v * PI) / 16.0);
-                }
-            }
-            dst[x][y] = 0.25 * sum;
+            for (int v = 0; v < 8; ++v) sum += tmp[x][v] * B[v][y];
+            dst[x][y] = sum;
         }
-    }
 }
