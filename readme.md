@@ -11,10 +11,12 @@ An interactive codec laboratory to visualize how transform-based image compressi
 - DCT vs. wavelet (Haar and CDF 9/7, the JPEG 2000 wavelet) comparison
 - Wavelet subband pyramid view
 - Rate–distortion curves using a per-subband entropy estimate of bits
-- Interactive block inspector
+- Interactive block inspector, with "what if?" coefficient dropping (keep the first N in zig-zag order, or toggle individual coefficients)
 - Zig-zag and zero-run visualization
-- Artifact analysis maps
-- PSNR-based quality metrics
+- Artifact analysis maps — click a hotspot to open that block in the inspector
+- PSNR and SSIM (standard 11×11 Gaussian window) quality metrics
+- Coefficient sparsity comparison across DCT, Haar and CDF 9/7
+- Live preview while dragging the quality slider; keyboard- and screen-reader-accessible inspectors; phone-friendly layout
 - Shareable settings via the URL (`#q=30&t=cdf97&cs=420&img=3`), PNG export, and keyboard shortcuts (`[` / `]` quality, `T` transform)
 
 ## 🛠 Technologies
