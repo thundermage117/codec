@@ -1,9 +1,23 @@
 # --- CONFIGURATION ---
 WEB_COMPILER = emcc
+# C functions exported to JavaScript (keep in sync with web/src/types/wasm.d.ts)
+WEB_EXPORTS = _init_session _process_image _rd_encode _get_rd_bit_estimate \
+              _get_view_ptr _set_view_tint _set_artifact_gain \
+              _get_psnr_y _get_psnr_cr _get_psnr_cb \
+              _get_ssim_y _get_ssim_cr _get_ssim_cb \
+              _get_last_bit_estimate _inspect_block_data _get_coeff_histogram \
+              _init_me_session _run_motion_estimation _get_mv_count \
+              _get_me_residual_ptr _get_search_steps _get_search_step_count \
+              _malloc _free
+comma := ,
+empty :=
+space := $(empty) $(empty)
+WEB_EXPORTS_JSON = [$(subst $(space),$(comma),$(foreach f,$(WEB_EXPORTS),"$(f)"))]
+
 WEB_FLAGS = -Icore/inc -O3 \
             -s WASM=1 \
             -s ALLOW_MEMORY_GROWTH=1 \
-            -s EXPORTED_FUNCTIONS='["_init_session", "_process_image", "_get_view_ptr", "_set_view_tint", "_get_psnr_y", "_get_psnr_cr", "_get_psnr_cb", "_get_ssim_y", "_get_ssim_cr", "_get_ssim_cb", "_get_last_bit_estimate", "_inspect_block_data", "_get_coeff_histogram", "_init_me_session", "_run_motion_estimation", "_get_mv_count", "_get_me_residual_ptr", "_get_search_steps", "_get_search_step_count", "_malloc", "_free"]' \
+            -s EXPORTED_FUNCTIONS='$(WEB_EXPORTS_JSON)' \
             -s EXPORTED_RUNTIME_METHODS='["cwrap", "ccall", "HEAPU8"]'
 
 # Source: Core C++ + Web Glue C++ (in src folder)

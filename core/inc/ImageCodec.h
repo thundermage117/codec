@@ -19,6 +19,7 @@
 #define IMAGE_PROCESSOR_H
 
 #include "Image.h"
+#include <vector>
 
 /*
 * ImageCodec class encapsulates the functionality for compressing and decompressing images using
@@ -34,14 +35,15 @@ public:
     };
 
     enum class TransformType {
-        DCT, // Discrete Cosine Transform (JPEG-style)
-        DWT  // Haar Discrete Wavelet Transform
+        DCT,      // 8×8 block Discrete Cosine Transform (JPEG-style)
+        DWT_HAAR, // Full-image Haar Discrete Wavelet Transform
+        DWT_97    // Full-image CDF 9/7 Discrete Wavelet Transform (JPEG 2000)
     };
 
 public:
     /*
     * Constructs an ImageCodec with the specified quality, quantization, and transform options.
-    * @param quality Quality factor for quantization (1-100). Higher means better quality.
+    * @param quality Quality factor for quantization, clamped to [1, 100]. Higher means better quality.
     * @param enableQuantization Whether to apply quantization to transform coefficients.
     * @param cs Chroma subsampling mode (default: 4:4:4).
     * @param transform Transform type to use (default: DCT).
@@ -52,6 +54,21 @@ public:
                         TransformType transform = TransformType::DCT);
 
     Image process(const Image& bgrImage);
+
+    /*
+    * Forward-transforms and quantizes a single channel with the configured
+    * wavelet and returns a displayable map of its subband pyramid (LL in the
+    * top-left, log-scaled detail magnitudes elsewhere; coefficients that
+    * quantize to zero are drawn dim), resampled to the channel's size. Returns an empty Image for TransformType::DCT.
+    */
+    Image subbandMap(const Image& channel) const;
+
+    bool isWavelet() const { return m_transformType != TransformType::DCT; }
+
+    /*
+    * Downsamples a chroma channel by box-averaging (2×1 for 4:2:2, 2×2 for 4:2:0).
+    */
+    static Image downsampleChannel(const Image& channel, ChromaSubsampling cs);
 
 private:
     double m_quality;
@@ -68,8 +85,9 @@ private:
     void generateQuantizationTables();
     Image processChannel(const Image& channel,
                          const double quantTable[8][8]);
-    Image processChannelDWT(const Image& channel);
-    Image downsampleChannel(const Image& channel, ChromaSubsampling cs) const;
+    Image processChannelDWT(const Image& channel, bool isChroma);
+    void transformChannelDWT(const Image& channel, std::vector<double>& coeffs,
+                              int& paddedW, int& paddedH, int& levels) const;
     Image upsampleChannel(const Image& channel, int targetWidth, int targetHeight, ChromaSubsampling cs) const;
 
 public:

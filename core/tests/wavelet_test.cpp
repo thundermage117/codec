@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include "wavelet.h"
 #include <cmath>
+#include <vector>
 
 // For a constant block of value A, the 3-level 2D Haar DWT concentrates all
 // energy into dst[0][0] = 8*A, with all other coefficients zero.
@@ -93,16 +94,18 @@ TEST(WaveletTest, RoundTripMixed) {
     }
 }
 
-// Bit estimation: verify it returns expected relative values
+// Bit estimation: an all-zero buffer is free; varied indices cost bits.
 TEST(WaveletTest, BitEstimation) {
     std::vector<double> data(64 * 64, 0.0);
-    double bitsZero = dwtEstimateBits(data.data(), 64, 64);
-    
-    // Fill with some large values
-    for (size_t i = 0; i < data.size(); ++i) data[i] = 100.0;
-    double bitsHigh = dwtEstimateBits(data.data(), 64, 64);
-    
-    EXPECT_GT(bitsHigh, bitsZero);
+    double bitsZero = dwtEstimateBits(data.data(), 64, 64, 3);
+    EXPECT_NEAR(bitsZero, 0.0, 1e-9);
+
+    for (size_t i = 0; i < data.size(); ++i) data[i] = static_cast<double>(i % 7) - 3.0;
+    double bitsBusy = dwtEstimateBits(data.data(), 64, 64, 3);
+
+    EXPECT_GT(bitsBusy, bitsZero);
+    // Bounded by log2(7) bits per coefficient.
+    EXPECT_LE(bitsBusy, 64 * 64 * std::log2(7.0) + 1e-6);
 }
 
 // Level calculation: verify scaling logic
@@ -140,4 +143,48 @@ TEST(WaveletTest, ImageRoundTrip) {
     for (int i = 0; i < w * h; ++i) {
         EXPECT_NEAR(data[i], src[i], 1e-9);
     }
+}
+
+// CDF 9/7 perfect reconstruction for even, odd and non-power-of-2 sizes.
+TEST(WaveletTest, Cdf97ImageRoundTrip) {
+    const int sizes[][2] = {{16, 16}, {12, 10}, {64, 48}, {7, 9}};
+    for (const auto& sz : sizes) {
+        const int w = sz[0], h = sz[1];
+        std::vector<double> src(w * h);
+        for (int i = 0; i < w * h; ++i) src[i] = std::sin(i * 0.37) * 100.0 + (i % 13);
+
+        std::vector<double> data = src;
+        const int levels = calcDwtLevels(w, h);
+        dwtImage(data.data(), w, h, levels, WaveletType::CDF97);
+        idwtImage(data.data(), w, h, levels, WaveletType::CDF97);
+
+        for (int i = 0; i < w * h; ++i)
+            ASSERT_NEAR(data[i], src[i], 1e-9) << w << "x" << h << " at " << i;
+    }
+}
+
+// A constant signal lands entirely in LL with the same √2-per-dimension gain
+// as Haar, so quantization steps mean the same thing for both wavelets.
+TEST(WaveletTest, Cdf97ConstantHasHaarCompatibleGain) {
+    const int w = 32, h = 32, levels = 3;
+    const double val = 10.0;
+    std::vector<double> data(w * h, val);
+    dwtImage(data.data(), w, h, levels, WaveletType::CDF97);
+
+    const int llW = w >> levels, llH = h >> levels;
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            const double expected = (x < llW && y < llH) ? val * (1 << levels) : 0.0;
+            ASSERT_NEAR(data[y * w + x], expected, 1e-6) << x << "," << y;
+        }
+}
+
+TEST(WaveletTest, SubbandIndexLayout) {
+    // 8×8, 2 levels: level-0 bands are the outer ring, level-1 bands the 4×4.
+    EXPECT_EQ(dwtSubbandIndex(0, 0, 8, 8, 2), 0); // LL
+    EXPECT_EQ(dwtSubbandIndex(5, 1, 8, 8, 2), 1); // level 0 HL (right)
+    EXPECT_EQ(dwtSubbandIndex(1, 5, 8, 8, 2), 2); // level 0 LH (bottom)
+    EXPECT_EQ(dwtSubbandIndex(7, 7, 8, 8, 2), 3); // level 0 HH
+    EXPECT_EQ(dwtSubbandIndex(2, 0, 8, 8, 2), 4); // level 1 HL
+    EXPECT_EQ(dwtSubbandIndex(3, 3, 8, 8, 2), 6); // level 1 HH
 }
