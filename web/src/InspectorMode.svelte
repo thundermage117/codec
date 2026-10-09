@@ -36,7 +36,7 @@
     // Reactive: recompute suggestions when entering inspector or quality changes
     $effect(() => {
         if (appState.appMode === 'inspector' && appState.wasmReady && appState.originalImageData) {
-            computeSuggestedBlocks(document.getElementById('processedCanvas') as HTMLCanvasElement | null);
+            computeSuggestedBlocks();
         }
     });
 
@@ -57,7 +57,7 @@
                 inspectBlock(currentBlock.x, currentBlock.y);
                 renderContextCrop(currentBlock.x, currentBlock.y);
             }
-            computeSuggestedBlocks(document.getElementById('processedCanvas') as HTMLCanvasElement | null);
+            computeSuggestedBlocks();
         }
     });
 
@@ -171,8 +171,8 @@
         const scaleY = appState.imgHeight / rect.height;
         const bx = Math.floor(x * scaleX / 8);
         const by = Math.floor(y * scaleY / 8);
-        const maxBx = Math.floor(appState.imgWidth / 8) - 1;
-        const maxBy = Math.floor(appState.imgHeight / 8) - 1;
+        const maxBx = Math.ceil(appState.imgWidth / 8) - 1; // includes partial edge blocks
+        const maxBy = Math.ceil(appState.imgHeight / 8) - 1;
         return {
             bx: Math.max(0, Math.min(maxBx, bx)),
             by: Math.max(0, Math.min(maxBy, by)),

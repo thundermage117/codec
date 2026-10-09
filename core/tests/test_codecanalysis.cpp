@@ -70,3 +70,41 @@ TEST(CodecAnalysisTest, ComputeMetrics_Structure) {
     EXPECT_DOUBLE_EQ(metrics.ssimCr, 1.0);
     EXPECT_DOUBLE_EQ(metrics.ssimCb, 1.0);
 }
+
+// The structural maps must react to distortion in any colour channel, not just
+// channel 0 (blue in BGR order).
+TEST(CodecAnalysisTest, EdgeDistortionSeesNonBlueChannels) {
+    Image original = createFlatImage(16, 16, 100.0, 100.0, 100.0);
+    Image distorted = original;
+    // Vertical red/green-only edge: blue channel stays flat.
+    for (int y = 0; y < 16; ++y)
+        for (int x = 8; x < 16; ++x) {
+            distorted.at(x, y, 1) = 200.0; // G
+            distorted.at(x, y, 2) = 200.0; // R
+        }
+    Image map = CodecAnalysis::computeEdgeDistortionMap(original, distorted);
+    ASSERT_EQ(map.channels(), 1);
+    EXPECT_GT(map.at(8, 8, 0), 0.0);
+}
+
+TEST(CodecAnalysisTest, BlockingMapSeesNonBlueChannels) {
+    Image recon = createFlatImage(16, 16, 100.0, 100.0, 100.0);
+    // Step in red only, exactly on the x = 8 block boundary.
+    for (int y = 0; y < 16; ++y)
+        for (int x = 8; x < 16; ++x)
+            recon.at(x, y, 2) = 140.0;
+    Image map = CodecAnalysis::computeBlockingMap(recon);
+    EXPECT_GT(map.at(8, 4, 0), 0.0);  // boundary column
+    EXPECT_EQ(map.at(5, 4, 0), 0.0);  // block interior
+}
+
+TEST(CodecAnalysisTest, StructuralMapsAcceptSingleChannel) {
+    Image a(16, 16, 1), b(16, 16, 1);
+    for (int y = 0; y < 16; ++y)
+        for (int x = 0; x < 16; ++x) {
+            a.at(x, y, 0) = 100.0;
+            b.at(x, y, 0) = x < 8 ? 100.0 : 150.0;
+        }
+    EXPECT_GT(CodecAnalysis::computeEdgeDistortionMap(a, b).at(8, 8, 0), 0.0);
+    EXPECT_GT(CodecAnalysis::computeBlockingMap(b).at(8, 8, 0), 0.0);
+}

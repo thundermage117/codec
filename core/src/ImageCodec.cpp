@@ -476,27 +476,19 @@ ImageCodec::BlockDebugData ImageCodec::inspectBlock(const Image& channel, int bl
         }
     }
 
-    // 2. Extract Original Block
-    // Ensure we don't go out of bounds
-    int startX = blockX * 8;
-    int startY = blockY * 8;
-
-    // Fill with zeros first
-    for(int i=0; i<8; ++i)
-        for(int j=0; j<8; ++j)
-            data.original[i][j] = 0.0;
-
+    // 2. Extract Original Block. Partial blocks at the right/bottom edges are
+    // padded by edge replication, exactly as processChannel codes them.
+    const int startX = blockX * 8;
+    const int startY = blockY * 8;
     const double* channelData = channel.data();
-    int width = channel.width();
-    int height = channel.height();
+    const int width = channel.width();
+    const int height = channel.height();
 
     for(int i=0; i<8; ++i) {
+        const int y = std::max(0, std::min(startY + i, height - 1));
         for(int j=0; j<8; ++j) {
-            int y = startY + i;
-            int x = startX + j;
-            if (x < width && y < height) {
-                data.original[i][j] = channelData[y * width + x];
-            }
+            const int x = std::max(0, std::min(startX + j, width - 1));
+            data.original[i][j] = channelData[y * width + x];
         }
     }
 

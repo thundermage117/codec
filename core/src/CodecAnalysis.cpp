@@ -53,6 +53,14 @@ Image CodecAnalysis::computeArtifactMap(
     return artifact;
 }
 
+// Luma of pixel (x, y): BT.601 weights for a 3-channel BGR image, or the single
+// channel itself for 1-channel input. The structural maps below work on luma so
+// that a distortion in any colour channel is seen (channel 0 alone is blue).
+static double lumaAt(const Image& img, int x, int y) {
+    if (img.channels() == 1) return img.at(x, y, 0);
+    return 0.114 * img.at(x, y, 0) + 0.587 * img.at(x, y, 1) + 0.299 * img.at(x, y, 2);
+}
+
 Image CodecAnalysis::computeEdgeDistortionMap(
     const Image& original,
     const Image& reconstructed
@@ -65,13 +73,13 @@ Image CodecAnalysis::computeEdgeDistortionMap(
     for (int y = 1; y < h - 1; ++y) {
         for (int x = 1; x < w - 1; ++x) {
             // Compute gradient in original
-            double gx = original.at(x+1, y, 0) - original.at(x-1, y, 0);
-            double gy = original.at(x, y+1, 0) - original.at(x, y-1, 0);
+            double gx = lumaAt(original, x+1, y) - lumaAt(original, x-1, y);
+            double gy = lumaAt(original, x, y+1) - lumaAt(original, x, y-1);
             double gradOrig = std::sqrt(gx*gx + gy*gy);
             
             // Compute gradient in reconstructed
-            double rgx = reconstructed.at(x+1, y, 0) - reconstructed.at(x-1, y, 0);
-            double rgy = reconstructed.at(x, y+1, 0) - reconstructed.at(x, y-1, 0);
+            double rgx = lumaAt(reconstructed, x+1, y) - lumaAt(reconstructed, x-1, y);
+            double rgy = lumaAt(reconstructed, x, y+1) - lumaAt(reconstructed, x, y-1);
             double gradRecon = std::sqrt(rgx*rgx + rgy*rgy);
             
             // Error is the loss of edge strength or introduction of spurious edges
@@ -94,11 +102,11 @@ Image CodecAnalysis::computeBlockingMap(
         for (int x = 0; x < w; ++x) {
             double score = 0.0;
             if (x % 8 == 0 && x > 0 && x < w) {
-                double diff = std::abs(reconstructed.at(x, y, 0) - reconstructed.at(x-1, y, 0));
+                double diff = std::abs(lumaAt(reconstructed, x, y) - lumaAt(reconstructed, x-1, y));
                 score += diff;
             }
             if (y % 8 == 0 && y > 0 && y < h) {
-                double diff = std::abs(reconstructed.at(x, y, 0) - reconstructed.at(x, y-1, 0));
+                double diff = std::abs(lumaAt(reconstructed, x, y) - lumaAt(reconstructed, x, y-1));
                 score += diff;
             }
             blocking.at(x, y, 0) = std::min(255.0, score * 8.0);

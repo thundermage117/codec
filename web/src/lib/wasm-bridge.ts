@@ -1,4 +1,4 @@
-import { appState } from './state.svelte.js';
+import { appState, ViewMode } from './state.svelte.js';
 
 export function setupWasm(onReady: () => void, onError?: (message: string) => void): void {
     // codec.js is loaded via a classic <script> tag; if it is missing (e.g. the
@@ -40,6 +40,19 @@ export function processImage(quality: number, csMode: number, transformType?: nu
 export function rdEncode(quality: number, csMode: number, transformType: number): { psnrY: number; bits: number } {
     const psnrY = Module._rd_encode(quality, csMode, transformType);
     return { psnrY, bits: Module._get_rd_bit_estimate() };
+}
+
+// Copies the current reconstruction (the RGB view) out of WASM as RGBA.
+// Returns null if nothing has been processed yet.
+export function getProcessedRgba(): Uint8ClampedArray | null {
+    const ptr = Module._get_view_ptr(ViewMode.RGB);
+    if (!ptr) return null;
+    try {
+        const size = appState.imgWidth * appState.imgHeight * 4;
+        return new Uint8ClampedArray(Module.HEAPU8.slice(ptr, ptr + size));
+    } finally {
+        Module._free(ptr);
+    }
 }
 
 export function getViewPtr(viewMode: number): number {

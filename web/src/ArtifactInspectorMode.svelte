@@ -89,15 +89,34 @@
         return lut;
     })();
 
-    function applyHeatmap(data: Uint8ClampedArray, pixelCount: number) {
+    function applyHeatmap(data: Uint8ClampedArray, intensity: Uint8Array, pixelCount: number) {
         for (let i = 0; i < pixelCount; i++) {
-            const v = data[i * 4]; // R channel (WASM outputs grayscale: R=G=B)
+            const v = intensity[i];
             data[i * 4    ] = VIRIDIS_LUT[v * 3    ];
             data[i * 4 + 1] = VIRIDIS_LUT[v * 3 + 1];
             data[i * 4 + 2] = VIRIDIS_LUT[v * 3 + 2];
         }
     }
 
+
+    // Each map stores min(255, value × gain). Gains for the structural maps
+    // mirror the constants in core/src/CodecAnalysis.cpp.
+    const EDGE_DISTORTION_GAIN = 4.0;
+    const BLOCKING_GAIN = 8.0;
+
+    const tooltipReading = $derived.by(() => {
+        const mode = appState.currentViewMode;
+        const gain = mode === ViewMode.EdgeDistortion ? EDGE_DISTORTION_GAIN
+                   : mode === ViewMode.BlockingMap ? BLOCKING_GAIN
+                   : gainValue;
+        const label = mode === ViewMode.EdgeDistortion ? 'Edge strength Δ'
+                    : mode === ViewMode.BlockingMap ? 'Boundary step'
+                    : '|Error|';
+        const value = tooltip.val / gain;
+        // A saturated pixel only tells us the true value is at least 255 / gain.
+        const text = `${tooltip.val >= 255 ? '≥ ' : ''}${value < 10 ? value.toFixed(1) : value.toFixed(0)}`;
+        return { label, text, saturated: tooltip.val >= 255 };
+    });
 
     function onArtifactMouseMove(e: MouseEvent) {
         if (!rawArtifactData || !artifactCanvas) { tooltip.visible = false; return; }
@@ -136,6 +155,9 @@
         if (!ARTIFACT_MODES.some(m => m.val === appState.currentViewMode)) {
             appState.currentViewMode = ViewMode.Artifacts;
         }
+        // The WASM gain outlives this component while the slider resets, so
+        // re-sync it; otherwise the map and tooltip would disagree with the slider.
+        if (appState.wasmReady) setArtifactGain(gainValue);
         renderOriginal();
         renderArtifact();
     });
@@ -168,9 +190,14 @@
             // @ts-ignore
             const src = new Uint8ClampedArray(Module.HEAPU8.buffer, ptr, artifactImageData.data.length);
             artifactImageData.data.set(src);
-            // Stash raw grayscale values before colour-mapping (used by tooltip)
-            for (let i = 0; i < w * h; i++) rawArtifactData[i] = artifactImageData.data[i * 4];
-            if (showHeatmap) applyHeatmap(artifactImageData.data, w * h);
+            // Stash per-pixel intensity before colour-mapping (used by tooltip and
+            // heatmap). The error map is per-channel colour, so take the largest
+            // channel; the structural maps are grayscale (R = G = B).
+            const px = artifactImageData.data;
+            for (let i = 0; i < w * h; i++) {
+                rawArtifactData[i] = Math.max(px[i * 4], px[i * 4 + 1], px[i * 4 + 2]);
+            }
+            if (showHeatmap) applyHeatmap(px, rawArtifactData, w * h);
             artifactCtx.putImageData(artifactImageData, 0, 0);
         } catch (err) {
             console.error('Artifact render error:', err);
@@ -575,10 +602,15 @@
             <span class="tooltip-type">{currentMode.label}</span>
         </div>
         <div class="tooltip-val">
-            <span class="val-number">{tooltip.val}</span>
-            <span class="val-scale">/ 255</span>
-            <span class="val-percent">({((tooltip.val / 255) * 100).toFixed(1)}%)</span>
+            <span class="val-scale">{tooltipReading.label}</span>
+            <span class="val-number">{tooltipReading.text}</span>
+            <span class="val-scale">levels</span>
         </div>
+        {#if tooltipReading.saturated}
+        <div class="val-percent">
+            {appState.currentViewMode === ViewMode.Artifacts ? 'Saturated — lower the gain to measure' : 'Saturated'}
+        </div>
+        {/if}
     </div>
     {/if}
 

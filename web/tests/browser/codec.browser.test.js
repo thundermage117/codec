@@ -2,7 +2,7 @@
 // not the Module mock used by the other browser tests.
 import { describe, it, expect, beforeAll } from 'vitest';
 import { appState, ViewMode } from '../../src/lib/state.svelte.js';
-import { initSession, processImage, rdEncode, getStats, getLastBitEstimate } from '../../src/lib/wasm-bridge.js';
+import { initSession, processImage, rdEncode, getStats, getLastBitEstimate, getProcessedRgba } from '../../src/lib/wasm-bridge.js';
 import { Transform, TRANSFORMS } from '../../src/lib/transforms.js';
 
 const WIDTH = 384;
@@ -104,5 +104,23 @@ describe('codec with the real WASM module', () => {
     it('Subbands view falls back to the reconstruction for DCT', () => {
         processImage(50, CS_420, Transform.DCT);
         expect(readView(ViewMode.Subbands)).toEqual(readView(ViewMode.RGB));
+    });
+
+    it('getProcessedRgba returns the same pixels as the RGB view', () => {
+        processImage(40, CS_420, Transform.DCT);
+        const recon = getProcessedRgba();
+        expect(recon).not.toBeNull();
+        expect(recon.length).toBe(WIDTH * HEIGHT * 4);
+        expect(Array.from(recon.subarray(0, 4096))).toEqual(Array.from(readView(ViewMode.RGB).subarray(0, 4096)));
+    });
+
+    it('edge-distortion map is populated at low quality', () => {
+        // Smoke test of the real map; the per-channel behaviour is covered by
+        // CodecAnalysisTest.EdgeDistortionSeesNonBlueChannels.
+        processImage(5, CS_420, Transform.DCT);
+        const edges = readView(ViewMode.EdgeDistortion);
+        let nonZero = 0;
+        for (let i = 0; i < edges.length; i += 4) if (edges[i] > 0) nonZero++;
+        expect(nonZero).toBeGreaterThan(WIDTH * HEIGHT * 0.05);
     });
 });

@@ -1,17 +1,16 @@
 /**
  * Suggested Blocks: Auto-detect interesting 8×8 blocks for guided exploration.
- * Scores blocks by edge content, texture complexity, reconstruction error, and smoothness.
+ * Scores blocks by edge content, texture complexity, and smoothness.
  */
 
 import { appState } from './state.svelte.js';
 import type { SuggestedBlock } from './state.svelte.js';
 
 /**
- * Compute suggested blocks from the loaded image data.
- * Reads appState.originalImageData and the processedCanvas for error scoring.
+ * Compute suggested blocks from appState.originalImageData.
  * Stores results in appState.suggestedBlocks.
  */
-export function computeSuggestedBlocks(processedCanvas?: HTMLCanvasElement | null): void {
+export function computeSuggestedBlocks(): void {
     if (!appState.originalImageData) {
         appState.suggestedBlocks = [];
         return;
@@ -30,30 +29,15 @@ export function computeSuggestedBlocks(processedCanvas?: HTMLCanvasElement | nul
 
     const origData = appState.originalImageData.data;
 
-    // Get reconstructed data from processedCanvas
-    let reconData: Uint8ClampedArray | null = null;
-    try {
-        const canvas = processedCanvas ?? (document.getElementById('processedCanvas') as HTMLCanvasElement | null);
-        if (canvas) {
-            const ctx = canvas.getContext('2d', { willReadFrequently: true });
-            if (ctx) {
-                const imgData = ctx.getImageData(0, 0, w, h);
-                reconData = imgData.data;
-            }
-        }
-    } catch {
-        // If we can't read the canvas, skip error scoring
-    }
-
     const maxCandidates = 200;
     const step = Math.max(1, Math.floor(totalBlocks / maxCandidates));
 
-    const candidates: Array<{ x: number; y: number; edge: number; texture: number; smooth: number; error: number }> = [];
+    const candidates: Array<{ x: number; y: number; edge: number; texture: number; smooth: number }> = [];
 
     for (let idx = 0; idx < totalBlocks; idx += step) {
         const bx = idx % blocksX;
         const by = Math.floor(idx / blocksX);
-        const scores = scoreBlock(origData, reconData, bx, by, w, h);
+        const scores = scoreBlock(origData, bx, by, w, h);
         candidates.push({ x: bx, y: by, ...scores });
     }
 
@@ -95,7 +79,6 @@ export function computeSuggestedBlocks(processedCanvas?: HTMLCanvasElement | nul
 
 function scoreBlock(
     origData: Uint8ClampedArray,
-    reconData: Uint8ClampedArray | null,
     bx: number,
     by: number,
     imgW: number,
@@ -107,7 +90,6 @@ function scoreBlock(
     let sumLum = 0;
     let sumLum2 = 0;
     let edgeSum = 0;
-    let errorSum = 0;
     let count = 0;
 
     for (let dy = 0; dy < 8; dy++) {
@@ -129,17 +111,10 @@ function scoreBlock(
                 const lumD = origData[idxD] * 0.299 + origData[idxD + 1] * 0.587 + origData[idxD + 2] * 0.114;
                 edgeSum += Math.abs(lumR - lum) + Math.abs(lumD - lum);
             }
-
-            if (reconData) {
-                const dr = origData[idx] - reconData[idx];
-                const dg = origData[idx + 1] - reconData[idx + 1];
-                const db = origData[idx + 2] - reconData[idx + 2];
-                errorSum += (dr * dr + dg * dg + db * db) / 3;
-            }
         }
     }
 
-    if (count === 0) return { edge: 0, texture: 0, smooth: 0, error: 0 };
+    if (count === 0) return { edge: 0, texture: 0, smooth: 0 };
 
     const mean = sumLum / count;
     const variance = (sumLum2 / count) - (mean * mean);
@@ -147,8 +122,7 @@ function scoreBlock(
     return {
         edge: edgeSum,
         texture: variance,
-        smooth: 1 / (1 + variance),
-        error: errorSum / count
+        smooth: 1 / (1 + variance)
     };
 }
 
