@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { appState, ViewMode } from './lib/state.svelte.js';
+    import { appState, ViewMode, leaveCurrentMode } from './lib/state.svelte.js';
     import { inspectBlock } from './lib/inspection.js';
     import { computeSuggestedBlocks, renderBlockThumbnail } from './lib/suggested-blocks.js';
     import { processImage } from './lib/wasm-bridge.js';
@@ -252,11 +252,7 @@
     // ===== Back button =====
 
     function onBack() {
-        appState.appMode = 'viewer';
-        appState.currentViewMode = ViewMode.RGB;
-        appState.isInspectMode = false;
-        appState.highlightBlock = null;
-        // Button in ViewerMode handles its own active state via class:active
+        leaveCurrentMode();
     }
 
     // ===== Inspector view mode (Y/Cr/Cb only) =====
@@ -294,7 +290,7 @@
                     <line x1="19" y1="12" x2="5" y2="12"></line>
                     <polyline points="12 5 5 12 12 19"></polyline>
                 </svg>
-                Back
+                {appState.inspectorReturn ? 'Back to Artifacts' : 'Back'}
             </button>
             <h2 class="inspector-topbar-title">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"

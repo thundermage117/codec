@@ -1,7 +1,7 @@
 <script lang="ts">
     import { onMount, onDestroy } from 'svelte';
     import { fade } from 'svelte/transition';
-    import { appState, ViewMode } from './lib/state.svelte.js';
+    import { appState, ViewMode, openBlockInspector } from './lib/state.svelte.js';
     import { TRANSFORMS, isWavelet } from './lib/transforms.js';
     import { processImage, previewImage, getViewPtr, getStats, free, setArtifactGain } from './lib/wasm-bridge.js';
     import QualityControl from './lib/components/QualityControl.svelte';
@@ -118,8 +118,18 @@
         return { label, text, saturated: tooltip.val >= 255 };
     });
 
+    // DCT codes 8×8 blocks independently, so a spot on the map can be opened in
+    // the block inspector. Wavelets have no blocks to open.
+    const canOpenBlocks = $derived(!isWavelet(appState.transformType));
+    let hoveredBlock = $state<{ x: number; y: number } | null>(null);
+
+    function openHoveredBlock(): void {
+        if (!hoveredBlock || !canOpenBlocks) return;
+        openBlockInspector(hoveredBlock, { mode: 'artifact_inspector', viewMode: appState.currentViewMode });
+    }
+
     function onArtifactMouseMove(e: MouseEvent) {
-        if (!rawArtifactData || !artifactCanvas) { tooltip.visible = false; return; }
+        if (!rawArtifactData || !artifactCanvas) { tooltip.visible = false; hoveredBlock = null; return; }
         const rect = artifactCanvas.getBoundingClientRect();
         const scaleX = artifactCanvas.width / rect.width;
         const scaleY = artifactCanvas.height / rect.height;
@@ -135,6 +145,7 @@
         tooltip.px = px;
         tooltip.py = py;
         tooltip.val = rawArtifactData[py * artifactCanvas.width + px];
+        hoveredBlock = canOpenBlocks && !isZoomMode ? { x: px >> 3, y: py >> 3 } : null;
     }
 
     function onChipMouseEnter(e: MouseEvent, desc: string) {
@@ -311,7 +322,10 @@
     }
 
     function onArtCanvasClick(e: MouseEvent) {
-        if (!isZoomMode) return;
+        if (!isZoomMode) {
+            openHoveredBlock();
+            return;
+        }
         const canvas = viewType === 'artifact' ? artifactCanvas : originalCanvas;
         if (!canvas) return;
         if (zoom > 1) {
@@ -466,7 +480,10 @@
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                                 <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
                             </svg>
-                            <p>Hover map for per-pixel error values. Mode chips have descriptions on hover.</p>
+                            <p>
+                                Hover the map for per-pixel values.
+                                {#if canOpenBlocks}Click to open that 8×8 block in the Block Inspector.{:else}Switch to DCT to open individual 8×8 blocks — wavelets have none.{/if}
+                            </p>
                         </div>
                     </div>
                 </details>
@@ -562,7 +579,8 @@
                         zoomHint="Click image to zoom in &nbsp;·&nbsp; Esc to exit"
                         onViewerClick={onArtCanvasClick}
                         onViewerMouseMove={onArtifactMouseMove}
-                        onViewerMouseLeave={() => tooltip.visible = false}
+                        onViewerMouseLeave={() => { tooltip.visible = false; hoveredBlock = null; }}
+                        blockOutline={viewType === 'artifact' ? hoveredBlock : null}
                     />
                 </div>
 
@@ -589,6 +607,9 @@
         <div class="val-percent">
             {appState.currentViewMode === ViewMode.Artifacts ? 'Saturated — lower the gain to measure' : 'Saturated'}
         </div>
+        {/if}
+        {#if hoveredBlock}
+        <div class="val-percent">Click to inspect block ({hoveredBlock.x}, {hoveredBlock.y})</div>
         {/if}
     </div>
     {/if}

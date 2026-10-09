@@ -23,6 +23,8 @@
         onViewerMouseLeave = null,
         onViewerMouseMove = null,
         onEnterInspector = null,
+        /** 8×8 block to outline (e.g. the block a click would open), or null. */
+        blockOutline = null as { x: number; y: number } | null,
         originalLabel = 'Original image',
         processedLabel = 'Compressed image'
     } = $props();
@@ -64,7 +66,7 @@
     style:--img-w={appState.imgWidth}
     style:--img-h={appState.imgHeight}>
     <div class="comparison-viewer"
-        style={`transform: scale(${zoom}); transform-origin: ${zoomOriginX}% ${zoomOriginY}%; cursor: ${isZoomMode && zoom === 1 ? 'zoom-in' : isInspectMode ? 'crosshair' : viewType === 'comparison' ? 'col-resize' : 'default'}`}
+        style={`transform: scale(${zoom}); transform-origin: ${zoomOriginX}% ${zoomOriginY}%; cursor: ${isZoomMode && zoom === 1 ? 'zoom-in' : isInspectMode ? 'crosshair' : blockOutline ? 'pointer' : viewType === 'comparison' ? 'col-resize' : 'default'}`}
         role="button"
         tabindex="0"
         aria-label={isInspectMode
@@ -98,6 +100,13 @@
 
             {#if showBlockGrid}
                 <div class="grid-overlay" aria-hidden="true"></div>
+            {/if}
+            {#if blockOutline && appState.imgWidth > 0}
+                <div class="block-outline" aria-hidden="true"
+                    style:left="{(blockOutline.x * 8 / appState.imgWidth) * 100}%"
+                    style:top="{(blockOutline.y * 8 / appState.imgHeight) * 100}%"
+                    style:width="{(8 / appState.imgWidth) * 100}%"
+                    style:height="{(8 / appState.imgHeight) * 100}%"></div>
             {/if}
         </div>
 
@@ -196,6 +205,16 @@
         object-fit: contain;
     }
 
+
+    .block-outline {
+        position: absolute;
+        pointer-events: none;
+        box-sizing: border-box;
+        outline: 2px solid #fff;
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 0 8px rgba(255, 255, 255, 0.5);
+        min-width: 4px;
+        min-height: 4px;
+    }
 
     .grid-overlay {
         position: absolute;
