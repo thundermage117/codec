@@ -19,6 +19,7 @@
 #include <cmath>
 #include "colorspace.h"
 #include <algorithm>
+#include <vector>
 
 Image CodecAnalysis::computeArtifactMap(
     const Image& original,
@@ -136,62 +137,89 @@ double CodecAnalysis::computePSNR(const Image& I1, const Image& I2) {
     return 10.0 * log10((255.0 * 255.0) / mse);
 }
 
-// Helper for SSIM
-static double getMean(const double* data, int width, int height, int x, int y, int kernelSize) {
-    double sum = 0.0;
-    int count = 0;
-    int half = kernelSize / 2;
+// --- SSIM (Wang, Bovik, Sheikh & Simoncelli, 2004) ---------------------------
+// 11×11 Gaussian window with σ = 1.5, constants K1 = 0.01, K2 = 0.03 for 8-bit
+// data, evaluated at every pixel and averaged over the region where the window
+// fits inside the image (as in the reference ssim_index.m and scikit-image
+// with gaussian_weights=True). Images smaller than the window are handled by
+// clamping at the borders and averaging over every pixel.
 
-    for (int j = -half; j <= half; ++j) {
-        for (int i = -half; i <= half; ++i) {
-            int cx = x + i;
-            int cy = y + j;
-            if (cx >= 0 && cx < width && cy >= 0 && cy < height) {
-                sum += data[cy * width + cx];
-                count++;
-            }
-        }
+static const int SSIM_RADIUS = 5;
+static const double SSIM_SIGMA = 1.5;
+
+static std::vector<double> ssimKernel() {
+    std::vector<double> k(2 * SSIM_RADIUS + 1);
+    double sum = 0.0;
+    for (int i = -SSIM_RADIUS; i <= SSIM_RADIUS; ++i) {
+        k[i + SSIM_RADIUS] = std::exp(-(i * i) / (2.0 * SSIM_SIGMA * SSIM_SIGMA));
+        sum += k[i + SSIM_RADIUS];
     }
-    return (count > 0) ? (sum / count) : 0.0;
+    for (double& v : k) v /= sum;
+    return k;
 }
 
-static double getVariance(const double* data, int width, int height, int x, int y, int kernelSize, double mean) {
-    double sum = 0.0;
-    int count = 0;
-    int half = kernelSize / 2;
-
-    for (int j = -half; j <= half; ++j) {
-        for (int i = -half; i <= half; ++i) {
-            int cx = x + i;
-            int cy = y + j;
-            if (cx >= 0 && cx < width && cy >= 0 && cy < height) {
-                double diff = data[cy * width + cx] - mean;
-                sum += diff * diff;
-                count++;
-            }
+// One 1D pass of the symmetric (2r+1)-tap Gaussian over n samples spaced
+// `stride` apart, with edge clamping. The kernel is symmetric, so taps are
+// paired (half the multiplies), and clamping is only done near the ends.
+static void gaussian1D(const double* src, double* dst, int n, size_t stride, const std::vector<double>& k) {
+    const int r = SSIM_RADIUS;
+    auto at = [&](int i) { return src[(size_t)std::max(0, std::min(n - 1, i)) * stride]; };
+    for (int x = 0; x < n; ++x) {
+        double acc = k[r] * src[(size_t)x * stride];
+        if (x >= r && x < n - r) {
+            for (int i = 1; i <= r; ++i)
+                acc += k[r + i] * (src[(size_t)(x - i) * stride] + src[(size_t)(x + i) * stride]);
+        } else {
+            for (int i = 1; i <= r; ++i)
+                acc += k[r + i] * (at(x - i) + at(x + i));
         }
+        dst[(size_t)x * stride] = acc;
     }
-    return (count > 0) ? (sum / count) : 0.0;
 }
 
-static double getCovariance(const double* d1, const double* d2, int width, int height, int x, int y, int kernelSize, double mean1, double mean2) {
-    double sum = 0.0;
-    int count = 0;
-    int half = kernelSize / 2;
+// Separable Gaussian blur of a w×h plane with edge clamping.
+static std::vector<double> gaussianBlur(const std::vector<double>& src, int w, int h,
+                                        const std::vector<double>& k) {
+    std::vector<double> tmp(src.size()), out(src.size());
+    for (int y = 0; y < h; ++y)
+        gaussian1D(src.data() + (size_t)y * w, tmp.data() + (size_t)y * w, w, 1, k);
+    for (int x = 0; x < w; ++x)
+        gaussian1D(tmp.data() + x, out.data() + x, h, (size_t)w, k);
+    return out;
+}
 
-    for (int j = -half; j <= half; ++j) {
-        for (int i = -half; i <= half; ++i) {
-            int cx = x + i;
-            int cy = y + j;
-            if (cx >= 0 && cx < width && cy >= 0 && cy < height) {
-                double diff1 = d1[cy * width + cx] - mean1;
-                double diff2 = d2[cy * width + cx] - mean2;
-                sum += diff1 * diff2;
-                count++;
-            }
-        }
+static double ssimPlane(const std::vector<double>& a, const std::vector<double>& b, int w, int h) {
+    const double C1 = (0.01 * 255.0) * (0.01 * 255.0);
+    const double C2 = (0.03 * 255.0) * (0.03 * 255.0);
+    const std::vector<double> k = ssimKernel();
+
+    std::vector<double> aa(a.size()), bb(a.size()), ab(a.size());
+    for (size_t i = 0; i < a.size(); ++i) {
+        aa[i] = a[i] * a[i];
+        bb[i] = b[i] * b[i];
+        ab[i] = a[i] * b[i];
     }
-    return (count > 0) ? (sum / count) : 0.0;
+    const auto muA = gaussianBlur(a, w, h, k);
+    const auto muB = gaussianBlur(b, w, h, k);
+    const auto eAA = gaussianBlur(aa, w, h, k);
+    const auto eBB = gaussianBlur(bb, w, h, k);
+    const auto eAB = gaussianBlur(ab, w, h, k);
+
+    const bool fits = w > 2 * SSIM_RADIUS && h > 2 * SSIM_RADIUS;
+    const int r = fits ? SSIM_RADIUS : 0;
+    double sum = 0.0;
+    long long count = 0;
+    for (int y = r; y < h - r; ++y)
+        for (int x = r; x < w - r; ++x) {
+            const size_t i = (size_t)y * w + x;
+            const double varA = eAA[i] - muA[i] * muA[i];
+            const double varB = eBB[i] - muB[i] * muB[i];
+            const double cov  = eAB[i] - muA[i] * muB[i];
+            sum += ((2.0 * muA[i] * muB[i] + C1) * (2.0 * cov + C2)) /
+                   ((muA[i] * muA[i] + muB[i] * muB[i] + C1) * (varA + varB + C2));
+            ++count;
+        }
+    return count > 0 ? sum / static_cast<double>(count) : 1.0;
 }
 
 double CodecAnalysis::computeSSIM(const Image& I1, const Image& I2) {
@@ -199,48 +227,19 @@ double CodecAnalysis::computeSSIM(const Image& I1, const Image& I2) {
         return 0.0;
     }
 
-    const double C1 = 6.5025;  // (0.01 * 255)^2
-    const double C2 = 58.5225; // (0.03 * 255)^2
-    
-    int width = I1.width();
-    int height = I1.height();
-    const double* d1 = I1.data();
-    const double* d2 = I2.data();
-    
-    // Using a simpler block-based approach for performance instead of full sliding window Gaussian
-    // But to be somewhat accurate we'll use a sliding window with stride
-    // For this implementation, let's do a basic sliding window with a small stride for speed
-    // or just checking every Nth pixel.
-    
-    // Let's do a proper sliding window but maybe with skip if needed. 
-    // For now, full sliding window.
-    
-    // NOTE: This is a simplified SSIM. A full Gaussian weighting is standard but slower.
-    // Using an 8x8 uniform window is a common approximation.
-    int kernelSize = 8;
-    int stride = 4; // Speed up calculation
-    
-    double mssim = 0.0;
-    int blocks = 0;
-    
-    for (int y = 0; y < height; y += stride) {
-        for (int x = 0; x < width; x += stride) {
-            double ux = getMean(d1, width, height, x, y, kernelSize);
-            double uy = getMean(d2, width, height, x, y, kernelSize);
-            
-            double sigx2 = getVariance(d1, width, height, x, y, kernelSize, ux);
-            double sigy2 = getVariance(d2, width, height, x, y, kernelSize, uy);
-            double sigxy = getCovariance(d1, d2, width, height, x, y, kernelSize, ux, uy);
-            
-            double num = (2 * ux * uy + C1) * (2 * sigxy + C2);
-            double den = (ux * ux + uy * uy + C1) * (sigx2 + sigy2 + C2);
-            
-            mssim += (num / den);
-            blocks++;
+    // Multi-channel input: mean SSIM over channels.
+    const int w = I1.width(), h = I1.height(), ch = I1.channels();
+    const size_t n = static_cast<size_t>(w) * h;
+    double total = 0.0;
+    std::vector<double> a(n), b(n);
+    for (int c = 0; c < ch; ++c) {
+        for (size_t i = 0; i < n; ++i) {
+            a[i] = I1.data()[i * ch + c];
+            b[i] = I2.data()[i * ch + c];
         }
+        total += ssimPlane(a, b, w, h);
     }
-    
-    return (blocks > 0) ? (mssim / blocks) : 0.0;
+    return total / ch;
 }
 
 CodecMetrics CodecAnalysis::computeMetrics(const Image& originalBgr, const Image& reconstructedBgr) {
