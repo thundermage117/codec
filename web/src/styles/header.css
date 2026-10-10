@@ -47,15 +47,12 @@ h1 {
     header {
         top: 8px;
         padding: 10px 12px;
-        flex-direction: column;
-        align-items: flex-start;
         backdrop-filter: none;
         -webkit-backdrop-filter: none;
     }
 
     .header-badges {
-        width: 100%;
-        justify-content: flex-start;
+        flex-wrap: nowrap;
     }
 
     h1 {
@@ -63,30 +60,25 @@ h1 {
     }
 }
 
-.privacy-badge {
+.privacy-note {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    background-color: var(--success-bg);
-    color: var(--success-text);
-    padding: 6px 12px;
-    border-radius: var(--radius-full);
-    font-size: var(--text-base);
+    gap: 5px;
+    color: var(--text-muted);
+    font-size: var(--text-sm);
     font-weight: 600;
-    box-shadow: var(--shadow-sm);
+    cursor: help;
 }
 
 .github-link {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--border);
     background-color: var(--bg-secondary);
-    color: var(--text-muted);
-    padding: 6px 12px;
     border-radius: var(--radius-full);
-    font-size: var(--text-base);
-    font-weight: 600;
-    text-decoration: none;
     box-shadow: var(--shadow-sm);
     transition: all 0.2s ease;
 }
