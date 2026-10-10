@@ -183,14 +183,13 @@ function renderNow(): void {
 
     renderGrid('gridOriginal', (isRGB ? originalRGB : null) ?? original, 'intensity', 'original', isRGB && !!originalRGB);
     renderGrid('gridDCT', coefficients, 'frequency', 'transform');
-    renderGrid('gridQuantized', current.quantized, 'frequency', 'quantized');
-    renderGrid('gridQuantized2', quantized, 'frequency', 'quantized');
+    renderGrid('gridQuantized', quantized, 'frequency', 'quantized');
     renderGrid('gridQuantizedAdvanced', quantized, 'frequency', 'quantized');
     renderGrid('gridDequantized', dequantized, 'frequency', 'dequantized');
     renderGrid('gridReconstructed', reconstructedRGB ?? reconstructed, 'intensity', 'reconstructed', !!reconstructedRGB);
     renderGrid('gridQuantTable', quantTable, 'qtable', 'qtable');
     renderGrid('gridError', Array.from(errorData), 'error', 'error');
-    markDroppedCells(['gridQuantized2', 'gridDequantized']);
+    markDroppedCells(['gridQuantized', 'gridDequantized']);
 
     renderLossMeter(mse, peakError);
     renderZigzagArray(quantized);

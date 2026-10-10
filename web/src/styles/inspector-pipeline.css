@@ -20,35 +20,14 @@
     opacity: 0.6;
     padding-left: 4px;
     display: flex;
-    justify-content: space-between;
-    align-items: center;
+    align-items: baseline;
+    gap: 8px;
 }
 
-.nav-hint {
-    display: flex;
-    align-items: center;
-    gap: 3px;
-    font-size: 0.62rem;
-    font-weight: 400;
+.pipeline-row-label .row-sub {
+    font-weight: 500;
     text-transform: none;
     letter-spacing: 0;
-}
-
-.nav-hint kbd {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 16px;
-    height: 16px;
-    padding: 0 3px;
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    background: var(--bg-secondary);
-    font-family: var(--font-mono);
-    font-size: 0.55rem;
-    font-weight: 600;
-    color: var(--text-muted);
-    box-shadow: 0 1px 0 var(--border);
 }
 
 .pipeline-row {
@@ -342,6 +321,16 @@
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
     gap: 12px;
+}
+
+/* Stats take the room; the quant table stays the size of the pipeline grids. */
+.analysis-row-two {
+    grid-template-columns: 1fr clamp(140px, 18vw, 260px);
+}
+
+/* Cards in a pipeline row share a top edge even when their heights differ. */
+.pipeline-row > .pipeline-block {
+    align-self: stretch;
 }
 
 /* Pipeline blocks in the analysis row fill their grid cell */

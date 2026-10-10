@@ -98,13 +98,23 @@
         transform: translateX(-50%) translateY(-4px);
     }
 
-    .analysis-row {
+    .analysis-row,
+    .analysis-row-two {
         grid-template-columns: 1fr;
     }
 
+    /* No arrow keys on phones. */
+    .block-header .kbd-only {
+        display: none;
+    }
+
+    .pipeline-row > .pipeline-block {
+        align-self: center;
+    }
+
     .context-crop-canvas-wrap canvas {
-        width: 200px;
-        height: 200px;
+        width: 80px;
+        height: 80px;
     }
 
     .sidebar-shortcuts {

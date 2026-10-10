@@ -12,7 +12,7 @@ import { inspectBlock } from '../../src/lib/inspection.js';
 const REQUIRED_DIVS = [
     'blockCoords',
     'qTableType', 'qTableType2',
-    'gridOriginal', 'gridDCT', 'gridQuantized', 'gridQuantized2',
+    'gridOriginal', 'gridDCT', 'gridQuantized',
     'gridDequantized', 'gridReconstructed', 'gridQuantTable', 'gridError',
     'statMSE', 'statPeakError', 'statZeros', 'statCompression',
     'lossMeterContainer', 'basisPopover',

@@ -85,7 +85,7 @@ describe('inspection.js - inspectBlock', () => {
         inspectBlock(0, 0);
         expect(hideBasisPopover).toHaveBeenCalled();
         expect(setCachedGridData).toHaveBeenCalled();
-        expect(renderGrid).toHaveBeenCalledTimes(9); // 9 grids updated
+        expect(renderGrid).toHaveBeenCalledTimes(8); // 8 grids updated
         expect(renderLossMeter).toHaveBeenCalled();
         expect(renderZigzagArray).toHaveBeenCalled();
         expect(renderEntropySummary).toHaveBeenCalled();

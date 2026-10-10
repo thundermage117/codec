@@ -17,15 +17,15 @@ function getTransformFreqLabel(row: number, col: number): string {
 }
 
 const ALL_GRID_IDS = [
-    'gridOriginal', 'gridDCT', 'gridQuantized', 'gridQuantized2',
+    'gridOriginal', 'gridDCT', 'gridQuantized',
     'gridQuantizedAdvanced', 'gridDequantized', 'gridReconstructed',
     'gridQuantTable', 'gridError'
 ];
 
 let lastHighlightedKey: string | null = null;
 
-/** Decoder-side grids whose coefficients can be dropped in edit mode. */
-const EDITABLE_GRID_IDS = ['gridQuantized2', 'gridDequantized'];
+/** Grids whose coefficients can be dropped in edit mode: the stored data and what the decoder makes of it. */
+const EDITABLE_GRID_IDS = ['gridQuantized', 'gridDequantized'];
 
 export function clearAllHighlights(): void {
     lastHighlightedKey = null;
@@ -95,9 +95,9 @@ export function renderLossMeter(mse: number, _peakError: number): void {
         meter.className = 'loss-meter';
         meter.innerHTML = `
             <div class="loss-meter-label-wrap tooltip-container">
-                <span class="loss-meter-label">Quality</span>
+                <span class="loss-meter-label">Fidelity</span>
                 <div class="tooltip-content-small" style="text-align: center">
-                    <strong>PSNR-based Quality</strong><br>
+                    <strong>Block fidelity</strong> (from this block's PSNR)<br>
                     <code>clamp((10&thinsp;log<sub>10</sub>(255&sup2;/MSE) &minus; 20) / 30, 0, 1)</code><br>
                     Maps the 20&ndash;50 dB PSNR range to 0&ndash;100%. MSE&nbsp;=&nbsp;0 is treated as lossless.
                 </div>
@@ -166,7 +166,7 @@ export function renderGrid(
             const row = Number.parseInt(cell.dataset.row || '0');
             const col = Number.parseInt(cell.dataset.col || '0');
 
-            // Edit mode: decoder-side coefficients toggle instead of animating.
+            // Edit mode: stored coefficients toggle instead of animating.
             if (coeffEdit.editing && EDITABLE_GRID_IDS.includes(el.id)) {
                 coeffEdit.toggle(row * 8 + col);
                 return;
