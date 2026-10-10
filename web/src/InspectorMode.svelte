@@ -45,6 +45,15 @@
         }
     });
 
+    // Opened without a block (from the viewer): start on the top suggestion
+    // rather than an empty page.
+    $effect(() => {
+        const first = appState.suggestedBlocks[0];
+        if (first && !untrack(() => appState.inspectedBlock)) {
+            appState.inspectedBlock = { x: first.x, y: first.y };
+        }
+    });
+
     // Reactive: re-process when quality/CS/transform changes in inspector
     $effect(() => {
         const q = appState.quality;
@@ -353,7 +362,7 @@
                                 {#each ['edge', 'texture', 'smooth'] as cat}
                                     {#if appState.suggestedBlocks.some(b => b.category === cat)}
                                         <div class="suggested-category-header">
-                                            {cat === 'edge' ? '🔷 Edges' : cat === 'texture' ? '🔶 Textures' : '🟢 Smooth'}
+                                            {cat === 'edge' ? 'Edges' : cat === 'texture' ? 'Textures' : 'Smooth'}
                                         </div>
                                         {#each appState.suggestedBlocks.filter(b => b.category === cat) as block}
                                             {@const isActive = appState.inspectedBlock?.x === block.x && appState.inspectedBlock?.y === block.y}
@@ -409,14 +418,6 @@
                             </div>
                         </div>
 
-                        <div class="control-group">
-                            <div class="group-label">Transform</div>
-                            <p class="control-hint">
-                                The block inspector follows the 8×8 DCT used by JPEG. Wavelet
-                                transforms work on the whole image — switch to Haar or CDF 9/7
-                                in the viewer and open the Subbands view to explore them.
-                            </p>
-                        </div>
                     </div>
                 </details>
 
