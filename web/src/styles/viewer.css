@@ -54,7 +54,6 @@ canvas {
     background: rgba(30, 41, 59, 0.9);
 }
 
-
 .comparison-viewer {
     position: relative;
     width: 100%;
@@ -96,43 +95,6 @@ canvas {
     background: linear-gradient(135deg, #059669, #047857);
     border-color: rgba(255, 255, 255, 0.25);
     box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.35), 0 8px 24px rgba(5, 150, 105, 0.28);
-}
-
-.inspector-active-banner {
-    position: absolute;
-    left: 12px;
-    top: 12px;
-    z-index: 4;
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    background: rgba(15, 23, 42, 0.82);
-    border: 1px solid rgba(52, 211, 153, 0.45);
-    color: rgba(241, 245, 249, 0.98);
-    border-radius: 999px;
-    font-size: 0.7rem;
-    padding: 6px 10px;
-    max-width: calc(100% - 24px);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-}
-
-.inspector-active-banner strong {
-    font-size: 0.72rem;
-    white-space: nowrap;
-}
-
-.inspector-active-banner span:last-child {
-    opacity: 0.9;
-}
-
-.banner-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 999px;
-    background: #34d399;
-    box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.25);
-    flex-shrink: 0;
 }
 
 .comparison-divider {
@@ -182,7 +144,6 @@ canvas {
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
 
-    .inspector-active-banner,
     .comparison-handle {
         backdrop-filter: none;
         -webkit-backdrop-filter: none;
@@ -213,33 +174,14 @@ canvas {
     height: auto;
 }
 
-
 @media (max-width: 860px) {
     .viewer-canvas-header {
         padding: 0 4px 6px;
-    }
-
-    .comparison-label {
-        font-size: 0.65rem;
-    }
-
-    .inspector-active-banner span:last-child {
-        display: none;
-    }
-
-    .inspector-quickstart {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-
-    .inspector-quickstart-btn {
-        width: 100%;
     }
 }
 
 @media (max-width: 1024px) {
 
-    .inspector-active-banner,
     .comparison-handle {
         backdrop-filter: none;
         -webkit-backdrop-filter: none;
@@ -247,57 +189,10 @@ canvas {
 }
 
 .viewer-canvas-header {
-    display: grid;
-    grid-template-columns: 1fr auto 1fr;
+    display: flex;
     align-items: center;
+    gap: 8px;
     padding: 0 4px 12px;
-}
-
-.canvas-header-left {
-    display: flex;
-    align-items: center;
-}
-
-.canvas-header-center {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.canvas-header-right {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-}
-
-.img-dim-info {
-    font-size: 0.72rem;
-    font-weight: 600;
-    color: var(--text-muted);
-    background: rgba(255, 255, 255, 0.05);
-    padding: 5px 10px;
-    border-radius: 999px;
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
-}
-
-.dim-sep {
-    color: var(--text-muted);
-    opacity: 0.4;
-    font-size: 0.65rem;
-    padding: 0 1px;
-}
-
-.dim-unit {
-    font-size: 0.65rem;
-    opacity: 0.6;
-    margin-left: 1px;
-}
-
-.dim-val {
-    font-variant-numeric: tabular-nums;
 }
 
 /* View Mode Toggle (Segmented Control) within Viewer Card */
@@ -321,7 +216,7 @@ canvas {
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     white-space: nowrap;
-    min-width: 90px;
+    min-width: 56px;
 }
 
 .view-mode-toggle button:hover {
@@ -335,16 +230,10 @@ canvas {
     box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
 }
 
-/* Phones: dimensions + zoom share the first row, the view toggle spans the second. */
+/* Phones: the view toggle gets its own row above the zoom controls. */
 @media (max-width: 600px) {
     .viewer-canvas-header {
-        grid-template-columns: 1fr auto;
-        row-gap: 8px;
-    }
-
-    .canvas-header-center {
-        grid-column: 1 / -1;
-        grid-row: 2;
+        flex-wrap: wrap;
     }
 
     .view-mode-toggle {
@@ -359,6 +248,7 @@ canvas {
 }
 
 .viewer-zoom-controls {
+    margin-left: auto;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -409,20 +299,6 @@ canvas {
     letter-spacing: 0.02em;
 }
 
-/* Old labels and mini info removed — moved to global header */
-
-
-.inspector-quickstart {
-    border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.2));
-    border-radius: 10px;
-    padding: 10px 12px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    background: rgba(15, 23, 42, 0.4);
-}
-
 .rd-chart-panel {
     padding: 4px;
     display: flex;
@@ -450,13 +326,6 @@ canvas {
     font-size: 0.75rem;
     color: var(--text-muted);
     opacity: 0.85;
-}
-
-.rd-chart-status {
-    font-size: 0.72rem;
-    font-weight: 700;
-    color: var(--primary);
-    white-space: nowrap;
 }
 
 .rd-chart-svg-wrap {
@@ -603,39 +472,83 @@ canvas {
         min-width: 40%;
     }
 }
+.view-mode-toggle button:disabled,
+.zoom-ctrl-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
 
-.quickstart-copy {
+/* Dropping an image file onto the viewer */
+.viewer-card.drag-over {
+    outline: 2px dashed var(--primary);
+    outline-offset: -6px;
+}
+
+.split-labels {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 4px 0;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: rgba(203, 213, 225, 0.8);
+}
+
+.viewer-note {
+    margin: 8px 4px 0;
+    font-size: 0.72rem;
+    line-height: 1.5;
+    color: rgba(203, 213, 225, 0.8);
+}
+
+/* Ways into the two deep-dive modes, under the image */
+.go-deeper {
+    display: flex;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.go-deeper-btn {
+    flex: 1;
     display: flex;
     flex-direction: column;
+    align-items: flex-start;
     gap: 2px;
-    min-width: 0;
-}
-
-.quickstart-copy strong {
-    font-size: 0.8rem;
+    text-align: left;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.04);
     color: rgba(248, 250, 252, 0.98);
-    letter-spacing: 0.02em;
-}
-
-.quickstart-copy span {
-    font-size: 0.72rem;
-    color: rgba(203, 213, 225, 0.92);
-}
-
-.inspector-quickstart-btn {
-    flex-shrink: 0;
-    border: none;
-    background: var(--primary);
-    color: white;
-    border-radius: 8px;
-    padding: 8px 10px;
-    font-size: 0.74rem;
-    font-weight: 700;
     cursor: pointer;
-    transition: background-color 0.2s ease, transform 0.15s ease;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
-.inspector-quickstart-btn:hover {
-    background: var(--primary-hover);
-    transform: translateY(-1px);
+.go-deeper-btn strong {
+    font-size: 0.8rem;
+}
+
+.go-deeper-btn strong::after {
+    content: ' →';
+    color: var(--primary);
+}
+
+.go-deeper-btn span {
+    font-size: 0.72rem;
+    color: rgba(203, 213, 225, 0.85);
+}
+
+.go-deeper-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--primary);
+}
+
+.go-deeper-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+@media (max-width: 600px) {
+    .go-deeper {
+        flex-direction: column;
+    }
 }

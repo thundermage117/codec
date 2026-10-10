@@ -10,63 +10,16 @@
     border-radius: 12px;
     background: var(--bg-secondary);
     overflow: hidden;
-    opacity: 0;
-    transform: translateY(10px);
-    animation: viewerSectionStaggerIn 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-}
-
-.controls .viewer-section:nth-child(2) {
-    animation-delay: 0.08s;
-}
-
-.controls .viewer-section:nth-child(3) {
-    animation-delay: 0.14s;
-}
-
-.controls .viewer-section:nth-child(4) {
-    animation-delay: 0.2s;
-}
-
-.viewer-section:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 10px 24px -18px var(--shadow-color);
-    border-color: color-mix(in srgb, var(--primary) 25%, var(--border-subtle, var(--border)));
 }
 
 .viewer-section-title {
-    list-style: none;
-    cursor: pointer;
+    margin: 0;
     padding: 12px 14px;
     font-size: var(--text-sm);
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--text-muted);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    user-select: none;
-}
-
-.viewer-section-title::-webkit-details-marker {
-    display: none;
-}
-
-.viewer-section-title::after {
-    content: '';
-    margin-left: auto;
-    width: 6px;
-    height: 6px;
-    border-right: 1.5px solid var(--text-muted);
-    border-bottom: 1.5px solid var(--text-muted);
-    transform: rotate(-45deg);
-    transition: transform 0.2s ease;
-    opacity: 0.7;
-}
-
-.viewer-section[open]>.viewer-section-title::after {
-    transform: rotate(45deg);
 }
 
 .viewer-section-body {
@@ -75,83 +28,12 @@
     display: flex;
     flex-direction: column;
     gap: 14px;
-    animation: viewerSectionIn 0.2s ease;
-}
-
-@keyframes viewerSectionIn {
-    from {
-        opacity: 0;
-        transform: translateY(-3px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
 }
 
 .control-group {
     display: flex;
     flex-direction: column;
     gap: 8px;
-}
-
-.viewer-section .control-group {
-    opacity: 0;
-    transform: translateY(4px);
-    animation: controlGroupIn 0.26s ease forwards;
-}
-
-.viewer-section[open] .control-group:nth-child(1) {
-    animation-delay: 0.04s;
-}
-
-.viewer-section[open] .control-group:nth-child(2) {
-    animation-delay: 0.09s;
-}
-
-.viewer-section[open] .control-group:nth-child(3) {
-    animation-delay: 0.14s;
-}
-
-.viewer-section[open] .control-group:nth-child(4) {
-    animation-delay: 0.19s;
-}
-
-@keyframes viewerSectionStaggerIn {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-@keyframes controlGroupIn {
-    from {
-        opacity: 0;
-        transform: translateY(4px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-@media (prefers-reduced-motion: reduce) {
-
-    .viewer-section,
-    .viewer-section .control-group,
-    .viewer-section-body {
-        animation: none;
-        transition: none;
-        opacity: 1;
-        transform: none;
-    }
 }
 
 label {
@@ -407,7 +289,6 @@ input[type="checkbox"] {
     color: var(--color-poor);
 }
 
-
 .analysis-placeholder {
     font-size: var(--text-base);
     color: var(--text-muted);
@@ -415,12 +296,6 @@ input[type="checkbox"] {
     border-radius: 8px;
     padding: 10px;
     text-align: center;
-}
-
-.advanced-hint {
-    margin: 0;
-    font-size: var(--text-base);
-    color: var(--text-muted);
 }
 
 .control-hint {
@@ -500,61 +375,6 @@ input[type="checkbox"] {
     letter-spacing: 0.02em;
 }
 
-/* File Size Estimation Bar */
-.file-size-bar-container {
-    margin-top: 6px;
-    padding: 14px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-xl);
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    transition: all 0.2s ease;
-}
-
-.file-size-bar-container:hover {
-    border-color: var(--primary-subtle);
-    background: color-mix(in srgb, var(--primary) 3%, var(--bg-secondary));
-}
-
-.file-size-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.file-size-title {
-    font-size: var(--text-xs);
-    font-weight: 800;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-}
-
-.reduction-badge {
-    background: var(--color-good-bg);
-    color: var(--color-good);
-    border: 1px solid var(--color-good-border);
-    font-size: var(--text-sm);
-    font-weight: 800;
-    padding: 3px 10px;
-    border-radius: var(--radius-full);
-}
-
-.file-size-main {
-    display: flex;
-    flex-direction: column;
-    padding: 2px 0;
-}
-
-.size-comparison-flow {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-family: var(--font-mono);
-}
-
 .size-val {
     font-weight: 700;
     white-space: nowrap;
@@ -570,37 +390,8 @@ input[type="checkbox"] {
     opacity: 0.7;
 }
 
-.size-arrow {
-    color: var(--text-muted);
-    opacity: 0.5;
-    font-size: 1.1rem;
-    font-weight: 400;
-}
-
 .size-val.highlight {
     color: var(--primary);
-}
-
-.file-size-track {
-    width: 100%;
-    height: 8px;
-    background: var(--bg-tertiary);
-    border-radius: var(--radius-full);
-    overflow: hidden;
-    margin: 2px 0;
-    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
-}
-
-.file-size-fill {
-    height: 100%;
-    background: linear-gradient(90deg, var(--color-good), var(--primary));
-    border-radius: var(--radius-full);
-    transition: width 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.file-size-footer {
-    display: flex;
-    justify-content: center;
 }
 
 .compression-ratio-label {
@@ -608,15 +399,6 @@ input[type="checkbox"] {
     font-weight: 700;
     color: var(--text-muted);
     opacity: 0.9;
-}
-
-.tint-toggle-group {
-    margin-top: 6px;
-}
-
-.tint-toggle-group label {
-    padding: 5px 4px;
-    font-size: var(--text-base-sm);
 }
 
 /* Beta Badge */
@@ -871,12 +653,4 @@ input[type="checkbox"] {
     color: var(--text-muted);
     text-align: center;
     opacity: 0.7;
-}
-
-/* Specific button for RD/Histogram generation to ensure consistency */
-.rd-generate-btn {
-    width: 120px !important;
-    padding-left: 0 !important;
-    padding-right: 0 !important;
-    flex-shrink: 0;
 }

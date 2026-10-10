@@ -17,7 +17,6 @@ body {
 
 code,
 .stat-value,
-.file-size-values,
 .stats {
     font-family: var(--font-mono);
 }
