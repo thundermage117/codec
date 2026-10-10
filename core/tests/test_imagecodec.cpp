@@ -422,3 +422,21 @@ TEST(ImageCodecTest, ChromaUpsamplingIsSmooth) {
         if (std::abs(output.at(x, 4, 2) - output.at(x + 1, 4, 2)) < 0.5) ++flatPairs;
     EXPECT_EQ(flatPairs, 0);
 }
+
+TEST(ImageCodecTest, InspectBlockPadsPartialEdgeBlocksByReplication) {
+    // 12×10 channel: block (1, 1) covers x 8..11 and y 8..9 only.
+    Image channel(12, 10, 1);
+    for (int y = 0; y < 10; ++y)
+        for (int x = 0; x < 12; ++x)
+            channel.at(x, y, 0) = x * 10 + y;
+
+    ImageCodec codec(50.0);
+    auto debug = codec.inspectBlock(channel, 1, 1, false);
+
+    for (int i = 0; i < 8; ++i)
+        for (int j = 0; j < 8; ++j) {
+            const int x = std::min(8 + j, 11);
+            const int y = std::min(8 + i, 9);
+            EXPECT_DOUBLE_EQ(debug.original[i][j], channel.at(x, y, 0)) << i << "," << j;
+        }
+}

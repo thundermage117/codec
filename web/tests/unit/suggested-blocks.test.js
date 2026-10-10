@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { appState } from '../../src/lib/state.svelte.js';
 import { computeSuggestedBlocks, renderBlockThumbnail } from '../../src/lib/suggested-blocks.js';
 
@@ -30,29 +30,13 @@ function makeCheckerboard(width, height) {
     return { data, width, height };
 }
 
-// ─── DOM fixture ────────────────────────────────────────────────────────
-// computeSuggestedBlocks reads from document.getElementById('processedCanvas')
-// via a try/catch, so we insert and remove a canvas element around each test.
+// ─── State reset ────────────────────────────────────────────────────────
 
-let processedCanvas;
 beforeEach(() => {
-    processedCanvas = document.createElement('canvas');
-    processedCanvas.id = 'processedCanvas';
-    processedCanvas.width = 64;
-    processedCanvas.height = 64;
-    document.body.appendChild(processedCanvas);
-
-    // Reset state
     appState.originalImageData = null;
     appState.imgWidth = 0;
     appState.imgHeight = 0;
     appState.suggestedBlocks = [];
-});
-
-afterEach(() => {
-    if (processedCanvas && processedCanvas.parentNode) {
-        document.body.removeChild(processedCanvas);
-    }
 });
 
 // ─── computeSuggestedBlocks ─────────────────────────────────────────────
@@ -276,25 +260,6 @@ describe('computeSuggestedBlocks - edge cases', () => {
         appState.imgHeight = 400;
         computeSuggestedBlocks();
         expect(appState.suggestedBlocks.length).toBeLessThanOrEqual(6);
-    });
-
-    it('accepts explicit processedCanvas param without throwing', () => {
-        appState.originalImageData = makeImageData(64, 64);
-        appState.imgWidth = 64;
-        appState.imgHeight = 64;
-        const canvas = document.createElement('canvas');
-        canvas.width = 64;
-        canvas.height = 64;
-        expect(() => computeSuggestedBlocks(canvas)).not.toThrow();
-        expect(appState.suggestedBlocks.length).toBeGreaterThan(0);
-    });
-
-    it('null processedCanvas param produces results without error scoring', () => {
-        appState.originalImageData = makeImageData(64, 64);
-        appState.imgWidth = 64;
-        appState.imgHeight = 64;
-        computeSuggestedBlocks(null);
-        expect(appState.suggestedBlocks.length).toBeGreaterThan(0);
     });
 
     it('16×16 image (4 blocks) returns at most 4 unique suggestions', () => {

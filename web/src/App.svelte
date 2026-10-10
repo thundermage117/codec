@@ -41,8 +41,8 @@
             e.preventDefault();
             if (!appState.inspectedBlock || !appState.originalImageData) return;
 
-            const maxBx = Math.floor(appState.imgWidth / 8) - 1;
-            const maxBy = Math.floor(appState.imgHeight / 8) - 1;
+            const maxBx = Math.ceil(appState.imgWidth / 8) - 1; // includes partial edge blocks
+            const maxBy = Math.ceil(appState.imgHeight / 8) - 1;
             let { x: bx, y: by } = appState.inspectedBlock;
 
             if (e.key === 'ArrowLeft') bx = Math.max(0, bx - 1);

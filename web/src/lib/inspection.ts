@@ -1,5 +1,5 @@
 import { appState, ViewMode } from './state.svelte.js';
-import { inspectBlockData } from './wasm-bridge.js';
+import { inspectBlockData, getProcessedRgba } from './wasm-bridge.js';
 import { hideBasisPopover, setCachedGridData } from './basis-popover.js';
 import { renderGrid, renderLossMeter, renderZigzagArray, renderEntropySummary, stopReconstructionAnimation } from './grid-renderer.js';
 import { estimateBlockBits, getEntropySymbols } from './dct-utils.js';
@@ -56,19 +56,13 @@ export function inspectBlock(blockX: number, blockY: number): void {
     let reconstructedRGB: Uint8ClampedArray | null = null;
 
     if (appState.currentViewMode === ViewMode.RGB) {
-        originalRGB = getBlockRGB(appState.originalImageData!, blockX, blockY);
-        const processedCanvas = document.getElementById('processedCanvas') as HTMLCanvasElement | null;
-        if (processedCanvas) {
-            try {
-                const ctx = processedCanvas.getContext('2d', { willReadFrequently: true });
-                if (ctx) {
-                    const reconImgData = ctx.getImageData(blockX * 8, blockY * 8, 8, 8);
-                    reconstructedRGB = getBlockRGB(reconImgData, 0, 0);
-                }
-            } catch {
-                console.warn('Could not read processedCanvas for RGB block view');
-            }
-        }
+        const w = appState.imgWidth;
+        const h = appState.imgHeight;
+        originalRGB = getBlockRGB(appState.originalImageData!.data, w, h, blockX, blockY);
+        // The viewer's canvases are unmounted while inspecting, so read the
+        // reconstruction straight from the codec session.
+        const recon = getProcessedRgba();
+        if (recon) reconstructedRGB = getBlockRGB(recon, w, h, blockX, blockY);
     }
 
     let mse = 0;
@@ -130,15 +124,15 @@ export function inspectBlock(blockX: number, blockY: number): void {
     renderEntropySummary(entropySymbols);
 }
 
-function getBlockRGB(imageData: ImageData, bx: number, by: number): Uint8ClampedArray {
+// Extracts an 8×8 RGB block from an RGBA buffer. Partial blocks at the
+// right/bottom edges are padded by edge replication, as the codec does.
+function getBlockRGB(pixels: Uint8ClampedArray, w: number, h: number, bx: number, by: number): Uint8ClampedArray {
     const data = new Uint8ClampedArray(64 * 3);
-    const pixels = imageData.data;
-    const w = imageData.width;
 
     for (let dy = 0; dy < 8; dy++) {
         for (let dx = 0; dx < 8; dx++) {
-            const x = bx * 8 + dx;
-            const y = by * 8 + dy;
+            const x = Math.min(bx * 8 + dx, w - 1);
+            const y = Math.min(by * 8 + dy, h - 1);
             const idx = (y * w + x) * 4;
             const i = dy * 8 + dx;
             data[i * 3] = pixels[idx];

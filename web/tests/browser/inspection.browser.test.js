@@ -20,7 +20,7 @@ const REQUIRED_DIVS = [
     'basisDivisor',
 ];
 
-const REQUIRED_CANVASES = ['processedCanvas', 'basisCanvas', 'contributionCanvas'];
+const REQUIRED_CANVASES = ['basisCanvas', 'contributionCanvas'];
 const REQUIRED_SLIDERS = ['inspQualitySlider', 'qualitySlider'];
 
 function buildDOM() {
@@ -102,7 +102,7 @@ beforeEach(() => {
     buildDOM();
     fillHeap();
 
-    // Set state for non-RGB mode to avoid processedCanvas.getImageData path
+    // Non-RGB mode: the luma pipeline is what these tests exercise
     appState.currentViewMode = ViewMode.Y;
     appState.currentCsMode = 444;
     appState.appMode = 'inspector';

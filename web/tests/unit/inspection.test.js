@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { inspectBlock } from '../../src/lib/inspection.js';
 import { appState, ViewMode } from '../../src/lib/state.svelte.js';
-import { inspectBlockData } from '../../src/lib/wasm-bridge.js';
+import { inspectBlockData, getProcessedRgba } from '../../src/lib/wasm-bridge.js';
 
 // Mock dependencies
 vi.mock('../../src/lib/grid-renderer.js', () => ({
@@ -19,6 +19,7 @@ vi.mock('../../src/lib/basis-popover.js', () => ({
 
 vi.mock('../../src/lib/wasm-bridge.js', () => ({
     inspectBlockData: vi.fn(() => 256),
+    getProcessedRgba: vi.fn(() => null),
 }));
 
 // Module.HEAPU8 is already mocked in tests/setup/unit.setup.js
@@ -32,7 +33,6 @@ describe('inspection.js - inspectBlock', () => {
             <span id="blockCoords"></span>
             <span id="qTableType"></span>
             <span id="qTableType2"></span>
-            <canvas id="processedCanvas"></canvas>
             <div class="stat-item"><span id="statMSE"></span></div>
             <div class="stat-item"><span id="statPeakError"></span></div>
             <div class="stat-item"><span id="statZeros"></span></div>
@@ -99,23 +99,37 @@ describe('inspection.js - inspectBlock', () => {
         expect(renderGrid).not.toHaveBeenCalled();
     });
 
-    it('handles RGB view mode and reads from processedCanvas', () => {
+    it('RGB mode reads the reconstructed block from WASM, not a canvas', () => {
         appState.currentViewMode = ViewMode.RGB;
-        // Mock getContext to return dummy getImageData
-        const canvas = document.getElementById('processedCanvas');
-        canvas.getContext = vi.fn(() => ({
-            getImageData: vi.fn(() => ({
-                data: new Uint8ClampedArray(64 * 4),
-                width: 8,
-                height: 8
-            }))
-        }));
+        appState.imgWidth = 16;
+        appState.imgHeight = 16;
+        appState.originalImageData = { data: new Uint8ClampedArray(16 * 16 * 4).fill(10), width: 16, height: 16 };
+        const recon = new Uint8ClampedArray(16 * 16 * 4);
+        // Mark pixel (8, 0) — the first pixel of block (1, 0) — in the reconstruction.
+        recon[(0 * 16 + 8) * 4] = 200;
+        vi.mocked(getProcessedRgba).mockReturnValueOnce(recon);
 
-        inspectBlock(0, 0);
+        inspectBlock(1, 0);
 
-        // renderGrid should be called with intensity and isRGB=true
-        expect(renderGrid).toHaveBeenCalledWith('gridOriginal', expect.any(Object), 'intensity', 'original', true);
-        expect(renderGrid).toHaveBeenCalledWith('gridReconstructed', expect.any(Object), 'intensity', 'reconstructed', true);
+        expect(getProcessedRgba).toHaveBeenCalled();
+        const reconCall = vi.mocked(renderGrid).mock.calls.find(c => c[0] === 'gridReconstructed');
+        expect(reconCall[4]).toBe(true);
+        expect(reconCall[1][0]).toBe(200); // R of the block's first pixel
+    });
+
+    it('pads partial edge blocks by replication in RGB mode', () => {
+        appState.currentViewMode = ViewMode.RGB;
+        appState.imgWidth = 12;
+        appState.imgHeight = 8;
+        const data = new Uint8ClampedArray(12 * 8 * 4);
+        for (let x = 0; x < 12; x++) data[x * 4] = x * 10; // R ramp along row 0
+        appState.originalImageData = { data, width: 12, height: 8 };
+
+        inspectBlock(1, 0); // covers x = 8..11, then replicates x = 11
+
+        const origCall = vi.mocked(renderGrid).mock.calls.find(c => c[0] === 'gridOriginal');
+        const rowR = Array.from({ length: 8 }, (_, i) => origCall[1][i * 3]);
+        expect(rowR).toEqual([80, 90, 100, 110, 110, 110, 110, 110]);
     });
 
     it('sets correct classes for stats based on MSE and BPP', () => {
