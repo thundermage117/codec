@@ -110,7 +110,9 @@ jobs:
       - name: Setup Emscripten
         uses: mymindstorm/setup-emsdk@ab889da2abbcbb280f91ec4c215d3bb4f3a8f775
         with:
-          version: 'latest'
+          # Pinned: the version that built the checked-in web/public/codec.wasm.
+          # 'latest' moved to 6.x and broke the build; bump deliberately.
+          version: '5.0.1'
 
       - name: Build WASM
         # We use 'emmake' to ensure the Makefile sees the Emscripten environment

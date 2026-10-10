@@ -33,7 +33,7 @@ npm run test:all     # both
 From the repo root:
 
 ```bash
-make web       # rebuild web/public/codec.{js,wasm} (needs emcc on PATH)
+make web       # rebuild web/public/codec.{js,wasm} (needs Emscripten 5.0.1, as pinned in CI)
 make test      # C++ GoogleTest suite (CMake; configures apps/native too, so needs OpenCV)
 make sanitize  # C++ tests under ASan + UBSan (falls back to UBSan where ASan can't start, e.g. macOS 26)
 ```
