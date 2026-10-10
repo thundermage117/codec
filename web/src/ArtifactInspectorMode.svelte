@@ -2,9 +2,11 @@
     import { onMount, onDestroy } from 'svelte';
     import { fade } from 'svelte/transition';
     import { appState, ViewMode, openBlockInspector } from './lib/state.svelte.js';
-    import { TRANSFORMS, isWavelet } from './lib/transforms.js';
+    import { isWavelet } from './lib/transforms.js';
     import { processImage, previewImage, getViewPtr, getStats, free, setArtifactGain } from './lib/wasm-bridge.js';
     import QualityControl from './lib/components/QualityControl.svelte';
+    import CodecSettings from './lib/components/CodecSettings.svelte';
+    import ResultSummary from './lib/components/ResultSummary.svelte';
     import ImageViewer from './lib/components/ImageViewer.svelte';
 
     let artifactCanvas: HTMLCanvasElement | undefined = $state();
@@ -34,12 +36,6 @@
         { val: ViewMode.BlockingMap,    label: 'Blocking Map',    desc: 'Detects discontinuities at 8×8 block edges, showing where the macroblock structure is visible.' },
     ];
 
-    const CS_MODES = [
-        { id: 'art_cs_444', val: 444, label: '4:4:4' },
-        { id: 'art_cs_422', val: 422, label: '4:2:2' },
-        { id: 'art_cs_420', val: 420, label: '4:2:0' },
-    ];
-
     // Wavelets have no 8×8 grid, so the blocking map should stay dark — say so.
     const artifactModes = $derived(ARTIFACT_MODES.map(m =>
         m.val === ViewMode.BlockingMap && isWavelet(appState.transformType)
@@ -49,10 +45,6 @@
     const currentMode = $derived(
         ARTIFACT_MODES.find(m => m.val === appState.currentViewMode) ?? ARTIFACT_MODES[0]
     );
-
-    type MetricState = 'good' | 'moderate' | 'poor';
-    function getPsnrState(v: number): MetricState { return v >= 40 ? 'good' : v >= 30 ? 'moderate' : 'poor'; }
-    function getSsimState(v: number): MetricState { return v >= 0.95 ? 'good' : v >= 0.9 ? 'moderate' : 'poor'; }
 
     // --- Viridis false-colour LUT ---
     // Stops: [intensity 0-255, R, G, B]
@@ -385,8 +377,15 @@
                     <summary class="sidebar-section-title"><span>Controls</span></summary>
                     <div class="sidebar-section-body">
                         <QualityControl idPrefix="artifactQuality" onPreview={previewQuality} />
+                        <CodecSettings idPrefix="art" />
+                    </div>
+                </details>
+
+                <details class="sidebar-section visual-tools-section" open>
+                    <summary class="sidebar-section-title"><span>Display</span></summary>
+                    <div class="sidebar-section-body">
                         {#if appState.currentViewMode === ViewMode.Artifacts}
-                        <div class="control-group" transition:fade={{duration: 150}}>
+                        <div class="control-group gain-group" transition:fade={{duration: 150}}>
                             <label class="gain-label">
                                 Error Gain
                                 <span class="gain-value-display">{gainValue.toFixed(1)}×</span>
@@ -399,41 +398,6 @@
                             <p class="gain-hint">Amplifies pixel error before clamping to 255. Higher = faint errors more visible.</p>
                         </div>
                         {/if}
-
-                            <div class="control-group">
-                                <div class="group-label">Chroma Subsampling</div>
-                                <div class="toggle-group">
-                                    {#each CS_MODES as cs}
-                                    <input type="radio" id={cs.id} name="art_chroma"
-                                        checked={appState.currentCsMode === cs.val}
-                                        onchange={() => appState.currentCsMode = cs.val}>
-                                    <label for={cs.id}>{cs.label}</label>
-                                    {/each}
-                                </div>
-                            </div>
-
-                            <div class="control-group">
-                                <div class="group-label">Transform</div>
-                                <div class="toggle-group">
-                                    {#each TRANSFORMS as t}
-                                    <input type="radio" id="art_transform_{t.slug}" name="art_transform_type"
-                                        checked={appState.transformType === t.value}
-                                        onchange={() => appState.transformType = t.value}>
-                                    <label for="art_transform_{t.slug}" title={t.fullName}>{t.label}</label>
-                                    {/each}
-                                </div>
-                            </div>
-                    </div>
-                </details>
-
-                <details class="sidebar-section visual-tools-section" open>
-                    <summary class="sidebar-section-title">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-                        </svg>
-                        <span>Visual Tools</span>
-                    </summary>
-                    <div class="sidebar-section-body">
                         <div class="tools-grid">
                             <button class="tool-btn" class:active={isBlinking} aria-pressed={isBlinking} onclick={toggleBlink} title="Blink Test">
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
@@ -489,34 +453,9 @@
                 </details>
 
                 <details class="sidebar-section" open>
-                    <summary class="sidebar-section-title"><span>Metrics</span></summary>
+                    <summary class="sidebar-section-title"><span>Result</span></summary>
                     <div class="sidebar-section-body">
-                        <div class="compact-metrics-grid">
-                            <div class="metric-header-row">
-                                <div class="metric-col-label">Channel</div>
-                                <div class="metric-col-label">PSNR (dB)</div>
-                                <div class="metric-col-label">SSIM</div>
-                            </div>
-                            {#each [
-                                { channel: 'Y',  psnr: appState.psnr.y,  ssim: appState.ssim.y  },
-                                { channel: 'Cr', psnr: appState.psnr.cr, ssim: appState.ssim.cr },
-                                { channel: 'Cb', psnr: appState.psnr.cb, ssim: appState.ssim.cb },
-                            ] as row}
-                            {@const ps = getPsnrState(row.psnr)}
-                            {@const ss = getSsimState(row.ssim)}
-                            <div class="metric-row">
-                                <div class="metric-channel-name">{row.channel}</div>
-                                <div class="metric-cell psnr-cell"
-                                    class:stat-good={ps==='good'} class:stat-moderate={ps==='moderate'} class:stat-poor={ps==='poor'}>
-                                    {row.psnr.toFixed(2)}
-                                </div>
-                                <div class="metric-cell"
-                                    class:stat-good={ss==='good'} class:stat-moderate={ss==='moderate'} class:stat-poor={ss==='poor'}>
-                                    {row.ssim.toFixed(4)}
-                                </div>
-                            </div>
-                            {/each}
-                        </div>
+                        <ResultSummary showSize={false} />
                     </div>
                 </details>
 
@@ -774,6 +713,9 @@
     }
 
     /* ===== Error Gain slider ===== */
+    .gain-group {
+        margin-bottom: 14px;
+    }
 
     .gain-label {
         display: flex;
