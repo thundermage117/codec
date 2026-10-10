@@ -74,7 +74,7 @@ public:
     *   zeroFraction   — fraction that quantize to zero at this codec's quality
     */
     struct CoefficientStats {
-        static constexpr int NUM_BINS = 12;
+        static constexpr int NUM_BINS = 12; // mirrored by COEFF_BINS in web/src/lib/wasm-bridge.ts
         double histogram[NUM_BINS] = {};
         double zeroFraction = 0.0;
     };
@@ -107,6 +107,9 @@ private:
     Image upsampleChannel(const Image& channel, int targetWidth, int targetHeight, ChromaSubsampling cs) const;
 
 public:
+    // Returned to JS by inspect_block_data as one flat buffer; the field order
+    // is mirrored by BLOCK_GRID in web/src/lib/inspection.ts (checked by
+    // web/tests/unit/wasm-contracts.test.js).
     struct BlockDebugData {
         double original[8][8];
         double coefficients[8][8]; // Transform coefficients (DCT or DWT)

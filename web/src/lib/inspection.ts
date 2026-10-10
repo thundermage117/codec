@@ -7,9 +7,18 @@ import { coeffEdit } from './coeff-edit.svelte.js';
 import { untrack } from 'svelte';
 import { INSPECTOR_IDS } from './inspector-dom.js';
 
-// Index of the quantized grid within BlockDebugData (original, coefficients,
-// quantTable, quantized, reconstructed — 64 doubles each).
-const QUANTIZED_GRID = 3;
+/**
+ * Layout of the buffer inspect_block_data returns: ImageCodec::BlockDebugData
+ * (core/inc/ImageCodec.h), five 8×8 grids of doubles in this order. Must match
+ * the struct's field order; tests/unit/wasm-contracts.test.js checks it.
+ */
+export const BLOCK_GRID = {
+    original: 0,
+    coefficients: 1,
+    quantTable: 2,
+    quantized: 3,
+    reconstructed: 4
+} as const;
 
 /**
  * The block coded just before (blockX, blockY) in a non-interleaved raster
@@ -68,7 +77,7 @@ export function inspectBlock(blockX: number, blockY: number): void {
     let prevDc = 0;
     if (prev) {
         const prevPtr = inspectBlockData(prev.x, prev.y, channelIndex, appState.quality);
-        if (prevPtr) prevDc = new Float64Array(Module.HEAPU8.buffer, prevPtr + QUANTIZED_GRID * 64 * 8, 1)[0];
+        if (prevPtr) prevDc = new Float64Array(Module.HEAPU8.buffer, prevPtr + BLOCK_GRID.quantized * 64 * 8, 1)[0];
     }
 
     const ptr = inspectBlockData(blockX, blockY, channelIndex, appState.quality);
@@ -94,11 +103,11 @@ export function inspectBlock(blockX: number, blockY: number): void {
     }
 
     current = {
-        original: readGrid(0),
-        coefficients: readGrid(1),
-        quantTable: readGrid(2),
-        quantized: readGrid(QUANTIZED_GRID),
-        reconstructed: readGrid(4),
+        original: readGrid(BLOCK_GRID.original),
+        coefficients: readGrid(BLOCK_GRID.coefficients),
+        quantTable: readGrid(BLOCK_GRID.quantTable),
+        quantized: readGrid(BLOCK_GRID.quantized),
+        reconstructed: readGrid(BLOCK_GRID.reconstructed),
         prevDc,
         originalRGB,
         reconstructedRGB,

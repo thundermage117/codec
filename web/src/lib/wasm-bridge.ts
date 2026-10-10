@@ -98,7 +98,7 @@ export function inspectBlockData(blockX: number, blockY: number, channelIndex: n
     return Module._inspect_block_data(blockX, blockY, channelIndex, quality, appState.currentCsMode, t);
 }
 
-// Must match ImageCodec::CoefficientStats::NUM_BINS.
+// Must match ImageCodec::CoefficientStats::NUM_BINS (checked by tests/unit/wasm-contracts.test.js).
 export const COEFF_BINS = 12;
 
 export interface CoeffStats {
