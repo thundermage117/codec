@@ -1,5 +1,7 @@
 import { Transform, type TransformValue } from './transforms.js';
 
+// View modes understood by the WASM get_view_ptr. Mirrors the ViewMode enum in
+// web/cpp/codec_web.cpp; tests/unit/wasm-contracts.test.js checks they agree.
 export const ViewMode = {
     RGB: 0,
     Artifacts: 1,

@@ -36,7 +36,8 @@ static MotionEstimator g_me;
 static std::vector<MotionVector> g_mvs;
 static std::vector<std::pair<int,int>> g_search_steps;
 
-// Enum to match view modes in JavaScript.
+// View modes for get_view_ptr. Mirrors ViewMode in web/src/lib/state.svelte.ts;
+// web/tests/unit/wasm-contracts.test.js checks the two agree.
 enum ViewMode {
     RGB = 0,
     Artifacts = 1,
@@ -57,6 +58,8 @@ static ImageCodec::ChromaSubsampling map_cs_mode(int mode) {
     }
 }
 
+// `transform_mode` arguments: mirrors Transform in web/src/lib/transforms.ts
+// (checked by web/tests/unit/wasm-contracts.test.js).
 static ImageCodec::TransformType map_transform_mode(int mode) {
     switch (mode) {
         case 1:  return ImageCodec::TransformType::DWT_HAAR;

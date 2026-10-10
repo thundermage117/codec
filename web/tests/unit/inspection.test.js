@@ -32,7 +32,6 @@ describe('inspection.js - inspectBlock', () => {
         document.body.innerHTML = `
             <span id="blockCoords"></span>
             <span id="qTableType"></span>
-            <span id="qTableType2"></span>
             <div class="stat-item"><span id="statMSE"></span></div>
             <div class="stat-item"><span id="statPeakError"></span></div>
             <div class="stat-item"><span id="statZeros"></span></div>
@@ -66,7 +65,6 @@ describe('inspection.js - inspectBlock', () => {
         appState.currentViewMode = ViewMode.Y;
         inspectBlock(0, 0);
         expect(document.getElementById('qTableType').innerText).toBe('Luma');
-        expect(document.getElementById('qTableType2').innerText).toBe('Luma');
     });
 
     it('sets Chroma label for Cb view mode', () => {
@@ -85,7 +83,7 @@ describe('inspection.js - inspectBlock', () => {
         inspectBlock(0, 0);
         expect(hideBasisPopover).toHaveBeenCalled();
         expect(setCachedGridData).toHaveBeenCalled();
-        expect(renderGrid).toHaveBeenCalledTimes(9); // 9 grids updated
+        expect(renderGrid).toHaveBeenCalledTimes(8); // 8 grids updated
         expect(renderLossMeter).toHaveBeenCalled();
         expect(renderZigzagArray).toHaveBeenCalled();
         expect(renderEntropySummary).toHaveBeenCalled();

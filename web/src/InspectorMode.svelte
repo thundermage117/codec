@@ -45,6 +45,15 @@
         }
     });
 
+    // Opened without a block (from the viewer): start on the top suggestion
+    // rather than an empty page.
+    $effect(() => {
+        const first = appState.suggestedBlocks[0];
+        if (first && !untrack(() => appState.inspectedBlock)) {
+            appState.inspectedBlock = { x: first.x, y: first.y };
+        }
+    });
+
     // Reactive: re-process when quality/CS/transform changes in inspector
     $effect(() => {
         const q = appState.quality;
@@ -301,23 +310,20 @@
                 Block Inspector
             </h2>
             <div class="inspector-topbar-badges">
-                <span class="inspector-badge badge-coords">
+                <span class="inspector-badge badge-coords" title="Top-left pixel of the block, then its block column and row">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                         <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
                         <circle cx="12" cy="10" r="3"></circle>
                     </svg>
                     <span id="blockCoords">{appState.inspectedBlock ? `${appState.inspectedBlock.x * 8}, ${appState.inspectedBlock.y * 8} (Block ${appState.inspectedBlock.x},${appState.inspectedBlock.y})` : '—'}</span>
                 </span>
-                <span class="inspector-badge badge-qtable" id="qTableType">
-                    {appState.currentViewMode === ViewMode.Cr || appState.currentViewMode === ViewMode.Cb ? 'Chroma' : 'Luma'}
-                </span>
             </div>
             <div class="inspector-topbar-legend">
-                <span class="legend-item"><span class="legend-dot dot-positive"></span>Positive</span>
-                <span class="legend-item"><span class="legend-dot dot-negative"></span>Negative</span>
-                <span class="legend-item"><span class="legend-dot dot-zero"></span>Near Zero</span>
-                <span class="legend-item"><span class="legend-dot dot-intensity"></span>Pixel Intensity</span>
-                <span class="legend-item"><span class="run-dot" style="margin-right: 4px; opacity: 1;"></span>Zero Run</span>
+                <span class="legend-item" title="Coefficient or error above zero"><span class="legend-dot dot-positive"></span>Positive</span>
+                <span class="legend-item" title="Coefficient or error below zero"><span class="legend-dot dot-negative"></span>Negative</span>
+                <span class="legend-item" title="Close to zero: what quantization turns into nothing"><span class="legend-dot dot-zero"></span>Near Zero</span>
+                <span class="legend-item" title="Grayscale cells show pixel brightness, 0 to 255"><span class="legend-dot dot-intensity"></span>Pixel Intensity</span>
+                <span class="legend-item" title="A run of zeros in zig-zag order, stored as one short code"><span class="run-dot" style="margin-right: 4px; opacity: 1;"></span>Zero Run</span>
             </div>
         </div>
 
@@ -329,7 +335,7 @@
 
                 <!-- Thumbnail Navigator -->
                 <details class="sidebar-section" open>
-                    <summary class="sidebar-section-title"><span>Image Navigator</span></summary>
+                    <summary class="sidebar-section-title"><span title="Click anywhere on the thumbnail to inspect that block">Image Navigator</span></summary>
                     <div class="sidebar-section-body">
                         <div class="thumbnail-container" id="thumbnailContainer">
                             <canvas id="thumbnailCanvas" bind:this={thumbnailCanvas}
@@ -342,7 +348,7 @@
 
                 <!-- Suggested Blocks -->
                 <details class="sidebar-section" open>
-                    <summary class="sidebar-section-title"><span>Suggested Blocks</span></summary>
+                    <summary class="sidebar-section-title"><span title="Blocks picked because they show compression clearly: edges ring, textures lose detail, smooth areas show blocking">Suggested Blocks</span></summary>
                     <div class="sidebar-section-body">
                         <div class="suggested-blocks-list" id="suggestedBlocksList">
                             {#if appState.suggestedBlocks.length === 0}
@@ -353,7 +359,7 @@
                                 {#each ['edge', 'texture', 'smooth'] as cat}
                                     {#if appState.suggestedBlocks.some(b => b.category === cat)}
                                         <div class="suggested-category-header">
-                                            {cat === 'edge' ? '🔷 Edges' : cat === 'texture' ? '🔶 Textures' : '🟢 Smooth'}
+                                            {cat === 'edge' ? 'Edges' : cat === 'texture' ? 'Textures' : 'Smooth'}
                                         </div>
                                         {#each appState.suggestedBlocks.filter(b => b.category === cat) as block}
                                             {@const isActive = appState.inspectedBlock?.x === block.x && appState.inspectedBlock?.y === block.y}
@@ -385,7 +391,7 @@
                         <QualityControl idPrefix="inspQuality" onPreview={(q) => { appState.quality = q; }} />
 
                         <div class="control-group">
-                            <div class="group-label">View Mode</div>
+                            <div class="group-label"><span class="has-hint" title="Which channel to follow through the pipeline: Y is brightness; Cr and Cb are colour differences">Channel</span></div>
                             <div class="toggle-group">
                                 {#each inspViewModes as mode}
                                 <input type="radio" id={mode.id} name="insp_view_mode"
@@ -397,7 +403,7 @@
                         </div>
 
                         <div class="control-group">
-                            <div class="group-label">Chroma Subsampling</div>
+                            <div class="group-label"><span class="has-hint" title="How much colour resolution is kept before the transform. Disabled for Y, which is never subsampled.">Chroma Subsampling</span></div>
                             <div class="toggle-group">
                                 {#each chromaModes as cs}
                                 <input type="radio" id={cs.id} name="insp_chroma_subsampling"
@@ -409,14 +415,6 @@
                             </div>
                         </div>
 
-                        <div class="control-group">
-                            <div class="group-label">Transform</div>
-                            <p class="control-hint">
-                                The block inspector follows the 8×8 DCT used by JPEG. Wavelet
-                                transforms work on the whole image — switch to Haar or CDF 9/7
-                                in the viewer and open the Subbands view to explore them.
-                            </p>
-                        </div>
                     </div>
                 </details>
 
@@ -447,29 +445,33 @@
                 <!-- Pipeline Content -->
                 <div id="inspectorContent" style={appState.inspectedBlock ? '' : 'display: none'}>
 
-                    <!-- Context Crop -->
-                    <div class="context-crop-container">
-                        <div class="context-crop-label">Block Context</div>
-                        <div class="context-crop-canvas-wrap">
+                    <!-- Which block, and what this page follows -->
+                    <div class="block-header">
+                        <div class="context-crop-canvas-wrap" title="The block (red) and its neighbourhood in the image">
                             <canvas id="contextCropCanvas" bind:this={contextCropCanvas} width="64" height="64"></canvas>
                         </div>
-                        <div class="context-crop-caption" id="contextCropCaption">
-                            {appState.inspectedBlock
-                                ? `Block (${appState.inspectedBlock.x}, ${appState.inspectedBlock.y}) — pixel (${appState.inspectedBlock.x * 8}, ${appState.inspectedBlock.y * 8})`
-                                : 'Select a block to see its surrounding context'}
+                        <div class="block-header-text">
+                            <div class="block-header-title" id="contextCropCaption">
+                                {#if appState.inspectedBlock}
+                                Block ({appState.inspectedBlock.x}, {appState.inspectedBlock.y})
+                                <span>pixel ({appState.inspectedBlock.x * 8}, {appState.inspectedBlock.y * 8})</span>
+                                {/if}
+                            </div>
+                            <p>
+                                Follow these 64 pixels into frequencies, through the rounding that loses
+                                information, and back.
+                                <span class="kbd-only"><kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> move to a neighbouring block.</span>
+                            </p>
                         </div>
                     </div>
 
                     <!-- Inspector Pipeline -->
                     <div class="inspector-pipeline">
 
-                        <div class="pipeline-row-label">
-                            Encoding Pipeline
-                            <span class="nav-hint"><kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> navigate blocks</span>
-                        </div>
+                        <div class="pipeline-row-label">Encode <span class="row-sub">pixels → stored integers</span></div>
                         <div class="pipeline-row">
                             <div class="pipeline-block">
-                                <div class="pipeline-block-header"><h3>Original</h3></div>
+                                <div class="pipeline-block-header"><h3 class="has-hint" title="The block's pixel values (0 to 255) for the selected channel">Original</h3></div>
                                 <div id="gridOriginal" class="block-grid"></div>
                                 <div class="block-label">AxB Pixels</div>
                             </div>
@@ -478,26 +480,26 @@
                                 <div class="arrow-line"></div><div class="arrow-label">{transformName}</div><div class="arrow-icon">→</div>
                             </div>
                             <div class="pipeline-block">
-                                <div class="pipeline-block-header"><h3>{transformGridLabel}</h3></div>
+                                <div class="pipeline-block-header"><h3 class="has-hint" title="How much of each of the 64 cosine patterns the block contains: smooth patterns top-left, finest detail bottom-right. Most of the energy sits top-left.">{transformGridLabel}</h3></div>
                                 <div id="gridDCT" class="block-grid" data-target="gridOriginal"></div>
                                 <div class="block-label">Frequencies</div>
                             </div>
                             <div class="pipeline-arrow">
-                                <div class="arrow-tooltip"><strong>Quantization</strong> Divides frequencies by the quantization table to reduce data size.</div>
+                                <div class="arrow-tooltip"><strong>Quantization</strong> Divides frequencies by the quantization table and rounds. This is the only lossy step.</div>
                                 <div class="arrow-line"></div><div class="arrow-label">÷ Quant</div><div class="arrow-icon">→</div>
                             </div>
                             <div class="pipeline-block">
-                                <div class="pipeline-block-header"><h3>Quantized</h3></div>
+                                <div class="pipeline-block-header"><h3 class="has-hint" title="Each coefficient divided by its quant table entry and rounded. These integers are what gets stored; zeros cost almost nothing. With Edit coefficients on, click one to drop it.">Quantized</h3></div>
                                 <div id="gridQuantized" class="block-grid" data-target="gridOriginal"></div>
-                                <div class="block-label">Integers</div>
+                                <div class="block-label">Stored Data</div>
                             </div>
                         </div>
 
-                        <div class="pipeline-row-label">Decoding Pipeline</div>
+                        <div class="pipeline-row-label">Decode <span class="row-sub">stored integers → pixels</span></div>
                         <div class="coeff-edit-bar" role="group" aria-label="Coefficient experiments">
                             <button class="tool-btn coeff-edit-toggle" class:active={coeffEdit.editing} aria-pressed={coeffEdit.editing}
                                 onclick={() => coeffEdit.editing = !coeffEdit.editing}
-                                title="Click coefficients in the decoder grids to drop or restore them">
+                                title="Click coefficients in Quantized or Dequantized to drop or restore them">
                                 ✎ Edit coefficients
                             </button>
                             <label class="coeff-keep">
@@ -518,16 +520,7 @@
                         </div>
                         <div class="pipeline-row">
                             <div class="pipeline-block">
-                                <div class="pipeline-block-header"><h3>Quantized</h3></div>
-                                <div id="gridQuantized2" class="block-grid" data-target="gridReconstructed"></div>
-                                <div class="block-label">Stored Data</div>
-                            </div>
-                            <div class="pipeline-arrow">
-                                <div class="arrow-tooltip"><strong>Dequantization</strong> Multiplies stored integers by the quantization table.</div>
-                                <div class="arrow-line"></div><div class="arrow-label">× Quant</div><div class="arrow-icon">→</div>
-                            </div>
-                            <div class="pipeline-block">
-                                <div class="pipeline-block-header"><h3>Dequantized</h3></div>
+                                <div class="pipeline-block-header"><h3 class="has-hint" title="The stored integers multiplied back by the quant table: the original coefficients plus rounding error. The rounding can't be undone.">Dequantized</h3></div>
                                 <div id="gridDequantized" class="block-grid" data-target="gridReconstructed"></div>
                                 <div class="block-label">Approx Freqs</div>
                             </div>
@@ -537,7 +530,7 @@
                             </div>
                             <div class="pipeline-block">
                                 <div class="pipeline-block-header">
-                                    <h3>Reconstructed</h3>
+                                    <h3 class="has-hint" title="The decoded block: what the viewer shows">Reconstructed</h3>
                                     <span id="reconstructionProgress" class="reconstruction-progress" style="display:none"></span>
                                     <button class="pipeline-play-btn tooltip-container"
                                         onclick={() => window.dispatchEvent(new CustomEvent('animate-reconstruction'))}>
@@ -549,6 +542,23 @@
                                 </div>
                                 <div id="gridReconstructed" class="block-grid"></div>
                                 <div class="block-label">Final Image</div>
+                            </div>
+                            <div class="pipeline-arrow">
+                                <div class="arrow-tooltip"><strong>Compare</strong> Subtract the reconstruction from the original to see what was lost.</div>
+                                <div class="arrow-line"></div><div class="arrow-label">vs Original</div><div class="arrow-icon">→</div>
+                            </div>
+                            <div class="pipeline-block error-block">
+                                <div class="pipeline-block-header"><h3 class="has-hint" title="Original minus reconstructed, per pixel: the detail compression lost">Error Residual</h3></div>
+                                <div class="error-visualizer">
+                                    <div id="gridError" class="block-grid"></div>
+                                    <div class="error-legend-vertical">
+                                        <div class="legend-scale">
+                                            <span>+30</span>
+                                            <div class="scale-bar"></div>
+                                            <span>-30</span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -568,54 +578,30 @@
                             </div>
                         </div>
 
-                        <div class="pipeline-row-label">Analysis & Statistics</div>
-                        <div class="analysis-row">
-                            <div class="pipeline-block error-block">
-                                <div class="pipeline-block-header"><h3>Error Residual</h3></div>
-                                <div class="error-visualizer">
-                                    <div id="gridError" class="block-grid"></div>
-                                    <div class="error-legend-vertical">
-                                        <div class="legend-scale">
-                                            <span>+30</span>
-                                            <div class="scale-bar"></div>
-                                            <span>-30</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
+                        <div class="pipeline-row-label">What it costs <span class="row-sub">and why</span></div>
+                        <div class="analysis-row analysis-row-two">
                             <div class="analysis-card stats-card">
-                                <div class="analysis-header"><h3>Block Statistics</h3></div>
+                                <div class="analysis-header"><h3>This Block</h3></div>
                                 <div class="stats-grid">
+                                    <div class="stat-box tooltip-container">
+                                        <div class="stat-value" id="statEstBits">—</div>
+                                        <div class="stat-label">Bits · <span id="statBpp">—</span> per pixel</div>
+                                        <div class="tooltip-content-small"><strong>Estimated bits (JPEG-style)</strong><br>A simplified JPEG Huffman simulation for this block: zig-zag runs and magnitudes, with DC coded as the difference from the previous block. Per pixel is that divided by 64. The viewer's file size uses a whole-image entropy estimate instead, so the two don't add up exactly.</div>
+                                    </div>
+                                    <div class="stat-box tooltip-container">
+                                        <div class="stat-value" id="statZeros">—</div>
+                                        <div class="stat-label">Zeros · <span id="statCompression">—</span></div>
+                                        <div class="tooltip-content-small"><strong>Zero coefficients</strong><br><code>count(|quant[i]| &lt; 0.5)</code><br>Quantized coefficients rounded to zero. Zeros are nearly free to store, so more zeros means fewer bits.</div>
+                                    </div>
                                     <div class="stat-box tooltip-container">
                                         <div class="stat-value" id="statMSE">—</div>
                                         <div class="stat-label">MSE</div>
-                                        <div class="tooltip-content-small"><strong>Mean Squared Error</strong><br><code>(1/64) &times; &Sigma;(orig &minus; recon)&sup2;</code><br>Average squared pixel error across all 64 coefficients.</div>
+                                        <div class="tooltip-content-small"><strong>Mean squared error</strong><br><code>(1/64) &times; &Sigma;(orig &minus; recon)&sup2;</code><br>Average squared pixel error across the block.</div>
                                     </div>
                                     <div class="stat-box tooltip-container">
                                         <div class="stat-value" id="statPeakError">—</div>
                                         <div class="stat-label">Peak Error</div>
-                                        <div class="tooltip-content-small"><strong>Peak Absolute Error</strong><br><code>max |orig &minus; recon|</code><br>Worst-case pixel difference in the block.</div>
-                                    </div>
-                                    <div class="stat-box tooltip-container">
-                                        <div class="stat-value" id="statZeros">—</div>
-                                        <div class="stat-label">Zeros (Count)</div>
-                                        <div class="tooltip-content-small"><strong>Zero Coefficients</strong><br><code>count(|quant[i]| &lt; 0.5)</code><br>Number of quantized transform coefficients rounded to zero.</div>
-                                    </div>
-                                    <div class="stat-box tooltip-container">
-                                        <div class="stat-value" id="statCompression">—</div>
-                                        <div class="stat-label">Compression</div>
-                                        <div class="tooltip-content-small"><strong>Zero Coefficient Ratio</strong><br><code>(zeros / 64) &times; 100%</code><br>Percentage of quantized transform coefficients equal to zero.</div>
-                                    </div>
-                                    <div class="stat-box tooltip-container">
-                                        <div class="stat-value" id="statEstBits">—</div>
-                                        <div class="stat-label">JPEG Bits (est.)</div>
-                                        <div class="tooltip-content-small"><strong>Estimated Bits (JPEG-style)</strong><br>A simplified JPEG Huffman simulation for this block: zig-zag runs and magnitudes, with DC coded as the difference from the previous block. The viewer's file size uses a whole-image entropy estimate instead, so the two don't add up exactly.</div>
-                                    </div>
-                                    <div class="stat-box tooltip-container">
-                                        <div class="stat-value" id="statBpp">—</div>
-                                        <div class="stat-label">Bits / Pixel</div>
-                                        <div class="tooltip-content-small"><strong>Bits Per Pixel</strong><br><code>(Est. Bits) / 64</code><br>Average number of bits required to store each pixel in this block.</div>
+                                        <div class="tooltip-content-small"><strong>Peak absolute error</strong><br><code>max |orig &minus; recon|</code><br>Worst-case pixel difference in the block.</div>
                                     </div>
                                 </div>
                                 <div id="lossMeterContainer" class="mt-auto"></div>
@@ -623,8 +609,8 @@
 
                             <div class="pipeline-block qtable-block">
                                 <div class="pipeline-block-header">
-                                    <h3>Quant Table</h3>
-                                    <span class="inspector-badge badge-qtable" id="qTableType2">
+                                    <h3 class="has-hint" title="The divisor for each frequency at the current quality. Bigger divisors (usually bottom-right) throw away fine detail the eye notices least.">Quant Table</h3>
+                                    <span class="inspector-badge badge-qtable" id="qTableType">
                                         {appState.currentViewMode === ViewMode.Cr || appState.currentViewMode === ViewMode.Cb ? 'Chroma' : 'Luma'}
                                     </span>
                                 </div>
@@ -666,7 +652,7 @@
                             
                             <div class="zigzag-visualizer-row">
                                 <div class="pipeline-block" style="flex: 0 0 auto; margin-right: 16px;">
-                                    <div class="pipeline-block-header"><h3>Quantized</h3></div>
+                                    <div class="pipeline-block-header"><h3 class="has-hint" title="What the decoder reads back from the file">Quantized</h3></div>
                                     <div id="gridQuantizedAdvanced" class="block-grid" data-target="gridOriginal"></div>
                                 </div>
                                 <div style="flex: 1; min-width: 0;">

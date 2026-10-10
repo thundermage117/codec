@@ -1,4 +1,6 @@
 // Transform types understood by the WASM codec (`transform_mode` argument).
+// Mirrors map_transform_mode in web/cpp/codec_web.cpp (checked by
+// tests/unit/wasm-contracts.test.js).
 export const Transform = {
     DCT: 0,
     Haar: 1,

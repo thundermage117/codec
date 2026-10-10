@@ -11,8 +11,8 @@ import { inspectBlock } from '../../src/lib/inspection.js';
 
 const REQUIRED_DIVS = [
     'blockCoords',
-    'qTableType', 'qTableType2',
-    'gridOriginal', 'gridDCT', 'gridQuantized', 'gridQuantized2',
+    'qTableType',
+    'gridOriginal', 'gridDCT', 'gridQuantized',
     'gridDequantized', 'gridReconstructed', 'gridQuantTable', 'gridError',
     'statMSE', 'statPeakError', 'statZeros', 'statCompression',
     'lossMeterContainer', 'basisPopover',
@@ -143,7 +143,6 @@ describe('inspectBlock - qTableType label', () => {
         appState.currentViewMode = ViewMode.Y; // channelIndex = 0
         inspectBlock(0, 0);
         expect(document.getElementById('qTableType').innerText).toBe('Luma');
-        expect(document.getElementById('qTableType2').innerText).toBe('Luma');
     });
 
     it('shows "Chroma" when currentViewMode is Cr', () => {

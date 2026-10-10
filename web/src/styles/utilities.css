@@ -70,3 +70,32 @@
         left: 90%;
     }
 }
+/* A label that explains itself on hover (via its title attribute). */
+.has-hint {
+    cursor: help;
+    text-decoration: underline dotted;
+    text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+    text-underline-offset: 3px;
+}
+
+/* Fast hover hints for title attributes (see lib/hover-hint.ts). */
+.hover-hint {
+    position: fixed;
+    z-index: 4000;
+    max-width: 280px;
+    padding: 7px 10px;
+    border-radius: 6px;
+    background: var(--tooltip-bg);
+    color: var(--tooltip-text);
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.4;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.1s ease;
+}
+
+.hover-hint.visible {
+    opacity: 1;
+}

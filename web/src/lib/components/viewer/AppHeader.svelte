@@ -17,19 +17,19 @@
 </script>
 
 <header>
-    <h1>WASM Codec Explorer</h1>
+    <h1>Codec Explorer</h1>
     <div class="header-badges">
-        <div class="privacy-badge">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                stroke-linecap="round" stroke-linejoin="round">
+        <span class="privacy-note" title="Everything runs in your browser via WebAssembly; images never leave your device.">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                 <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
             </svg>
-            <span>Processed locally on your device</span>
-        </div>
-        <a href="https://github.com/thundermage117/codec" class="github-link" target="_blank" rel="noopener noreferrer">
-            <img src="/assets/GitHub_Invertocat_Black.svg" alt="GitHub Logo" width="16" height="16">
-            <span>View Source on GitHub</span>
+            Runs locally
+        </span>
+        <a href="https://github.com/thundermage117/codec" class="github-link" target="_blank" rel="noopener noreferrer"
+            aria-label="Source on GitHub" title="Source on GitHub">
+            <img src="/assets/GitHub_Invertocat_Black.svg" alt="" width="16" height="16">
         </a>
         <button class="theme-toggle" id="themeToggle" aria-label="Toggle dark mode" onclick={toggleTheme}>
             <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"

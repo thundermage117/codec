@@ -57,7 +57,7 @@
 
 <div class="control-group">
     <label for="{idPrefix}Slider">
-        Quality <span id="{idPrefix}Value">{sliderValue}</span>
+        <span class="has-hint" title="Scales the quantization table. Lower quality means bigger divisors, so more coefficients round to zero: a smaller file and more visible loss.">Quality</span> <span id="{idPrefix}Value">{sliderValue}</span>
     </label>
     <div class="preset-group">
         {#each PRESETS as preset}

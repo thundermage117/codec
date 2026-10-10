@@ -12,24 +12,17 @@
         zoom = $bindable(1),
         zoomOriginX = $bindable(50),
         zoomOriginY = $bindable(50),
-        isInspectMode = false,
-        highlightBlock = $bindable(null),
-        showInspectorBanner = false,
-        showQuickstart = false,
         showBlockGrid = false,
         zoomHint = null,
         onViewerClick = null,
         onViewerMouseDown = null,
         onViewerMouseLeave = null,
         onViewerMouseMove = null,
-        onEnterInspector = null,
         /** 8×8 block to outline (e.g. the block a click would open), or null. */
         blockOutline = null as { x: number; y: number } | null,
         originalLabel = 'Original image',
         processedLabel = 'Compressed image'
     } = $props();
-
-    type BlockCoord = { x: number; y: number } | null;
 
     function handleMouseDown(e: MouseEvent) {
         if (onViewerMouseDown) onViewerMouseDown(e);
@@ -47,11 +40,12 @@
         if (onViewerMouseMove) onViewerMouseMove(e);
     }
 
+    // Arrow keys move the comparison split (Shift for bigger steps).
     function handleKeyDown(e: KeyboardEvent) {
-        if (isInspectMode && (e.key === 'Enter' || e.key === ' ')) {
-            e.preventDefault();
-            if (onViewerClick) onViewerClick(e as unknown as MouseEvent);
-        }
+        if (viewType !== 'comparison' || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+        e.preventDefault();
+        const step = (e.shiftKey ? 10 : 2) * (e.key === 'ArrowLeft' ? -1 : 1);
+        comparisonPercent = Math.max(0, Math.min(100, comparisonPercent + step));
     }
 
     // comparisonPercent is in viewport-space %, but clip-path is applied inside the scaled
@@ -66,18 +60,16 @@
     style:--img-w={appState.imgWidth}
     style:--img-h={appState.imgHeight}>
     <div class="comparison-viewer"
-        style={`transform: scale(${zoom}); transform-origin: ${zoomOriginX}% ${zoomOriginY}%; cursor: ${isZoomMode && zoom === 1 ? 'zoom-in' : isInspectMode ? 'crosshair' : blockOutline ? 'pointer' : viewType === 'comparison' ? 'col-resize' : 'default'}`}
+        style={`transform: scale(${zoom}); transform-origin: ${zoomOriginX}% ${zoomOriginY}%; cursor: ${isZoomMode && zoom === 1 ? 'zoom-in' : blockOutline ? 'pointer' : viewType === 'comparison' ? 'col-resize' : 'default'}`}
         role="button"
         tabindex="0"
-        aria-label={isInspectMode
-            ? 'Inspector viewer. Press Enter to inspect highlighted block.'
-            : viewType === 'original' ? originalLabel
+        aria-label={viewType === 'original' ? originalLabel
             : viewType === 'processed' ? processedLabel
-            : `${originalLabel} compared with ${processedLabel}. Drag to adjust split.`}
+            : `${originalLabel} compared with ${processedLabel}. Drag or use arrow keys to move the split.`}
+        onkeydown={handleKeyDown}
         onmousedown={handleMouseDown}
         onclick={handleClick}
         onmousemove={handleMouseMove}
-        onkeydown={handleKeyDown}
         onmouseleave={handleMouseLeave}>
 
         <div class="canvas-container">
@@ -114,15 +106,8 @@
 
     <!-- Overlays outside comparison-viewer so they don't scale with zoom transform -->
 
-    {#if appState.originalImageData && isInspectMode && showInspectorBanner}
-    <div class="inspector-active-banner">
-        <span class="banner-dot"></span>
-        <strong>Inspector mode ON</strong>
-        <span>Click any 8×8 block to open the full pipeline.</span>
-    </div>
-    {/if}
 
-    {#if appState.originalImageData && !isInspectMode && viewType === 'comparison'}
+    {#if appState.originalImageData && viewType === 'comparison'}
     <div class="comparison-divider" style={`left: ${comparisonPercent}%`} aria-hidden="true">
         <div class="comparison-handle">
             <span></span>
@@ -149,15 +134,6 @@
 {/if}
 
 
-{#if showQuickstart && appState.originalImageData}
-<div class="inspector-quickstart">
-    <div class="quickstart-copy">
-        <strong>Block Inspector</strong>
-        <span>Click any 8×8 region to inspect DCT coefficients and quantization.</span>
-    </div>
-    <button class="inspector-quickstart-btn" onclick={onEnterInspector}>Enter Block Inspector</button>
-</div>
-{/if}
 
 <style>
     .zoom-viewport {

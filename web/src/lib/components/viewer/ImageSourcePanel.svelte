@@ -2,13 +2,12 @@
     import { appState } from '../../state.svelte.js';
 
     interface Props {
-        dropZoneVisible: boolean;
         activeTestImageIndex: number | null;
         onFile: (file: File) => void;
         onTestImage: (index: number) => void;
     }
 
-    let { dropZoneVisible = $bindable(), activeTestImageIndex, onFile, onTestImage }: Props = $props();
+    let { activeTestImageIndex, onFile, onTestImage }: Props = $props();
 
     const TEST_IMAGE_COUNT = 20; // Kodak dataset
     let testImagesOpen = $state(false);
@@ -19,65 +18,31 @@
         if (file) onFile(file);
     }
 
-    function onDrop(e: DragEvent) {
-        e.preventDefault();
-        dropZoneVisible = false;
-        const file = e.dataTransfer?.files[0];
-        if (file) onFile(file);
-    }
-
     function openFilePicker() {
         fileInput?.click();
     }
-
-    function onDropZoneKeyDown(e: KeyboardEvent) {
-        if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            openFilePicker();
-        }
-    }
 </script>
 
-    <input type="file" id="fileInput" accept="image/*" bind:this={fileInput}
-        disabled={!appState.wasmReady}
-        onchange={onFileInput}
-        style="display:none">
+<input type="file" id="fileInput" accept="image/*" bind:this={fileInput}
+    disabled={!appState.wasmReady}
+    onchange={onFileInput}
+    style="display:none">
 {#if !appState.wasmReady}
 <div class="stats">
     <span id="status">{appState.status}</span>
 </div>
 {/if}
 
-{#if dropZoneVisible}
-<div class="drop-zone" id="dropZone"
-    role="button"
-    tabindex="0"
-    aria-label="Upload image"
-    onclick={openFilePicker}
-    onkeydown={onDropZoneKeyDown}
-    ondragover={(e) => { e.preventDefault(); (e.currentTarget as HTMLElement).classList.add('drag-over'); }}
-    ondragleave={(e) => (e.currentTarget as HTMLElement).classList.remove('drag-over')}
-    ondrop={onDrop}>
-    <svg class="drop-zone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
-        stroke-linecap="round" stroke-linejoin="round">
-        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-        <circle cx="8.5" cy="8.5" r="1.5"></circle>
-        <path d="M21 15l-5-5L5 21"></path>
-    </svg>
-    <div class="drop-zone-text">Drop an image here</div>
-    <div class="drop-zone-hint">or <span class="browse-link">browse to upload</span></div>
-</div>
-{:else}
-<button class="tool-btn" onclick={openFilePicker}>
+<button class="tool-btn" onclick={openFilePicker} disabled={!appState.wasmReady}
+    title="Or drop an image file onto the viewer">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
         stroke-linecap="round" stroke-linejoin="round">
         <polyline points="16 16 12 12 8 16"></polyline>
         <line x1="12" y1="12" x2="12" y2="21"></line>
         <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"></path>
     </svg>
-    Load new image
+    Use your own image
 </button>
-{/if}
 
 <!-- Sample / built-in test images -->
 <div class="test-images-section">
@@ -93,7 +58,7 @@
             <img src="/test-images/{n}.png" alt="" />
             {/each}
         </div>
-        <span class="test-images-toggle-label">
+        <span class="test-images-toggle-label" title="Photos from the Kodak test suite, a standard set for comparing image codecs">
             Sample Images
             {#if activeTestImageIndex !== null}
             <span class="test-images-active-dot"></span>

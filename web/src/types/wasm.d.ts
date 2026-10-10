@@ -1,3 +1,6 @@
+// The C functions the WASM build exports. Each must be listed in the Makefile's
+// WEB_EXPORTS or marked EMSCRIPTEN_KEEPALIVE in web/cpp/codec_web.cpp
+// (checked by tests/unit/wasm-exports.test.js).
 declare global {
     var Module: WasmModule;
 }
