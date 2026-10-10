@@ -1,6 +1,7 @@
 import { hideTooltip } from './tooltip.js';
 import { computeBasisPattern, computeHaarBasisPattern, getFreqLabel, getHaarFreqLabel } from './dct-utils.js';
 import { appState } from './state.svelte.js';
+import { INSPECTOR_IDS } from './inspector-dom.js';
 
 interface CachedGridData {
     coeffData?: Float64Array;
@@ -101,7 +102,7 @@ function positionPopover(popover: HTMLElement, e: Pick<MouseEvent, 'clientX' | '
 
 export function showBasisPopover(e: Pick<MouseEvent, 'clientX' | 'clientY'>, row: number, col: number): void {
     hideTooltip();
-    const popover = document.getElementById('basisPopover');
+    const popover = document.getElementById(INSPECTOR_IDS.basisPopover);
     if (!popover || !cachedGridData.coeffData) return;
 
     const idx = row * 8 + col;
@@ -114,14 +115,14 @@ export function showBasisPopover(e: Pick<MouseEvent, 'clientX' | 'clientY'>, row
         if (el) el.innerText = text;
     };
 
-    setEl('basisCoord', `(${row}, ${col})`);
-    setEl('basisFreqLabel', getTransformFreqLabel(row, col));
-    setEl('basisValue', coeffVal.toFixed(2));
-    setEl('basisQuantized', Math.round(quantVal).toString());
-    setEl('basisDivisor', Math.round(qtVal).toString());
+    setEl(INSPECTOR_IDS.basisCoord, `(${row}, ${col})`);
+    setEl(INSPECTOR_IDS.basisFreqLabel, getTransformFreqLabel(row, col));
+    setEl(INSPECTOR_IDS.basisValue, coeffVal.toFixed(2));
+    setEl(INSPECTOR_IDS.basisQuantized, Math.round(quantVal).toString());
+    setEl(INSPECTOR_IDS.basisDivisor, Math.round(qtVal).toString());
 
     // Update the static label next to the coefficient value
-    const coeffLabelEl = document.getElementById('basisValueLabel');
+    const coeffLabelEl = document.getElementById(INSPECTOR_IDS.basisValueLabel);
     if (coeffLabelEl) coeffLabelEl.innerText = appState.transformType === 1 ? 'DWT:' : 'DCT:';
 
     const basisPattern = getBasisPattern(col, row);
@@ -130,8 +131,8 @@ export function showBasisPopover(e: Pick<MouseEvent, 'clientX' | 'clientY'>, row
         contribution[i] = coeffVal * basisPattern[i];
     }
 
-    drawPatternOnCanvas('basisCanvas', Array.from(basisPattern), 'diverging');
-    drawPatternOnCanvas('contributionCanvas', Array.from(contribution), 'diverging');
+    drawPatternOnCanvas(INSPECTOR_IDS.basisCanvas, Array.from(basisPattern), 'diverging');
+    drawPatternOnCanvas(INSPECTOR_IDS.contributionCanvas, Array.from(contribution), 'diverging');
 
     positionPopover(popover, e);
     popover.style.display = 'block';
@@ -140,7 +141,7 @@ export function showBasisPopover(e: Pick<MouseEvent, 'clientX' | 'clientY'>, row
 }
 
 export function hideBasisPopover(): void {
-    const popover = document.getElementById('basisPopover');
+    const popover = document.getElementById(INSPECTOR_IDS.basisPopover);
     if (popover) {
         popover.classList.remove('visible');
         setTimeout(() => {
@@ -154,14 +155,14 @@ let animationId: number | null = null;
 let originalColors: string[] = [];
 let currentTargetGridId: string | null = null;
 
-export function startBasisAnimation(row: number, col: number, targetGridId: string = 'gridOriginal'): void {
+export function startBasisAnimation(row: number, col: number, targetGridId: string = INSPECTOR_IDS.gridOriginal): void {
     if (animationId !== null) {
         cancelAnimationFrame(animationId);
         animationId = null;
         restoreOriginalColors();
     }
 
-    if (!targetGridId) targetGridId = 'gridOriginal';
+    if (!targetGridId) targetGridId = INSPECTOR_IDS.gridOriginal;
     currentTargetGridId = targetGridId;
 
     const targetGrid = document.getElementById(targetGridId);

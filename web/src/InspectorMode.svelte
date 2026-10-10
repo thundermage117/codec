@@ -610,7 +610,7 @@
                             <div class="pipeline-block qtable-block">
                                 <div class="pipeline-block-header">
                                     <h3 class="has-hint" title="The divisor for each frequency at the current quality. Bigger divisors (usually bottom-right) throw away fine detail the eye notices least.">Quant Table</h3>
-                                    <span class="inspector-badge badge-qtable" id="qTableType2">
+                                    <span class="inspector-badge badge-qtable" id="qTableType">
                                         {appState.currentViewMode === ViewMode.Cr || appState.currentViewMode === ViewMode.Cb ? 'Chroma' : 'Luma'}
                                     </span>
                                 </div>

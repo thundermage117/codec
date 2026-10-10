@@ -3,6 +3,7 @@ import { showBasisPopover, hideBasisPopover, getCachedGridData } from './basis-p
 import { coeffEdit } from './coeff-edit.svelte.js';
 import { ZIGZAG_INDICES, computeBasisPattern, computeHaarBasisPattern, getFreqLabel, getHaarFreqLabel } from './dct-utils.js';
 import { appState } from './state.svelte.js';
+import { INSPECTOR_IDS } from './inspector-dom.js';
 
 function getBasisPattern(u: number, v: number): Float64Array {
     return appState.transformType === 1
@@ -17,15 +18,15 @@ function getTransformFreqLabel(row: number, col: number): string {
 }
 
 const ALL_GRID_IDS = [
-    'gridOriginal', 'gridDCT', 'gridQuantized',
-    'gridQuantizedAdvanced', 'gridDequantized', 'gridReconstructed',
-    'gridQuantTable', 'gridError'
+    INSPECTOR_IDS.gridOriginal, INSPECTOR_IDS.gridDCT, INSPECTOR_IDS.gridQuantized,
+    INSPECTOR_IDS.gridQuantizedAdvanced, INSPECTOR_IDS.gridDequantized, INSPECTOR_IDS.gridReconstructed,
+    INSPECTOR_IDS.gridQuantTable, INSPECTOR_IDS.gridError
 ];
 
 let lastHighlightedKey: string | null = null;
 
 /** Grids whose coefficients can be dropped in edit mode: the stored data and what the decoder makes of it. */
-const EDITABLE_GRID_IDS = ['gridQuantized', 'gridDequantized'];
+const EDITABLE_GRID_IDS: string[] = [INSPECTOR_IDS.gridQuantized, INSPECTOR_IDS.gridDequantized];
 
 export function clearAllHighlights(): void {
     lastHighlightedKey = null;
@@ -44,7 +45,7 @@ export function highlightAcrossGrids(row: number, col: number): void {
         if (cell && cell.classList) cell.classList.add('cell-highlight');
     });
 
-    const zzContainer = document.getElementById('gridZigzag');
+    const zzContainer = document.getElementById(INSPECTOR_IDS.gridZigzag);
     if (zzContainer) {
         const zzCell = (zzContainer.querySelector(`.zz-cell[data-idx="${idx}"]`) ||
             zzContainer.querySelector(`.zz-run[data-indices~="${idx}"]`)) as HTMLElement | null;
@@ -63,7 +64,7 @@ export function highlightRunAcrossGrids(indices: number[]): void {
         });
     });
 
-    const zzContainer = document.getElementById('gridZigzag');
+    const zzContainer = document.getElementById(INSPECTOR_IDS.gridZigzag);
     if (zzContainer) {
         indices.forEach(idx => {
             const zzCell = zzContainer.querySelector(`.zz-cell[data-idx="${idx}"]`) as HTMLElement | null;
@@ -85,7 +86,7 @@ function getCellDescription(row: number, col: number, gridType: string): string 
 }
 
 export function renderLossMeter(mse: number, _peakError: number): void {
-    const container = document.getElementById('lossMeterContainer');
+    const container = document.getElementById(INSPECTOR_IDS.lossMeterContainer);
     if (!container) return;
 
     let meter = container.querySelector('.loss-meter') as HTMLDivElement | null;
@@ -177,7 +178,7 @@ export function renderGrid(
                 detail: { row, col, targetGridId }
             }));
             showBannerForCell(row, col);
-            if (el.id === 'gridDequantized') {
+            if (el.id === INSPECTOR_IDS.gridDequantized) {
                 applyPartialReconToGrid(row, col);
             }
         };
@@ -228,7 +229,7 @@ export function renderGrid(
             if (e.key === 'Escape') {
                 // First Escape closes the popover; the next one reaches the
                 // inspector's own handler and exits.
-                const popoverOpen = document.getElementById('basisPopover')?.classList.contains('visible');
+                const popoverOpen = document.getElementById(INSPECTOR_IDS.basisPopover)?.classList.contains('visible');
                 const tooltipOpen = document.querySelector('.grid-cell-tooltip.visible');
                 if (popoverOpen || tooltipOpen) {
                     e.stopPropagation();
@@ -402,7 +403,7 @@ function focusGridCell(grid: HTMLElement, idx: number): void {
 }
 
 export function renderZigzagArray(data: Float64Array): void {
-    const el = document.getElementById('gridZigzag');
+    const el = document.getElementById(INSPECTOR_IDS.gridZigzag);
     if (!el) return;
 
     el.innerHTML = '';
@@ -535,7 +536,7 @@ export function startZigzagAnimation(): void {
         highlightAcrossGrids(row, col);
 
         // Scroll the active zz-cell or zz-run into view within the container
-        const zzContainer = document.getElementById('gridZigzag');
+        const zzContainer = document.getElementById(INSPECTOR_IDS.gridZigzag);
         if (zzContainer) {
             const activeZz = (zzContainer.querySelector(`.zz-cell[data-idx="${idx}"]`) ||
                 zzContainer.querySelector(`.zz-run[data-indices~="${idx}"]`)) as HTMLElement | null;
@@ -581,7 +582,7 @@ function applyPartialReconToGrid(row: number, col: number): void {
     }
     if (zzPos < 0) return;
 
-    const targetGrid = document.getElementById('gridReconstructed');
+    const targetGrid = document.getElementById(INSPECTOR_IDS.gridReconstructed);
     if (!targetGrid) return;
     const cells = Array.from(targetGrid.querySelectorAll('.grid-cell')) as HTMLElement[];
     if (cells.length !== 64) return;
@@ -684,7 +685,7 @@ export function startReconstructionAnimation(): void {
     const data = getCachedGridData();
     if (!data || !data.dequantizedData) return;
 
-    const targetGrid = document.getElementById('gridReconstructed');
+    const targetGrid = document.getElementById(INSPECTOR_IDS.gridReconstructed);
     if (!targetGrid) return;
 
     const cells = Array.from(targetGrid.querySelectorAll('.grid-cell')) as HTMLElement[];
@@ -795,7 +796,7 @@ function setReconstructionButtonIcon(playing: boolean): void {
 }
 
 function updateReconstructionProgress(index: number): void {
-    const el = document.getElementById('reconstructionProgress');
+    const el = document.getElementById(INSPECTOR_IDS.reconstructionProgress);
     if (!el) return;
 
     if (index < 0) { el.style.display = 'none'; return; }
@@ -815,7 +816,7 @@ function updateReconstructionProgress(index: number): void {
 }
 
 function hideReconAnimBanner(): void {
-    const banner = document.getElementById('reconAnimBanner');
+    const banner = document.getElementById(INSPECTOR_IDS.reconAnimBanner);
     if (banner) banner.style.display = 'none';
 }
 
@@ -857,23 +858,23 @@ function updateReconAnimBanner(
     coeff: number,
     basisPattern: Float64Array | null
 ): void {
-    const banner = document.getElementById('reconAnimBanner');
+    const banner = document.getElementById(INSPECTOR_IDS.reconAnimBanner);
     if (!banner) return;
 
     if (processedCount >= 64) {
         // Done state
-        const stepEl = document.getElementById('reconBannerStep');
-        const fillEl = document.getElementById('reconBannerFill') as HTMLElement | null;
-        const freqEl = document.getElementById('reconBannerFreq');
-        const coeffEl = document.getElementById('reconBannerCoeff');
-        const descEl = document.getElementById('reconBannerDesc');
+        const stepEl = document.getElementById(INSPECTOR_IDS.reconBannerStep);
+        const fillEl = document.getElementById(INSPECTOR_IDS.reconBannerFill) as HTMLElement | null;
+        const freqEl = document.getElementById(INSPECTOR_IDS.reconBannerFreq);
+        const coeffEl = document.getElementById(INSPECTOR_IDS.reconBannerCoeff);
+        const descEl = document.getElementById(INSPECTOR_IDS.reconBannerDesc);
         if (stepEl) stepEl.textContent = '64';
         if (fillEl) fillEl.style.width = '100%';
         if (freqEl) { freqEl.textContent = 'Complete'; freqEl.style.background = '#10b981'; freqEl.style.color = 'white'; }
         if (coeffEl) { coeffEl.textContent = ''; coeffEl.style.color = ''; }
         if (descEl) descEl.textContent = 'All 64 coefficients applied — reconstruction complete';
         // Clear the canvas
-        const canvas = document.getElementById('reconBasisCanvas') as HTMLCanvasElement | null;
+        const canvas = document.getElementById(INSPECTOR_IDS.reconBasisCanvas) as HTMLCanvasElement | null;
         if (canvas) { const ctx = canvas.getContext('2d'); if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height); }
         banner.style.display = '';
         return;
@@ -886,11 +887,11 @@ function updateReconAnimBanner(
     const label = getTransformFreqLabel(row, col);
     const isZero = Math.abs(coeff) < 0.0001;
 
-    const stepEl = document.getElementById('reconBannerStep');
-    const fillEl = document.getElementById('reconBannerFill') as HTMLElement | null;
-    const freqEl = document.getElementById('reconBannerFreq');
-    const coeffEl = document.getElementById('reconBannerCoeff');
-    const descEl = document.getElementById('reconBannerDesc');
+    const stepEl = document.getElementById(INSPECTOR_IDS.reconBannerStep);
+    const fillEl = document.getElementById(INSPECTOR_IDS.reconBannerFill) as HTMLElement | null;
+    const freqEl = document.getElementById(INSPECTOR_IDS.reconBannerFreq);
+    const coeffEl = document.getElementById(INSPECTOR_IDS.reconBannerCoeff);
+    const descEl = document.getElementById(INSPECTOR_IDS.reconBannerDesc);
 
     if (stepEl) stepEl.textContent = String(processedCount);
     if (fillEl) fillEl.style.width = `${(processedCount / 64) * 100}%`;
@@ -918,7 +919,7 @@ function updateReconAnimBanner(
             : FREQ_DESCRIPTIONS[label] ?? '';
     }
 
-    const canvas = document.getElementById('reconBasisCanvas') as HTMLCanvasElement | null;
+    const canvas = document.getElementById(INSPECTOR_IDS.reconBasisCanvas) as HTMLCanvasElement | null;
     if (canvas && basisPattern && !isZero) {
         drawContributionOnCanvas(canvas, basisPattern, coeff);
     } else if (canvas && isZero) {
@@ -978,7 +979,7 @@ if (typeof window !== 'undefined') {
 }
 
 export function renderEntropySummary(symbols: any[]): void {
-    const container = document.getElementById('entropySummary');
+    const container = document.getElementById(INSPECTOR_IDS.entropySummary);
     if (!container) return;
 
     let dcBits = 0;

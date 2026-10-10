@@ -5,6 +5,7 @@ import { renderGrid, renderLossMeter, renderZigzagArray, renderEntropySummary, s
 import { estimateBlockBits, getEntropySymbols, reconstructBlock } from './dct-utils.js';
 import { coeffEdit } from './coeff-edit.svelte.js';
 import { untrack } from 'svelte';
+import { INSPECTOR_IDS } from './inspector-dom.js';
 
 // Index of the quantized grid within BlockDebugData (original, coefficients,
 // quantTable, quantized, reconstructed — 64 doubles each).
@@ -49,9 +50,8 @@ export function inspectBlock(blockX: number, blockY: number): void {
     hideBasisPopover();
     stopReconstructionAnimation();
 
-    const coordsSpan = document.getElementById('blockCoords');
-    const qTableType = document.getElementById('qTableType');
-    const qTableType2 = document.getElementById('qTableType2');
+    const coordsSpan = document.getElementById(INSPECTOR_IDS.blockCoords);
+    const qTableType = document.getElementById(INSPECTOR_IDS.qTableType);
 
     if (coordsSpan) coordsSpan.innerText = `${blockX * 8}, ${blockY * 8} (Block ${blockX},${blockY})`;
 
@@ -61,7 +61,6 @@ export function inspectBlock(blockX: number, blockY: number): void {
 
     const tableLabel = (channelIndex === 0) ? 'Luma' : 'Chroma';
     if (qTableType) qTableType.innerText = tableLabel;
-    if (qTableType2) qTableType2.innerText = tableLabel;
 
     // Read the previous block's quantized DC first: inspectBlockData returns a
     // pointer to one shared buffer that the next call overwrites.
@@ -168,28 +167,28 @@ function renderNow(): void {
         }
     };
 
-    setStatEl('statMSE', mse >= 100 ? mse.toFixed(0) : mse.toFixed(2), mseClass, mseClass);
-    setStatEl('statPeakError', peakError >= 100 ? peakError.toFixed(0) : peakError.toFixed(1), peakClass, peakClass);
-    setStatEl('statZeros', `${zeroCount}/64`, null, null);
-    setStatEl('statCompression', `${zeroPercent}%`, compClass, compClass);
+    setStatEl(INSPECTOR_IDS.statMSE, mse >= 100 ? mse.toFixed(0) : mse.toFixed(2), mseClass, mseClass);
+    setStatEl(INSPECTOR_IDS.statPeakError, peakError >= 100 ? peakError.toFixed(0) : peakError.toFixed(1), peakClass, peakClass);
+    setStatEl(INSPECTOR_IDS.statZeros, `${zeroCount}/64`, null, null);
+    setStatEl(INSPECTOR_IDS.statCompression, `${zeroPercent}%`, compClass, compClass);
 
     const estBits = estimateBlockBits(quantized, prevDc);
     const bpp = estBits / 64;
 
     // Good bpp is strictly less than 1.5, moderate is < 3.0, otherwise poor.
     const bppClass = bpp < 1.5 ? 'good' : bpp < 3.0 ? 'moderate' : 'poor';
-    setStatEl('statEstBits', `${estBits}`, null, null);
-    setStatEl('statBpp', bpp.toFixed(2), bppClass, bppClass);
+    setStatEl(INSPECTOR_IDS.statEstBits, `${estBits}`, null, null);
+    setStatEl(INSPECTOR_IDS.statBpp, bpp.toFixed(2), bppClass, bppClass);
 
-    renderGrid('gridOriginal', (isRGB ? originalRGB : null) ?? original, 'intensity', 'original', isRGB && !!originalRGB);
-    renderGrid('gridDCT', coefficients, 'frequency', 'transform');
-    renderGrid('gridQuantized', quantized, 'frequency', 'quantized');
-    renderGrid('gridQuantizedAdvanced', quantized, 'frequency', 'quantized');
-    renderGrid('gridDequantized', dequantized, 'frequency', 'dequantized');
-    renderGrid('gridReconstructed', reconstructedRGB ?? reconstructed, 'intensity', 'reconstructed', !!reconstructedRGB);
-    renderGrid('gridQuantTable', quantTable, 'qtable', 'qtable');
-    renderGrid('gridError', Array.from(errorData), 'error', 'error');
-    markDroppedCells(['gridQuantized', 'gridDequantized']);
+    renderGrid(INSPECTOR_IDS.gridOriginal, (isRGB ? originalRGB : null) ?? original, 'intensity', 'original', isRGB && !!originalRGB);
+    renderGrid(INSPECTOR_IDS.gridDCT, coefficients, 'frequency', 'transform');
+    renderGrid(INSPECTOR_IDS.gridQuantized, quantized, 'frequency', 'quantized');
+    renderGrid(INSPECTOR_IDS.gridQuantizedAdvanced, quantized, 'frequency', 'quantized');
+    renderGrid(INSPECTOR_IDS.gridDequantized, dequantized, 'frequency', 'dequantized');
+    renderGrid(INSPECTOR_IDS.gridReconstructed, reconstructedRGB ?? reconstructed, 'intensity', 'reconstructed', !!reconstructedRGB);
+    renderGrid(INSPECTOR_IDS.gridQuantTable, quantTable, 'qtable', 'qtable');
+    renderGrid(INSPECTOR_IDS.gridError, Array.from(errorData), 'error', 'error');
+    markDroppedCells([INSPECTOR_IDS.gridQuantized, INSPECTOR_IDS.gridDequantized]);
 
     renderLossMeter(mse, peakError);
     renderZigzagArray(quantized);
