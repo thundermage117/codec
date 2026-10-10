@@ -152,8 +152,8 @@
             {#each yTicks as tick}
             <text x={padL - 6} y={mapY(tick) + 4} class="rd-axis-text rd-axis-text-end">{tick.toFixed(1)}</text>
             {/each}
-            <text x={(padL + svgW - padR) / 2} y={svgH - 4} class="rd-axis-title rd-axis-text-middle">Bitrate (bits per pixel)</text>
-            <text x={14} y={(padT + svgH - padB) / 2} transform={`rotate(-90 14 ${(padT + svgH - padB) / 2})`} class="rd-axis-title rd-axis-text-middle">PSNR Y (dB)</text>
+            <text x={(padL + svgW - padR) / 2} y={svgH - 4} class="rd-axis-title rd-axis-text-middle has-hint"><title>Estimated stored bits divided by the number of pixels. Lower means a smaller file.</title>Bitrate (bits per pixel)</text>
+            <text x={14} y={(padT + svgH - padB) / 2} transform={`rotate(-90 14 ${(padT + svgH - padB) / 2})`} class="rd-axis-title rd-axis-text-middle has-hint"><title>Peak signal-to-noise ratio of the brightness channel. Higher is closer to the original; above about 40 dB differences are hard to see.</title>PSNR Y (dB)</text>
         </svg>
     </div>
 

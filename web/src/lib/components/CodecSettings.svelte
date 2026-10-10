@@ -20,7 +20,7 @@
 </script>
 
 <div class="control-group">
-    <div class="group-label">Transform</div>
+    <div class="group-label"><span class="has-hint" title="How the image is turned into frequencies before quantization. DCT works on 8×8 blocks (JPEG); Haar and CDF 9/7 are wavelets over the whole image (JPEG 2000 uses CDF 9/7).">Transform</span></div>
     <div class="toggle-group">
         {#each TRANSFORMS as t}
         <input type="radio" id="{idPrefix}_t_{t.slug}" name="{idPrefix}_transform"
@@ -32,7 +32,7 @@
 </div>
 
 <div class="control-group">
-    <div class="group-label">Chroma subsampling</div>
+    <div class="group-label"><span class="has-hint" title="How much colour resolution is kept. The eye is far less sensitive to colour than to brightness, so JPEG usually stores colour at a lower resolution.">Chroma subsampling</span></div>
     <div class="toggle-group">
         {#each CS_MODES as cs}
         <input type="radio" id="{idPrefix}_cs_{cs.val}" name="{idPrefix}_chroma"

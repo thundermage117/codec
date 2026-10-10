@@ -29,7 +29,7 @@
     {#if showSize && appState.fileSizeInfo}
     {@const size = appState.fileSizeInfo}
     <div class="result-size">
-        <span class="result-size-value">~{size.estimated}</span>
+        <span class="result-size-value has-hint" title="Estimated from the entropy of the quantized coefficients. A real encoder's file would be close, but not identical.">~{size.estimated}</span>
         <span class="result-size-note">{size.ratio}× smaller than {size.original} raw</span>
     </div>
     {/if}
@@ -44,7 +44,7 @@
         </div>
     </div>
     <details class="result-details">
-        <summary>Per channel</summary>
+        <summary title="PSNR and SSIM for brightness (Y) and both colour-difference channels (Cr, Cb)">Per channel</summary>
         <div class="compact-metrics-grid">
             <div class="metric-header-row">
                 <div class="metric-col-label">Channel</div>

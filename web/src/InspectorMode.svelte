@@ -310,23 +310,23 @@
                 Block Inspector
             </h2>
             <div class="inspector-topbar-badges">
-                <span class="inspector-badge badge-coords">
+                <span class="inspector-badge badge-coords" title="Top-left pixel of the block, then its block column and row">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                         <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
                         <circle cx="12" cy="10" r="3"></circle>
                     </svg>
                     <span id="blockCoords">{appState.inspectedBlock ? `${appState.inspectedBlock.x * 8}, ${appState.inspectedBlock.y * 8} (Block ${appState.inspectedBlock.x},${appState.inspectedBlock.y})` : '—'}</span>
                 </span>
-                <span class="inspector-badge badge-qtable" id="qTableType">
+                <span class="inspector-badge badge-qtable" id="qTableType" title="Which quantization table this channel uses. JPEG quantizes luma (brightness) more gently than chroma (colour), because the eye notices brightness errors more.">
                     {appState.currentViewMode === ViewMode.Cr || appState.currentViewMode === ViewMode.Cb ? 'Chroma' : 'Luma'}
                 </span>
             </div>
             <div class="inspector-topbar-legend">
-                <span class="legend-item"><span class="legend-dot dot-positive"></span>Positive</span>
-                <span class="legend-item"><span class="legend-dot dot-negative"></span>Negative</span>
-                <span class="legend-item"><span class="legend-dot dot-zero"></span>Near Zero</span>
-                <span class="legend-item"><span class="legend-dot dot-intensity"></span>Pixel Intensity</span>
-                <span class="legend-item"><span class="run-dot" style="margin-right: 4px; opacity: 1;"></span>Zero Run</span>
+                <span class="legend-item" title="Coefficient or error above zero"><span class="legend-dot dot-positive"></span>Positive</span>
+                <span class="legend-item" title="Coefficient or error below zero"><span class="legend-dot dot-negative"></span>Negative</span>
+                <span class="legend-item" title="Close to zero: what quantization turns into nothing"><span class="legend-dot dot-zero"></span>Near Zero</span>
+                <span class="legend-item" title="Grayscale cells show pixel brightness, 0 to 255"><span class="legend-dot dot-intensity"></span>Pixel Intensity</span>
+                <span class="legend-item" title="A run of zeros in zig-zag order, stored as one short code"><span class="run-dot" style="margin-right: 4px; opacity: 1;"></span>Zero Run</span>
             </div>
         </div>
 
@@ -338,7 +338,7 @@
 
                 <!-- Thumbnail Navigator -->
                 <details class="sidebar-section" open>
-                    <summary class="sidebar-section-title"><span>Image Navigator</span></summary>
+                    <summary class="sidebar-section-title"><span title="Click anywhere on the thumbnail to inspect that block">Image Navigator</span></summary>
                     <div class="sidebar-section-body">
                         <div class="thumbnail-container" id="thumbnailContainer">
                             <canvas id="thumbnailCanvas" bind:this={thumbnailCanvas}
@@ -351,7 +351,7 @@
 
                 <!-- Suggested Blocks -->
                 <details class="sidebar-section" open>
-                    <summary class="sidebar-section-title"><span>Suggested Blocks</span></summary>
+                    <summary class="sidebar-section-title"><span title="Blocks picked because they show compression clearly: edges ring, textures lose detail, smooth areas show blocking">Suggested Blocks</span></summary>
                     <div class="sidebar-section-body">
                         <div class="suggested-blocks-list" id="suggestedBlocksList">
                             {#if appState.suggestedBlocks.length === 0}
@@ -394,7 +394,7 @@
                         <QualityControl idPrefix="inspQuality" onPreview={(q) => { appState.quality = q; }} />
 
                         <div class="control-group">
-                            <div class="group-label">View Mode</div>
+                            <div class="group-label"><span class="has-hint" title="Which channel to follow through the pipeline: Y is brightness; Cr and Cb are colour differences">View Mode</span></div>
                             <div class="toggle-group">
                                 {#each inspViewModes as mode}
                                 <input type="radio" id={mode.id} name="insp_view_mode"
@@ -406,7 +406,7 @@
                         </div>
 
                         <div class="control-group">
-                            <div class="group-label">Chroma Subsampling</div>
+                            <div class="group-label"><span class="has-hint" title="How much colour resolution is kept before the transform. Disabled for Y, which is never subsampled.">Chroma Subsampling</span></div>
                             <div class="toggle-group">
                                 {#each chromaModes as cs}
                                 <input type="radio" id={cs.id} name="insp_chroma_subsampling"
@@ -470,7 +470,7 @@
                         </div>
                         <div class="pipeline-row">
                             <div class="pipeline-block">
-                                <div class="pipeline-block-header"><h3>Original</h3></div>
+                                <div class="pipeline-block-header"><h3 class="has-hint" title="The block's pixel values (0 to 255) for the selected channel">Original</h3></div>
                                 <div id="gridOriginal" class="block-grid"></div>
                                 <div class="block-label">AxB Pixels</div>
                             </div>
@@ -479,16 +479,16 @@
                                 <div class="arrow-line"></div><div class="arrow-label">{transformName}</div><div class="arrow-icon">→</div>
                             </div>
                             <div class="pipeline-block">
-                                <div class="pipeline-block-header"><h3>{transformGridLabel}</h3></div>
+                                <div class="pipeline-block-header"><h3 class="has-hint" title="How much of each of the 64 cosine patterns the block contains: smooth patterns top-left, finest detail bottom-right. Most of the energy sits top-left.">{transformGridLabel}</h3></div>
                                 <div id="gridDCT" class="block-grid" data-target="gridOriginal"></div>
                                 <div class="block-label">Frequencies</div>
                             </div>
                             <div class="pipeline-arrow">
-                                <div class="arrow-tooltip"><strong>Quantization</strong> Divides frequencies by the quantization table to reduce data size.</div>
+                                <div class="arrow-tooltip"><strong>Quantization</strong> Divides frequencies by the quantization table and rounds. This is the only lossy step.</div>
                                 <div class="arrow-line"></div><div class="arrow-label">÷ Quant</div><div class="arrow-icon">→</div>
                             </div>
                             <div class="pipeline-block">
-                                <div class="pipeline-block-header"><h3>Quantized</h3></div>
+                                <div class="pipeline-block-header"><h3 class="has-hint" title="Each coefficient divided by its quant table entry and rounded. These integers are what gets stored; zeros cost almost nothing.">Quantized</h3></div>
                                 <div id="gridQuantized" class="block-grid" data-target="gridOriginal"></div>
                                 <div class="block-label">Integers</div>
                             </div>
@@ -524,11 +524,11 @@
                                 <div class="block-label">Stored Data</div>
                             </div>
                             <div class="pipeline-arrow">
-                                <div class="arrow-tooltip"><strong>Dequantization</strong> Multiplies stored integers by the quantization table.</div>
+                                <div class="arrow-tooltip"><strong>Dequantization</strong> Multiplies stored integers by the quantization table. The rounding can't be undone, so values come back approximately.</div>
                                 <div class="arrow-line"></div><div class="arrow-label">× Quant</div><div class="arrow-icon">→</div>
                             </div>
                             <div class="pipeline-block">
-                                <div class="pipeline-block-header"><h3>Dequantized</h3></div>
+                                <div class="pipeline-block-header"><h3 class="has-hint" title="Quantized values multiplied back by the table: the original coefficients plus rounding error">Dequantized</h3></div>
                                 <div id="gridDequantized" class="block-grid" data-target="gridReconstructed"></div>
                                 <div class="block-label">Approx Freqs</div>
                             </div>
@@ -538,7 +538,7 @@
                             </div>
                             <div class="pipeline-block">
                                 <div class="pipeline-block-header">
-                                    <h3>Reconstructed</h3>
+                                    <h3 class="has-hint" title="The decoded block: what the viewer shows">Reconstructed</h3>
                                     <span id="reconstructionProgress" class="reconstruction-progress" style="display:none"></span>
                                     <button class="pipeline-play-btn tooltip-container"
                                         onclick={() => window.dispatchEvent(new CustomEvent('animate-reconstruction'))}>
@@ -572,7 +572,7 @@
                         <div class="pipeline-row-label">Analysis & Statistics</div>
                         <div class="analysis-row">
                             <div class="pipeline-block error-block">
-                                <div class="pipeline-block-header"><h3>Error Residual</h3></div>
+                                <div class="pipeline-block-header"><h3 class="has-hint" title="Original minus reconstructed, per pixel: the detail compression lost">Error Residual</h3></div>
                                 <div class="error-visualizer">
                                     <div id="gridError" class="block-grid"></div>
                                     <div class="error-legend-vertical">
@@ -624,7 +624,7 @@
 
                             <div class="pipeline-block qtable-block">
                                 <div class="pipeline-block-header">
-                                    <h3>Quant Table</h3>
+                                    <h3 class="has-hint" title="The divisor for each frequency at the current quality. Bigger divisors (usually bottom-right) throw away fine detail the eye notices least.">Quant Table</h3>
                                     <span class="inspector-badge badge-qtable" id="qTableType2">
                                         {appState.currentViewMode === ViewMode.Cr || appState.currentViewMode === ViewMode.Cb ? 'Chroma' : 'Luma'}
                                     </span>
@@ -667,7 +667,7 @@
                             
                             <div class="zigzag-visualizer-row">
                                 <div class="pipeline-block" style="flex: 0 0 auto; margin-right: 16px;">
-                                    <div class="pipeline-block-header"><h3>Quantized</h3></div>
+                                    <div class="pipeline-block-header"><h3 class="has-hint" title="What the decoder reads back from the file">Quantized</h3></div>
                                     <div id="gridQuantizedAdvanced" class="block-grid" data-target="gridOriginal"></div>
                                 </div>
                                 <div style="flex: 1; min-width: 0;">

@@ -58,7 +58,7 @@
             <img src="/test-images/{n}.png" alt="" />
             {/each}
         </div>
-        <span class="test-images-toggle-label">
+        <span class="test-images-toggle-label" title="Photos from the Kodak test suite, a standard set for comparing image codecs">
             Sample Images
             {#if activeTestImageIndex !== null}
             <span class="test-images-active-dot"></span>

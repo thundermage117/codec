@@ -70,3 +70,10 @@
         left: 90%;
     }
 }
+/* A label that explains itself on hover (via its title attribute). */
+.has-hint {
+    cursor: help;
+    text-decoration: underline dotted;
+    text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+    text-underline-offset: 3px;
+}

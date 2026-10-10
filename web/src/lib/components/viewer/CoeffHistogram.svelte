@@ -98,8 +98,8 @@
             <text x={padL + (b + 0.5) * groupW} y={padT + chartH + 14} class="rd-axis-text rd-axis-text-middle">{binLabel(b)}</text>
             {/each}
 
-            <text x={(padL + svgW - padR) / 2} y={svgH - 4} class="rd-axis-title rd-axis-text-middle">|AC coefficient| (doubling-width bins)</text>
-            <text x={11} y={padT + chartH / 2} transform={`rotate(-90 11 ${padT + chartH / 2})`} class="rd-axis-title rd-axis-text-middle">Share</text>
+            <text x={(padL + svgW - padR) / 2} y={svgH - 4} class="rd-axis-title rd-axis-text-middle has-hint"><title>Size of each coefficient, ignoring sign. AC means every coefficient except the DC / LL average. Each bin is twice as wide as the one before.</title>|AC coefficient| (doubling-width bins)</text>
+            <text x={11} y={padT + chartH / 2} transform={`rotate(-90 11 ${padT + chartH / 2})`} class="rd-axis-title rd-axis-text-middle has-hint"><title>Fraction of the transform's coefficients that fall in each bin</title>Share</text>
 
             {#each series as s, k}
             <rect x={padL + 10 + k * 80} y={8} width={9} height={9} style="fill: {s.info.color}"/>
@@ -111,7 +111,8 @@
     <div class="rd-current-callout">
         {#each series as s, k}
         {#if k > 0}<div class="rd-callout-sep"></div>{/if}
-        <div class="rd-callout-item" class:hist-active={s.info.value === appState.transformType}>
+        <div class="rd-callout-item" class:hist-active={s.info.value === appState.transformType}
+            title="Share of {s.info.label} coefficients that quantize to zero at quality {statsQuality}. More zeros means a smaller file.">
             <span class="rd-callout-label">{s.info.label} zeroed at Q{statsQuality}</span>
             <span class="rd-callout-value" style="color: {s.info.color}">{(s.data.zeroFraction * 100).toFixed(1)}%</span>
         </div>

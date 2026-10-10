@@ -399,7 +399,7 @@
                         </div>
                         {/if}
                         <div class="tools-grid">
-                            <button class="tool-btn" class:active={isBlinking} aria-pressed={isBlinking} onclick={toggleBlink} title="Blink Test">
+                            <button class="tool-btn" class:active={isBlinking} aria-pressed={isBlinking} onclick={toggleBlink} title="Blink test: flip repeatedly between the original and the map, so the changes jump out">
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
                                     stroke-linecap="round" stroke-linejoin="round">
                                     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
@@ -408,7 +408,7 @@
                                 <span>Blink</span>
                             </button>
 
-                            <button class="tool-btn" class:active={showHeatmap} aria-pressed={showHeatmap} onclick={() => showHeatmap = !showHeatmap} title="Toggle Heat Map">
+                            <button class="tool-btn" class:active={showHeatmap} aria-pressed={showHeatmap} onclick={() => showHeatmap = !showHeatmap} title="Colour the map from dark (no change) to yellow and white (large change), instead of grayscale">
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                                     stroke-linecap="round" stroke-linejoin="round">
                                     <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
@@ -416,7 +416,7 @@
                                 <span>Heat Map</span>
                             </button>
 
-                            <button class="tool-btn" class:active={showBlockGrid} aria-pressed={showBlockGrid} onclick={() => showBlockGrid = !showBlockGrid} title="8×8 Block Grid">
+                            <button class="tool-btn" class:active={showBlockGrid} aria-pressed={showBlockGrid} onclick={() => showBlockGrid = !showBlockGrid} title="Overlay the 8×8 block grid the DCT works on, to line artifacts up with block edges">
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                                     stroke-linecap="round" stroke-linejoin="round">
                                     <rect x="3" y="3" width="7" height="7"/>
