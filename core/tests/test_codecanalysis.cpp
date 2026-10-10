@@ -108,3 +108,53 @@ TEST(CodecAnalysisTest, StructuralMapsAcceptSingleChannel) {
     EXPECT_GT(CodecAnalysis::computeEdgeDistortionMap(a, b).at(8, 8, 0), 0.0);
     EXPECT_GT(CodecAnalysis::computeBlockingMap(b).at(8, 8, 0), 0.0);
 }
+
+// --- SSIM against an independent reference -------------------------------
+// Expected values come from a NumPy implementation of Wang et al. (2004):
+// 11×11 Gaussian window, σ = 1.5, K1 = 0.01, K2 = 0.03, L = 255, mean over
+// the 'valid' region — the formulation of ssim_index.m and scikit-image.
+
+static Image lcgImage(int w, int h, unsigned seed) {
+    Image img(w, h, 1);
+    unsigned s = seed;
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            s = s * 1103515245u + 12345u;
+            img.at(x, y, 0) = static_cast<double>((s >> 16) % 256);
+        }
+    return img;
+}
+
+static Image smoothImage(int w, int h) {
+    Image img(w, h, 1);
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x)
+            img.at(x, y, 0) = 128.0 + 90.0 * std::sin(x * 0.21) * std::cos(y * 0.17);
+    return img;
+}
+
+TEST(CodecAnalysisTest, SSIM_MatchesReferenceImplementation) {
+    const int W = 40, H = 32;
+    const Image noise = lcgImage(W, H, 12345u);
+    const Image smooth = smoothImage(W, H);
+
+    Image noisy = smooth, shifted = smooth;
+    for (int y = 0; y < H; ++y)
+        for (int x = 0; x < W; ++x) {
+            noisy.at(x, y, 0) += (noise.at(x, y, 0) - 128.0) / 8.0;
+            shifted.at(x, y, 0) += 20.0;
+        }
+
+    EXPECT_NEAR(CodecAnalysis::computeSSIM(smooth, noisy), 0.868245474080, 1e-9);
+    EXPECT_NEAR(CodecAnalysis::computeSSIM(noise, smooth), 0.007581148316, 1e-9);
+    EXPECT_NEAR(CodecAnalysis::computeSSIM(smooth, shifted), 0.985743727949, 1e-9);
+}
+
+TEST(CodecAnalysisTest, SSIM_SmallImagesFallBackGracefully) {
+    // Smaller than the 11×11 window: clamped borders, still in range.
+    Image a = smoothImage(6, 5), b = lcgImage(6, 5, 7u);
+    const double ssim = CodecAnalysis::computeSSIM(a, b);
+    EXPECT_GE(ssim, -1.0);
+    EXPECT_LE(ssim, 1.0);
+    EXPECT_NEAR(CodecAnalysis::computeSSIM(a, a), 1.0, 1e-12);
+}

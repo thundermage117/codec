@@ -3,6 +3,7 @@ import {
     computeBasisPattern,
     getFreqLabel,
     getEntropySymbols,
+    reconstructBlock,
     estimateBlockBits,
     ZIGZAG_INDICES,
     computeHaarBasisPattern,
@@ -168,5 +169,50 @@ describe('dct-utils', () => {
             expect(getHaarFreqLabel(2, 2)).toBe('Mid');
             expect(getHaarFreqLabel(4, 4)).toBe('High');
         });
+    });
+});
+
+describe('differential DC coding', () => {
+    const block = (dc) => { const b = new Float64Array(64); b[0] = dc; return b; };
+
+    it('codes DC as the difference from the previous block', () => {
+        const [dcSym] = getEntropySymbols(block(20), 18);
+        expect(dcSym.type).toBe('DC');
+        expect(dcSym.amplitude).toBe(2);
+        expect(dcSym.dcValue).toBe(20);
+        expect(dcSym.dcPredictor).toBe(18);
+        expect(dcSym.size).toBe(2); // |2| needs 2 magnitude bits
+    });
+
+    it('makes a DC equal to its predictor cheap', () => {
+        expect(estimateBlockBits(block(37), 37)).toBeLessThan(estimateBlockBits(block(37), 0));
+    });
+
+    it('defaults to a zero predictor (first block of a scan)', () => {
+        expect(getEntropySymbols(block(5))[0].amplitude).toBe(5);
+    });
+});
+
+describe('reconstructBlock', () => {
+    it('a DC-only block reconstructs to a flat block offset by 128', () => {
+        const coeffs = new Float64Array(64);
+        coeffs[0] = 80; // orthonormal DC: mean offset = 80 / 8 = 10
+        const out = reconstructBlock(coeffs);
+        for (const v of out) expect(v).toBeCloseTo(138, 10);
+    });
+
+    it('dropping a coefficient removes exactly its basis pattern', () => {
+        const coeffs = new Float64Array(64);
+        coeffs[0] = 40; coeffs[1] = 25; coeffs[9] = -12;
+        const all = reconstructBlock(coeffs);
+        const without = reconstructBlock(coeffs, k => k !== 1);
+        // Index 1 = row 0, col 1: varies horizontally only.
+        for (let y = 0; y < 8; y++) {
+            const d0 = all[y * 8] - without[y * 8];
+            expect(d0).toBeGreaterThan(0);
+            for (let x = 0; x < 8; x++) {
+                expect(all[y * 8 + x] - without[y * 8 + x]).toBeCloseTo(all[x] - without[x], 10);
+            }
+        }
     });
 });

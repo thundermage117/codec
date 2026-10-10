@@ -34,6 +34,13 @@ export function processImage(quality: number, csMode: number, transformType?: nu
     Module._process_image(quality, csMode, t);
 }
 
+// Re-encodes for live preview (e.g. while a slider is dragged): updates the
+// displayed reconstruction but not PSNR/SSIM. Call processImage once settled.
+export function previewImage(quality: number, csMode: number, transformType?: number): void {
+    const t = transformType !== undefined ? transformType : appState.transformType;
+    Module._preview_image(quality, csMode, t);
+}
+
 // Encodes at the given settings for a rate–distortion sample. Unlike
 // processImage this leaves the session's processed image untouched and skips
 // SSIM, so it is cheap enough to call many times in a row.
@@ -91,21 +98,33 @@ export function inspectBlockData(blockX: number, blockY: number, channelIndex: n
     return Module._inspect_block_data(blockX, blockY, channelIndex, quality, appState.currentCsMode, t);
 }
 
-// Returns normalized DCT and DWT AC coefficient histograms for the Y channel.
-// num_bins bins from [0, max_val); the last bin is an overflow bucket.
+// Must match ImageCodec::CoefficientStats::NUM_BINS.
+export const COEFF_BINS = 12;
+
+export interface CoeffStats {
+    /** Fraction of AC/detail coefficients per log2 magnitude bin (see binLabel). */
+    histogram: number[];
+    /** Fraction of AC/detail coefficients that quantize to zero at the given quality. */
+    zeroFraction: number;
+}
+
+// Luma coefficient statistics for every transform at `quality`, computed with
+// the codec's own transforms and quantizers. Keyed by transform value.
 // Returns null if WASM is not ready or no image is loaded.
-export function getCoeffHistogram(numBins: number, maxVal: number): { dct: number[]; dwt: number[] } | null {
-    const ptr = Module._get_coeff_histogram(numBins, maxVal);
+export function getCoeffStats(quality: number): Record<number, CoeffStats> | null {
+    const ptr = Module._get_coeff_stats(quality);
     if (!ptr) return null;
     try {
         const view = new DataView(Module.HEAPU8.buffer);
-        const dct: number[] = [];
-        const dwt: number[] = [];
-        for (let i = 0; i < numBins; i++) {
-            dct.push(view.getFloat64(ptr + i * 8, true));
-            dwt.push(view.getFloat64(ptr + (numBins + i) * 8, true));
+        const record = COEFF_BINS + 1;
+        const result: Record<number, CoeffStats> = {};
+        for (let mode = 0; mode < 3; mode++) {
+            const base = ptr + mode * record * 8;
+            const histogram: number[] = [];
+            for (let b = 0; b < COEFF_BINS; b++) histogram.push(view.getFloat64(base + b * 8, true));
+            result[mode] = { histogram, zeroFraction: view.getFloat64(base + COEFF_BINS * 8, true) };
         }
-        return { dct, dwt };
+        return result;
     } finally {
         Module._free(ptr);
     }

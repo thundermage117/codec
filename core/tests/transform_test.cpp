@@ -56,3 +56,47 @@ TEST(TransformTest, RoundTrip) {
         }
     }
 }
+
+// Reference: the direct (non-separable) DCT-II definition the fast version
+// must match exactly (up to floating-point rounding).
+static void referenceDct(const double src[8][8], double dst[8][8]) {
+    const double pi = 3.14159265358979323846;
+    for (int u = 0; u < 8; ++u)
+        for (int v = 0; v < 8; ++v) {
+            double sum = 0.0;
+            for (int x = 0; x < 8; ++x)
+                for (int y = 0; y < 8; ++y)
+                    sum += src[x][y] * std::cos((2 * x + 1) * u * pi / 16.0)
+                                     * std::cos((2 * y + 1) * v * pi / 16.0);
+            const double cu = u == 0 ? 1.0 / std::sqrt(2.0) : 1.0;
+            const double cv = v == 0 ? 1.0 / std::sqrt(2.0) : 1.0;
+            dst[u][v] = 0.25 * cu * cv * sum;
+        }
+}
+
+TEST(TransformTest, MatchesDirectDefinition) {
+    double src[8][8], fast[8][8], ref[8][8];
+    unsigned state = 7u;
+    for (int i = 0; i < 8; ++i)
+        for (int j = 0; j < 8; ++j) {
+            state = state * 1103515245u + 12345u;
+            src[i][j] = static_cast<double>((state >> 16) % 256) - 128.0;
+        }
+    dct8x8(src, fast);
+    referenceDct(src, ref);
+    for (int u = 0; u < 8; ++u)
+        for (int v = 0; v < 8; ++v)
+            ASSERT_NEAR(fast[u][v], ref[u][v], 1e-9) << u << "," << v;
+}
+
+TEST(TransformTest, AsymmetricBlockKeepsOrientation) {
+    // A horizontal ramp (varies along the column index y) must put its
+    // energy in row u = 0, i.e. dst[0][v], not in column dst[u][0].
+    double src[8][8], dst[8][8];
+    for (int x = 0; x < 8; ++x)
+        for (int y = 0; y < 8; ++y)
+            src[x][y] = y * 10.0;
+    dct8x8(src, dst);
+    EXPECT_GT(std::abs(dst[0][1]), 1.0);
+    EXPECT_NEAR(dst[1][0], 0.0, 1e-9);
+}

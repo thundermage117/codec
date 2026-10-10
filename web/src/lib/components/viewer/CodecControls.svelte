@@ -1,6 +1,7 @@
 <script lang="ts">
     import { appState, ViewMode } from '../../state.svelte.js';
     import { TRANSFORMS, isWavelet } from '../../transforms.js';
+    import QualityControl from '../QualityControl.svelte';
 
     const VIEW_MODES = [
         { id: 'view_rgb', val: ViewMode.RGB, label: 'RGB' },
@@ -14,52 +15,15 @@
     // The subband pyramid only exists for wavelet transforms.
     const viewModes = $derived(isWavelet(appState.transformType) ? [...VIEW_MODES, SUBBAND_MODE] : VIEW_MODES);
 
-    // Local slider value so dragging doesn't re-encode on every input event;
-    // the committed value is written to appState on change/blur.
-    let qualitySliderValue = $state(appState.quality);
-    let isQualitySliderInteracting = false;
-
-    // Keep slider UI in sync with committed quality changes from non-slider actions.
-    $effect(() => {
-        const q = appState.quality;
-        if (!isQualitySliderInteracting) qualitySliderValue = q;
-    });
-
-    function onQualitySliderInput(event: Event): void {
-        qualitySliderValue = Number((event.target as HTMLInputElement).value);
-        isQualitySliderInteracting = true;
+    interface Props {
+        /** Live preview while the quality slider is dragged. */
+        onQualityPreview?: (quality: number) => void;
     }
 
-    function commitQualitySlider(): void {
-        isQualitySliderInteracting = false;
-        if (appState.quality !== qualitySliderValue) {
-            appState.quality = qualitySliderValue;
-        }
-    }
+    let { onQualityPreview }: Props = $props();
 </script>
 
-<div class="control-group">
-    <label for="qualitySlider">
-        Quality <span id="qualityValue">{qualitySliderValue}</span>
-    </label>
-    <div class="preset-group">
-        {#each [{ q: 10, label: 'Low', desc: 'Thumbnails' }, { q: 50, label: 'Medium', desc: 'Web / Social' }, { q: 90, label: 'High', desc: 'Print / Archive' }] as preset}
-        <button class="preset-btn" data-quality={preset.q}
-            class:active={appState.quality === preset.q}
-            disabled={!appState.wasmReady}
-            onclick={() => { appState.quality = preset.q; }}>
-            <span class="preset-label">{preset.label}</span>
-            <span class="preset-desc">{preset.desc}</span>
-        </button>
-        {/each}
-    </div>
-    <input type="range" id="qualitySlider" min="1" max="100"
-        value={qualitySliderValue}
-        oninput={onQualitySliderInput}
-        onchange={commitQualitySlider}
-        onblur={commitQualitySlider}
-        disabled={!appState.wasmReady}>
-</div>
+<QualityControl idPrefix="quality" onPreview={onQualityPreview} />
 
 <div class="control-group">
     <div class="group-label">View Mode</div>

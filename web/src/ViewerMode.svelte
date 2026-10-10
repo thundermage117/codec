@@ -1,7 +1,7 @@
 <script lang="ts">
     import { onDestroy, onMount, untrack } from 'svelte';
     import { appState, ViewMode, type ViewModeValue } from './lib/state.svelte.js';
-    import { processImage, rdEncode, getViewPtr, getStats, free, setViewTint, getLastBitEstimate } from './lib/wasm-bridge.js';
+    import { processImage, previewImage, rdEncode, getViewPtr, getStats, free, setViewTint, getLastBitEstimate } from './lib/wasm-bridge.js';
     import { TRANSFORMS, Transform, isWavelet, nextTransform, transformInfo } from './lib/transforms.js';
     import { parseUrlState, writeUrlState } from './lib/url-state.js';
     import { handleFileSelect, loadImageFromUrl } from './lib/image-manager.js';
@@ -208,6 +208,15 @@
         } finally {
             if (outputPtr) free(outputPtr);
         }
+    }
+
+    // Live preview while the quality slider is dragged: re-encode without
+    // metrics and redraw; the effect below does the full encode on release.
+    function previewQuality(q: number): void {
+        if (!appState.wasmReady || !appState.originalImageData) return;
+        previewImage(q, appState.currentCsMode);
+        render();
+        updateFileSizeEstimate();
     }
 
     // ===== Reactive effects =====
@@ -587,13 +596,13 @@
 
                     <div class="canvas-header-center">
                         <div class="view-mode-toggle">
-                            <button class:active={viewerToggle === 'comparison'} onclick={() => viewerToggle = 'comparison'}>
+                            <button class:active={viewerToggle === 'comparison'} aria-pressed={viewerToggle === 'comparison'} onclick={() => viewerToggle = 'comparison'}>
                                 Comparison
                             </button>
-                            <button class:active={viewerToggle === 'original'} onclick={() => viewerToggle = 'original'}>
+                            <button class:active={viewerToggle === 'original'} aria-pressed={viewerToggle === 'original'} onclick={() => viewerToggle = 'original'}>
                                 Original
                             </button>
-                            <button class:active={viewerToggle === 'processed'} onclick={() => viewerToggle = 'processed'}>
+                            <button class:active={viewerToggle === 'processed'} aria-pressed={viewerToggle === 'processed'} onclick={() => viewerToggle = 'processed'}>
                                 Processed
                             </button>
                         </div>
@@ -612,7 +621,7 @@
                                 Zoom out
                             </button>
                             {:else}
-                            <button class="zoom-ctrl-btn" class:active={isZoomMode}
+                            <button class="zoom-ctrl-btn" class:active={isZoomMode} aria-pressed={isZoomMode}
                                 onclick={toggleZoomMode}
                                 title={isZoomMode ? 'Exit zoom mode (Esc)' : 'Zoom mode — click image to zoom in'}>
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -635,6 +644,7 @@
                     style="width: 100%"
                     bind:originalCanvas
                     bind:processedCanvas
+                    processedLabel="Compressed image, {transformInfo(appState.transformType).label} at quality {appState.quality}"
                     viewType={viewerToggle}
                     bind:comparisonPercent={appState.comparisonPercent}
                     bind:isZoomMode
@@ -667,7 +677,7 @@
                 <div class="viewer-section-body">
                     <ImageSourcePanel bind:dropZoneVisible activeTestImageIndex={appState.activeTestImage}
                         onFile={loadFile} onTestImage={loadTestImage} />
-                    <CodecControls />
+                    <CodecControls onQualityPreview={previewQuality} />
                 </div>
             </details>
 

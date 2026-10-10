@@ -69,6 +69,33 @@ class AppState {
 
     // File size display
     fileSizeInfo = $state<FileSizeInfo | null>(null);
+
+    // Where Back / Escape in the block inspector should return to, when it was
+    // opened from another mode (e.g. clicking a block in the artifact map).
+    inspectorReturn = $state<{ mode: 'artifact_inspector'; viewMode: ViewModeValue } | null>(null);
 }
 
 export const appState = new AppState();
+
+/** Back / Escape: leave the current full-page mode. */
+export function leaveCurrentMode(): void {
+    const ret = appState.appMode === 'inspector' ? appState.inspectorReturn : null;
+    appState.inspectorReturn = null;
+    appState.isInspectMode = false;
+    appState.highlightBlock = null;
+    if (ret) {
+        appState.appMode = ret.mode;
+        appState.currentViewMode = ret.viewMode;
+    } else {
+        appState.appMode = 'viewer';
+        appState.currentViewMode = ViewMode.RGB;
+    }
+}
+
+/** Opens the block inspector on one block, remembering how to get back. */
+export function openBlockInspector(block: { x: number; y: number }, returnTo: AppState['inspectorReturn'] = null): void {
+    appState.inspectorReturn = returnTo;
+    appState.inspectedBlock = { ...block };
+    appState.isInspectMode = true;
+    appState.appMode = 'inspector';
+}

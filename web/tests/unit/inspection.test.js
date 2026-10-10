@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { inspectBlock } from '../../src/lib/inspection.js';
+import { inspectBlock, previousBlockInScan } from '../../src/lib/inspection.js';
 import { appState, ViewMode } from '../../src/lib/state.svelte.js';
 import { inspectBlockData, getProcessedRgba } from '../../src/lib/wasm-bridge.js';
 
@@ -138,5 +138,45 @@ describe('inspection.js - inspectBlock', () => {
         const mseSpan = document.getElementById('statMSE');
         expect(mseSpan.classList.contains('stat-good')).toBe(true);
         expect(mseSpan.innerText).toBe('0.00');
+    });
+});
+
+describe('previousBlockInScan', () => {
+    beforeEach(() => {
+        appState.imgWidth = 100; // 13 luma blocks per row; 50 px chroma → 7 blocks at 4:2:x
+        appState.imgHeight = 64;
+        appState.currentCsMode = 444;
+    });
+
+    it('steps left within a row and wraps to the end of the previous row', () => {
+        expect(previousBlockInScan(3, 2, 0)).toEqual({ x: 2, y: 2 });
+        expect(previousBlockInScan(0, 2, 0)).toEqual({ x: 12, y: 1 });
+        expect(previousBlockInScan(0, 0, 0)).toBeNull();
+    });
+
+    it('uses the coarser chroma grid at 4:2:0', () => {
+        appState.currentCsMode = 420;
+        // Luma-grid block (5, 3) is chroma block (2, 1); previous is chroma (1, 1).
+        expect(previousBlockInScan(5, 3, 1)).toEqual({ x: 2, y: 2 });
+        // Chroma block (0, 1) wraps to chroma (6, 0).
+        expect(previousBlockInScan(1, 2, 2)).toEqual({ x: 12, y: 0 });
+        expect(previousBlockInScan(1, 1, 1)).toBeNull();
+    });
+
+    it('keeps luma on its own grid regardless of subsampling', () => {
+        appState.currentCsMode = 420;
+        expect(previousBlockInScan(5, 3, 0)).toEqual({ x: 4, y: 3 });
+    });
+});
+
+describe('inspectBlock - DC prediction', () => {
+    it('reads the previous block before the current one', () => {
+        appState.currentViewMode = ViewMode.Y;
+        appState.imgWidth = 64;
+        appState.imgHeight = 64;
+        vi.mocked(inspectBlockData).mockClear();
+        inspectBlock(2, 1);
+        const calls = vi.mocked(inspectBlockData).mock.calls.map(c => [c[0], c[1]]);
+        expect(calls).toEqual([[1, 1], [2, 1]]);
     });
 });

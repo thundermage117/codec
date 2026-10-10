@@ -9,9 +9,11 @@ import {
     renderEntropySummary,
     startZigzagAnimation,
     startReconstructionAnimation,
-    stopReconstructionAnimation
+    stopReconstructionAnimation,
+    nextCellIndex
 } from '../../src/lib/grid-renderer';
 import { ZIGZAG_INDICES } from '../../src/lib/dct-utils';
+import { showBasisPopover, hideBasisPopover } from '../../src/lib/basis-popover';
 
 vi.mock('../../src/lib/basis-popover', () => ({
     showBasisPopover: vi.fn(),
@@ -544,5 +546,82 @@ describe('grid-renderer', () => {
             const run = document.querySelector('.zz-run');
             expect(run.classList.contains('cell-highlight')).toBe(true);
         });
+    });
+});
+
+describe('grid keyboard access', () => {
+    let grid;
+    let outsideKeys;
+
+    beforeEach(() => {
+        document.body.innerHTML = `
+            <div class="pipeline-block"><div class="pipeline-block-header"><h3>DCT Coefficients</h3></div>
+            <div id="gridDCT"></div></div>
+            <div id="basisPopover"></div>`;
+        grid = document.getElementById('gridDCT');
+        renderGrid('gridDCT', new Float64Array(64).map((_, i) => i), 'frequency', 'transform');
+        outsideKeys = vi.fn();
+        document.body.addEventListener('keydown', outsideKeys);
+        vi.mocked(showBasisPopover).mockClear();
+        vi.mocked(hideBasisPopover).mockClear();
+    });
+
+    const key = (el, k) => el.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
+
+    test('nextCellIndex moves within bounds', () => {
+        expect(nextCellIndex(0, 'ArrowLeft')).toBe(0);
+        expect(nextCellIndex(0, 'ArrowRight')).toBe(1);
+        expect(nextCellIndex(7, 'ArrowRight')).toBe(7);
+        expect(nextCellIndex(9, 'ArrowUp')).toBe(1);
+        expect(nextCellIndex(57, 'ArrowDown')).toBe(57);
+        expect(nextCellIndex(20, 'Home')).toBe(16);
+        expect(nextCellIndex(20, 'End')).toBe(23);
+        expect(nextCellIndex(20, 'a')).toBeNull();
+    });
+
+    test('grid is a labelled group with a single tab stop', () => {
+        expect(grid.getAttribute('role')).toBe('group');
+        expect(grid.getAttribute('aria-label')).toBe('DCT Coefficients');
+        const tabbable = [...grid.children].filter(c => c.tabIndex === 0);
+        expect(tabbable).toHaveLength(1);
+        expect(grid.children[0].getAttribute('role')).toBe('button');
+        expect(grid.children[9].getAttribute('aria-label')).toMatch(/^Row 2, column 2: 9\.0/);
+    });
+
+    test('arrow keys move focus inside the grid and do not reach the page', () => {
+        grid.children[0].focus();
+        key(grid.children[0], 'ArrowRight');
+        expect(document.activeElement).toBe(grid.children[1]);
+        expect(grid.children[1].tabIndex).toBe(0);
+        expect(grid.children[0].tabIndex).toBe(-1);
+        key(grid.children[1], 'ArrowDown');
+        expect(document.activeElement).toBe(grid.children[9]);
+        expect(outsideKeys).not.toHaveBeenCalled();
+    });
+
+    test('focusing a basis cell opens its popover', () => {
+        grid.children[3].focus();
+        expect(showBasisPopover).toHaveBeenCalledWith(expect.any(Object), 0, 3);
+    });
+
+    test('Escape closes an open popover without exiting, then passes through', () => {
+        document.getElementById('basisPopover').classList.add('visible');
+        grid.children[0].focus();
+        key(grid.children[0], 'Escape');
+        expect(hideBasisPopover).toHaveBeenCalled();
+        expect(outsideKeys).not.toHaveBeenCalled();
+
+        document.getElementById('basisPopover').classList.remove('visible');
+        key(grid.children[0], 'Escape');
+        expect(outsideKeys).toHaveBeenCalledTimes(1);
+    });
+
+    test('Enter on a basis cell triggers the basis animation', () => {
+        const listener = vi.fn();
+        window.addEventListener('animate-basis', listener);
+        key(grid.children[10], 'Enter');
+        expect(listener).toHaveBeenCalledTimes(1);
+        expect(listener.mock.calls[0][0].detail).toMatchObject({ row: 1, col: 2 });
+        window.removeEventListener('animate-basis', listener);
     });
 });

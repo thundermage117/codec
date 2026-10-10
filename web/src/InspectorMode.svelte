@@ -1,8 +1,11 @@
 <script lang="ts">
-    import { appState, ViewMode } from './lib/state.svelte.js';
+    import { appState, ViewMode, leaveCurrentMode } from './lib/state.svelte.js';
     import { inspectBlock } from './lib/inspection.js';
     import { computeSuggestedBlocks, renderBlockThumbnail } from './lib/suggested-blocks.js';
     import { processImage } from './lib/wasm-bridge.js';
+    import QualityControl from './lib/components/QualityControl.svelte';
+    import { coeffEdit } from './lib/coeff-edit.svelte.js';
+    import { renderInspectedBlock, droppedNonZeroCount } from './lib/inspection.js';
     import { untrack } from 'svelte';
 
     let thumbnailCanvas: HTMLCanvasElement;
@@ -27,6 +30,8 @@
     $effect(() => {
         const block = appState.inspectedBlock;
         if (block && appState.wasmReady) {
+            // Individual toggles belong to one block; keep-first-N persists.
+            untrack(() => { coeffEdit.dropped = []; });
             inspectBlock(block.x, block.y);
             renderContextCrop(block.x, block.y);
             highlightThumbnailBlock(block.x, block.y);
@@ -59,6 +64,19 @@
             }
             computeSuggestedBlocks();
         }
+    });
+
+    // Re-render the inspected block when coefficient edits change.
+    $effect(() => {
+        const _k = coeffEdit.keepFirst;
+        const _d = coeffEdit.dropped;
+        const _e = coeffEdit.editing;
+        untrack(() => renderInspectedBlock());
+    });
+
+    const editSummary = $derived.by(() => {
+        const _v = coeffEdit.renderVersion;
+        return droppedNonZeroCount();
     });
 
     const transformName = $derived(appState.transformType === 0 ? 'DCT' : 'DWT');
@@ -180,12 +198,21 @@
         };
     }
 
+    // In the stacked phone layout the pipeline sits below the sidebar, so a
+    // click on the navigator would otherwise change content off-screen.
+    function revealPipelineOnNarrowScreens(): void {
+        if (!window.matchMedia('(max-width: 900px)').matches) return;
+        requestAnimationFrame(() =>
+            document.getElementById('inspectorContent')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    }
+
     function onThumbnailClick(e: MouseEvent) {
         if (!appState.originalImageData) return;
         const { bx, by, valid } = getBlockFromEvent(e);
         if (valid) {
             appState.inspectedBlock = { x: bx, y: by };
             document.querySelectorAll('.suggested-block-btn').forEach(b => b.classList.remove('active'));
+            revealPipelineOnNarrowScreens();
         }
     }
 
@@ -219,16 +246,13 @@
     function onSuggestedBlockSelect(bx: number, by: number) {
         appState.inspectedBlock = { x: bx, y: by };
         highlightThumbnailBlock(bx, by);
+        revealPipelineOnNarrowScreens();
     }
 
     // ===== Back button =====
 
     function onBack() {
-        appState.appMode = 'viewer';
-        appState.currentViewMode = ViewMode.RGB;
-        appState.isInspectMode = false;
-        appState.highlightBlock = null;
-        // Button in ViewerMode handles its own active state via class:active
+        leaveCurrentMode();
     }
 
     // ===== Inspector view mode (Y/Cr/Cb only) =====
@@ -266,7 +290,7 @@
                     <line x1="19" y1="12" x2="5" y2="12"></line>
                     <polyline points="12 5 5 12 12 19"></polyline>
                 </svg>
-                Back
+                {appState.inspectorReturn ? 'Back to Artifacts' : 'Back'}
             </button>
             <h2 class="inspector-topbar-title">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -334,7 +358,7 @@
                                         {#each appState.suggestedBlocks.filter(b => b.category === cat) as block}
                                             {@const isActive = appState.inspectedBlock?.x === block.x && appState.inspectedBlock?.y === block.y}
                                             {@const scoreColor = cat === 'edge' ? '#3b82f6' : cat === 'texture' ? '#f59e0b' : '#10b981'}
-                                            <button class="suggested-block-btn" class:active={isActive}
+                                            <button class="suggested-block-btn" class:active={isActive} aria-pressed={isActive}
                                                 data-bx={block.x} data-by={block.y}
                                                 onclick={() => onSuggestedBlockSelect(block.x, block.y)}>
                                                 <div class="suggested-block-icon" style="color: {scoreColor}">{block.icon}</div>
@@ -357,24 +381,8 @@
                 <details class="sidebar-section sidebar-controls" open>
                     <summary class="sidebar-section-title"><span>Controls</span></summary>
                     <div class="sidebar-section-body">
-                        <div class="control-group">
-                            <label for="inspQualitySlider">
-                                Quality <span id="inspQualityValue">{appState.quality}</span>
-                            </label>
-                            <div class="preset-group">
-                                {#each [{ q: 10, label: 'Low', desc: 'Thumbnails' }, { q: 50, label: 'Medium', desc: 'Web / Social' }, { q: 90, label: 'High', desc: 'Print / Archive' }] as preset}
-                                <button class="preset-btn insp-preset-btn"
-                                    class:active={appState.quality === preset.q}
-                                    data-quality={preset.q}
-                                    onclick={() => { appState.quality = preset.q; }}>
-                                    <span class="preset-label">{preset.label}</span>
-                                    <span class="preset-desc">{preset.desc}</span>
-                                </button>
-                                {/each}
-                            </div>
-                            <input type="range" id="inspQualitySlider" min="1" max="100"
-                                bind:value={appState.quality}>
-                        </div>
+                        <!-- The inspector is block-focused and cheap to refresh, so dragging commits live. -->
+                        <QualityControl idPrefix="inspQuality" onPreview={(q) => { appState.quality = q; }} />
 
                         <div class="control-group">
                             <div class="group-label">View Mode</div>
@@ -415,7 +423,8 @@
                 <!-- Keyboard Shortcuts -->
                 <div class="sidebar-shortcuts">
                     <div class="shortcut-row"><kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> Navigate blocks</div>
-                    <div class="shortcut-row"><kbd>Esc</kbd> Exit inspector</div>
+                    <div class="shortcut-row"><kbd>Tab</kbd> into a grid, then <kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> explore cells, <kbd>Enter</kbd> animate</div>
+                    <div class="shortcut-row"><kbd>Esc</kbd> Close popover / exit inspector</div>
                     <div class="shortcut-row"><kbd>?</kbd> Show shortcuts</div>
                 </div>
             </aside>
@@ -485,6 +494,28 @@
                         </div>
 
                         <div class="pipeline-row-label">Decoding Pipeline</div>
+                        <div class="coeff-edit-bar" role="group" aria-label="Coefficient experiments">
+                            <button class="tool-btn coeff-edit-toggle" class:active={coeffEdit.editing} aria-pressed={coeffEdit.editing}
+                                onclick={() => coeffEdit.editing = !coeffEdit.editing}
+                                title="Click coefficients in the decoder grids to drop or restore them">
+                                ✎ Edit coefficients
+                            </button>
+                            <label class="coeff-keep">
+                                Keep first
+                                <input type="range" min="1" max="64" bind:value={coeffEdit.keepFirst}
+                                    aria-label="Number of zig-zag coefficients the decoder keeps">
+                                <span class="coeff-keep-value">{coeffEdit.keepFirst}</span>
+                                in zig-zag order
+                            </label>
+                            {#if coeffEdit.active}
+                            <span class="coeff-edit-summary" aria-live="polite">
+                                Dropping {editSummary.dropped} of {editSummary.nonZero} non-zero coefficients
+                            </span>
+                            <button class="tool-btn coeff-edit-reset" onclick={() => coeffEdit.reset()}>Reset</button>
+                            {:else if coeffEdit.editing}
+                            <span class="coeff-edit-summary">Click a coefficient in <em>Quantized</em> or <em>Dequantized</em> to drop it.</span>
+                            {/if}
+                        </div>
                         <div class="pipeline-row">
                             <div class="pipeline-block">
                                 <div class="pipeline-block-header"><h3>Quantized</h3></div>
@@ -578,8 +609,8 @@
                                     </div>
                                     <div class="stat-box tooltip-container">
                                         <div class="stat-value" id="statEstBits">—</div>
-                                        <div class="stat-label">Est. Bits</div>
-                                        <div class="tooltip-content-small"><strong>Estimated Bits</strong><br>Calculated via simplified Huffman simulation on Zig-zag scanned runs and symbol magnitudes.</div>
+                                        <div class="stat-label">JPEG Bits (est.)</div>
+                                        <div class="tooltip-content-small"><strong>Estimated Bits (JPEG-style)</strong><br>A simplified JPEG Huffman simulation for this block: zig-zag runs and magnitudes, with DC coded as the difference from the previous block. The viewer's file size uses a whole-image entropy estimate instead, so the two don't add up exactly.</div>
                                     </div>
                                     <div class="stat-box tooltip-container">
                                         <div class="stat-value" id="statBpp">—</div>

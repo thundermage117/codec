@@ -2,7 +2,48 @@ import { appState, ViewMode } from './state.svelte.js';
 import { inspectBlockData, getProcessedRgba } from './wasm-bridge.js';
 import { hideBasisPopover, setCachedGridData } from './basis-popover.js';
 import { renderGrid, renderLossMeter, renderZigzagArray, renderEntropySummary, stopReconstructionAnimation } from './grid-renderer.js';
-import { estimateBlockBits, getEntropySymbols } from './dct-utils.js';
+import { estimateBlockBits, getEntropySymbols, reconstructBlock } from './dct-utils.js';
+import { coeffEdit } from './coeff-edit.svelte.js';
+import { untrack } from 'svelte';
+
+// Index of the quantized grid within BlockDebugData (original, coefficients,
+// quantTable, quantized, reconstructed — 64 doubles each).
+const QUANTIZED_GRID = 3;
+
+/**
+ * The block coded just before (blockX, blockY) in a non-interleaved raster
+ * scan of this channel, in the original-image block coordinates that
+ * inspectBlockData expects; null for the first block. Subsampled chroma has
+ * its own, coarser block grid, so the step back happens in that grid.
+ */
+export function previousBlockInScan(blockX: number, blockY: number, channelIndex: number): { x: number; y: number } | null {
+    const chroma = channelIndex !== 0;
+    const scaleX = chroma && appState.currentCsMode !== 444 ? 2 : 1;
+    const scaleY = chroma && appState.currentCsMode === 420 ? 2 : 1;
+    const blocksPerRow = Math.ceil(Math.ceil(appState.imgWidth / scaleX) / 8);
+
+    const cx = Math.floor(blockX / scaleX);
+    const cy = Math.floor(blockY / scaleY);
+    let px: number, py: number;
+    if (cx > 0) { px = cx - 1; py = cy; }
+    else if (cy > 0) { px = blocksPerRow - 1; py = cy - 1; }
+    else return null;
+    return { x: px * scaleX, y: py * scaleY };
+}
+
+/** Everything the inspector shows for one block, copied out of the WASM heap. */
+interface InspectedBlock {
+    original: Float64Array;
+    coefficients: Float64Array;
+    quantTable: Float64Array;
+    quantized: Float64Array;
+    reconstructed: Float64Array;
+    prevDc: number;
+    originalRGB: Uint8ClampedArray | null;
+    reconstructedRGB: Uint8ClampedArray | null;
+}
+
+let current: InspectedBlock | null = null;
 
 export function inspectBlock(blockX: number, blockY: number): void {
     hideBasisPopover();
@@ -22,39 +63,27 @@ export function inspectBlock(blockX: number, blockY: number): void {
     if (qTableType) qTableType.innerText = tableLabel;
     if (qTableType2) qTableType2.innerText = tableLabel;
 
+    // Read the previous block's quantized DC first: inspectBlockData returns a
+    // pointer to one shared buffer that the next call overwrites.
+    const prev = previousBlockInScan(blockX, blockY, channelIndex);
+    let prevDc = 0;
+    if (prev) {
+        const prevPtr = inspectBlockData(prev.x, prev.y, channelIndex, appState.quality);
+        if (prevPtr) prevDc = new Float64Array(Module.HEAPU8.buffer, prevPtr + QUANTIZED_GRID * 64 * 8, 1)[0];
+    }
+
     const ptr = inspectBlockData(blockX, blockY, channelIndex, appState.quality);
     if (!ptr) {
         console.error('Failed to inspect block: Ptr is null');
         return;
     }
 
-    const blockSize = 64;
-    const readGrid = (offsetIdx: number): Float64Array => {
-        const startBytes = ptr + (offsetIdx * blockSize * 8);
-        return new Float64Array(Module.HEAPU8.buffer, startBytes, blockSize);
-    };
-
-    const originalData = readGrid(0);
-    const coeffData = readGrid(1);
-    const qtData = readGrid(2);
-    const quantData = readGrid(3);
-    const reconData = readGrid(4);
-
-    const errorData = new Float64Array(64);
-    for (let i = 0; i < 64; i++) {
-        errorData[i] = originalData[i] - reconData[i];
-    }
-
-    const dequantizedData = new Float64Array(64);
-    for (let i = 0; i < 64; i++) {
-        dequantizedData[i] = quantData[i] * qtData[i];
-    }
-
-    setCachedGridData({ coeffData, qtData, quantData, dequantizedData });
+    // Copy: the buffer is shared and gets overwritten by the next inspection.
+    const readGrid = (offsetIdx: number): Float64Array =>
+        new Float64Array(Module.HEAPU8.buffer, ptr + offsetIdx * 64 * 8, 64).slice();
 
     let originalRGB: Uint8ClampedArray | null = null;
     let reconstructedRGB: Uint8ClampedArray | null = null;
-
     if (appState.currentViewMode === ViewMode.RGB) {
         const w = appState.imgWidth;
         const h = appState.imgHeight;
@@ -65,6 +94,51 @@ export function inspectBlock(blockX: number, blockY: number): void {
         if (recon) reconstructedRGB = getBlockRGB(recon, w, h, blockX, blockY);
     }
 
+    current = {
+        original: readGrid(0),
+        coefficients: readGrid(1),
+        quantTable: readGrid(2),
+        quantized: readGrid(QUANTIZED_GRID),
+        reconstructed: readGrid(4),
+        prevDc,
+        originalRGB,
+        reconstructedRGB,
+    };
+    renderInspectedBlock();
+}
+
+/**
+ * Renders the inspected block, applying any coefficient edits (coeffEdit):
+ * dropped coefficients are zeroed on the decoder side, and the
+ * reconstruction, error, statistics and entropy panels follow.
+ *
+ * Runs untracked: callers are Svelte effects, and reading the edit state here
+ * must not make e.g. the block-change effect depend on it (that effect clears
+ * per-block toggles, so a toggle would immediately undo itself). The
+ * inspector's own edit effect subscribes to the edit state explicitly.
+ */
+export function renderInspectedBlock(): void {
+    untrack(renderNow);
+}
+
+function renderNow(): void {
+    if (!current) return;
+    const { original, coefficients, quantTable, prevDc, originalRGB } = current;
+    const edited = coeffEdit.active;
+
+    const quantized = current.quantized.map((q, i) => (edited && coeffEdit.isDropped(i) ? 0 : q));
+    const dequantized = quantized.map((q, i) => q * quantTable[i]);
+    // Unedited blocks show the codec's own reconstruction; edits are
+    // re-synthesised in JS from the remaining coefficients.
+    const reconstructed = edited ? reconstructBlock(dequantized) : current.reconstructed;
+    const reconstructedRGB = edited ? null : current.reconstructedRGB;
+    const isRGB = appState.currentViewMode === ViewMode.RGB && !edited;
+
+    const errorData = new Float64Array(64);
+    for (let i = 0; i < 64; i++) errorData[i] = original[i] - reconstructed[i];
+
+    setCachedGridData({ coeffData: coefficients, qtData: quantTable, quantData: quantized, dequantizedData: dequantized });
+
     let mse = 0;
     let peakError = 0;
     let zeroCount = 0;
@@ -72,7 +146,7 @@ export function inspectBlock(blockX: number, blockY: number): void {
     for (let i = 0; i < 64; i++) {
         mse += errorData[i] * errorData[i];
         peakError = Math.max(peakError, Math.abs(errorData[i]));
-        if (Math.abs(quantData[i]) < 0.5) zeroCount++;
+        if (Math.abs(quantized[i]) < 0.5) zeroCount++;
     }
     mse /= 64;
 
@@ -99,7 +173,7 @@ export function inspectBlock(blockX: number, blockY: number): void {
     setStatEl('statZeros', `${zeroCount}/64`, null, null);
     setStatEl('statCompression', `${zeroPercent}%`, compClass, compClass);
 
-    const estBits = estimateBlockBits(quantData);
+    const estBits = estimateBlockBits(quantized, prevDc);
     const bpp = estBits / 64;
 
     // Good bpp is strictly less than 1.5, moderate is < 3.0, otherwise poor.
@@ -107,21 +181,49 @@ export function inspectBlock(blockX: number, blockY: number): void {
     setStatEl('statEstBits', `${estBits}`, null, null);
     setStatEl('statBpp', bpp.toFixed(2), bppClass, bppClass);
 
-    renderGrid('gridOriginal', originalRGB ?? originalData, 'intensity', 'original', appState.currentViewMode === ViewMode.RGB);
-    renderGrid('gridDCT', coeffData, 'frequency', 'transform');
-    renderGrid('gridQuantized', quantData, 'frequency', 'quantized');
-    renderGrid('gridQuantized2', quantData, 'frequency', 'quantized');
-    renderGrid('gridQuantizedAdvanced', quantData, 'frequency', 'quantized');
-    renderGrid('gridDequantized', dequantizedData, 'frequency', 'dequantized');
-    renderGrid('gridReconstructed', reconstructedRGB ?? reconData, 'intensity', 'reconstructed', appState.currentViewMode === ViewMode.RGB);
-    renderGrid('gridQuantTable', qtData, 'qtable', 'qtable');
+    renderGrid('gridOriginal', (isRGB ? originalRGB : null) ?? original, 'intensity', 'original', isRGB && !!originalRGB);
+    renderGrid('gridDCT', coefficients, 'frequency', 'transform');
+    renderGrid('gridQuantized', current.quantized, 'frequency', 'quantized');
+    renderGrid('gridQuantized2', quantized, 'frequency', 'quantized');
+    renderGrid('gridQuantizedAdvanced', quantized, 'frequency', 'quantized');
+    renderGrid('gridDequantized', dequantized, 'frequency', 'dequantized');
+    renderGrid('gridReconstructed', reconstructedRGB ?? reconstructed, 'intensity', 'reconstructed', !!reconstructedRGB);
+    renderGrid('gridQuantTable', quantTable, 'qtable', 'qtable');
     renderGrid('gridError', Array.from(errorData), 'error', 'error');
+    markDroppedCells(['gridQuantized2', 'gridDequantized']);
 
     renderLossMeter(mse, peakError);
-    renderZigzagArray(quantData);
+    renderZigzagArray(quantized);
 
-    const entropySymbols = getEntropySymbols(quantData);
+    const entropySymbols = getEntropySymbols(quantized, prevDc);
     renderEntropySummary(entropySymbols);
+    coeffEdit.renderVersion++;
+}
+
+/** Number of non-zero quantized coefficients the current edits remove. */
+export function droppedNonZeroCount(): { dropped: number; nonZero: number } {
+    if (!current) return { dropped: 0, nonZero: 0 };
+    let dropped = 0;
+    let nonZero = 0;
+    current.quantized.forEach((q, i) => {
+        if (Math.round(q) === 0) return;
+        nonZero++;
+        if (coeffEdit.active && coeffEdit.isDropped(i)) dropped++;
+    });
+    return { dropped, nonZero };
+}
+
+function markDroppedCells(gridIds: string[]): void {
+    for (const id of gridIds) {
+        const grid = document.getElementById(id);
+        if (!grid) continue;
+        for (let i = 0; i < grid.children.length; i++) {
+            const cell = grid.children[i] as HTMLElement;
+            const dropped = coeffEdit.active && coeffEdit.isDropped(i);
+            cell.classList.toggle('cell-dropped', dropped);
+            if (dropped) cell.setAttribute('aria-label', `${cell.getAttribute('aria-label')} Dropped.`);
+        }
+    }
 }
 
 // Extracts an 8×8 RGB block from an RGBA buffer. Partial blocks at the

@@ -95,20 +95,32 @@ void init_session(uint8_t* rgba_input, int width, int height) {
     g_session.initialized = true;
 }
 
-EMSCRIPTEN_KEEPALIVE
-void process_image(int quality, int cs_mode, int transform_mode) {
-    if (!g_session.initialized) return;
-
-    auto cs = map_cs_mode(cs_mode);
-    auto transform = map_transform_mode(transform_mode);
-    ImageCodec codec(quality, true, cs, transform);
+// Encodes the session image and stores the reconstruction (no metrics).
+static void encodeIntoSession(int quality, int cs_mode, int transform_mode) {
+    ImageCodec codec(quality, true, map_cs_mode(cs_mode), map_transform_mode(transform_mode));
     g_session.processedBgr = codec.process(g_session.originalImage);
     g_session.lastBitEstimate = codec.getLastBitEstimate();
-    g_session.metrics = CodecAnalysis::computeMetrics(g_session.originalImage, g_session.processedBgr);
     g_session.processedYCrCb = bgrToYCrCb(g_session.processedBgr);
     g_session.quality = quality;
     g_session.csMode = cs_mode;
     g_session.transformMode = transform_mode;
+}
+
+EMSCRIPTEN_KEEPALIVE
+void process_image(int quality, int cs_mode, int transform_mode) {
+    if (!g_session.initialized) return;
+
+    encodeIntoSession(quality, cs_mode, transform_mode);
+    g_session.metrics = CodecAnalysis::computeMetrics(g_session.originalImage, g_session.processedBgr);
+}
+
+// Fast path for live preview while a slider is dragged: updates the displayed
+// reconstruction and bit estimate but skips PSNR/SSIM (left from the last
+// process_image call). Follow up with process_image once the value settles.
+EMSCRIPTEN_KEEPALIVE
+void preview_image(int quality, int cs_mode, int transform_mode) {
+    if (!g_session.initialized) return;
+    encodeIntoSession(quality, cs_mode, transform_mode);
 }
 
 // Lightweight encode for rate–distortion sweeps: returns luma PSNR and records
@@ -271,65 +283,28 @@ double get_last_bit_estimate() {
     return g_session.initialized ? g_session.lastBitEstimate : 0.0;
 }
 
-// Returns a malloc'd array of 2*num_bins doubles: [dct_bins | dwt_bins].
-// Each series is normalized by the total AC coefficient count.
-// Scans all 8×8 blocks of the Y channel, applies both DCT and DWT per block,
-// and bins the absolute magnitudes of AC coefficients (skipping DC [0][0]).
-// Caller must free the returned pointer.
+// Coefficient statistics of the original luma for every transform at the
+// given quality, computed with the codec's own transform and quantizer.
+// Returns a malloc'd array of 3 × (NUM_BINS + 1) doubles, one record per
+// transform mode (0 = DCT, 1 = Haar, 2 = CDF 9/7):
+//   [histogram[0..NUM_BINS-1], zeroFraction]
+// See ImageCodec::CoefficientStats for the bin layout. Caller must free.
 EMSCRIPTEN_KEEPALIVE
-double* get_coeff_histogram(int num_bins, double max_val) {
-    if (!g_session.initialized || num_bins <= 0 || max_val <= 0.0) return nullptr;
+double* get_coeff_stats(int quality) {
+    if (!g_session.initialized) return nullptr;
 
-    const Image& ycrcb = g_session.originalYCrCb;
-    const int w = ycrcb.width();
-    const int h = ycrcb.height();
-    const int blocksX = w / 8;
-    const int blocksY = h / 8;
-    if (blocksX == 0 || blocksY == 0) return nullptr;
-
-    double* out = (double*)calloc(2 * num_bins, sizeof(double));
+    constexpr int BINS = ImageCodec::CoefficientStats::NUM_BINS;
+    constexpr int RECORD = BINS + 1;
+    double* out = (double*)malloc(3 * RECORD * sizeof(double));
     if (!out) return nullptr;
 
-    double* dctBins = out;
-    double* dwtBins = out + num_bins;
-    long long totalCount = 0;
-
-    double src[8][8], dctCoeffs[8][8], dwtCoeffs[8][8];
-    const double* ycrcbData = ycrcb.data();
-
-    for (int by = 0; by < blocksY; by++) {
-        for (int bx = 0; bx < blocksX; bx++) {
-            // Extract 8×8 Y block with level shift matching processChannel
-            for (int row = 0; row < 8; row++) {
-                for (int col = 0; col < 8; col++) {
-                    src[row][col] = ycrcbData[((by * 8 + row) * w + (bx * 8 + col)) * 3] - 128.0;
-                }
-            }
-
-            dct8x8(src, dctCoeffs);
-            dwt8x8(src, dwtCoeffs);
-
-            // Bin AC coefficients — skip [0][0] (DC / LL)
-            for (int i = 0; i < 8; i++) {
-                for (int j = 0; j < 8; j++) {
-                    if (i == 0 && j == 0) continue;
-
-                    int dctBin = std::min(num_bins - 1, (int)(std::abs(dctCoeffs[i][j]) / max_val * num_bins));
-                    dctBins[dctBin]++;
-
-                    int dwtBin = std::min(num_bins - 1, (int)(std::abs(dwtCoeffs[i][j]) / max_val * num_bins));
-                    dwtBins[dwtBin]++;
-
-                    totalCount++;
-                }
-            }
-        }
+    const Image luma = extractChannel(g_session.originalYCrCb, 0);
+    for (int mode = 0; mode < 3; ++mode) {
+        ImageCodec codec(quality, true, ImageCodec::ChromaSubsampling::CS_444, map_transform_mode(mode));
+        const auto stats = codec.coefficientStats(luma);
+        std::copy(stats.histogram, stats.histogram + BINS, out + mode * RECORD);
+        out[mode * RECORD + BINS] = stats.zeroFraction;
     }
-
-    if (totalCount > 0) {
-        for (int i = 0; i < 2 * num_bins; i++) out[i] /= totalCount;
-    }
-
     return out;
 }
 

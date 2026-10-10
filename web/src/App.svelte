@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { appState, ViewMode } from './lib/state.svelte.js';
+    import { appState, leaveCurrentMode } from './lib/state.svelte.js';
     import { setupWasm } from './lib/wasm-bridge.js';
     import ViewerMode from './ViewerMode.svelte';
     import InspectorMode from './InspectorMode.svelte';
@@ -22,10 +22,7 @@
     function onKeyDown(e: KeyboardEvent) {
         if (e.key === 'Escape') {
             e.preventDefault();
-            appState.appMode = 'viewer';
-            appState.currentViewMode = ViewMode.RGB;
-            appState.isInspectMode = false;
-            appState.highlightBlock = null;
+            leaveCurrentMode();
             return;
         }
 

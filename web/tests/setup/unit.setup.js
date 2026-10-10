@@ -55,6 +55,7 @@ globalThis.Module = {
     _init_session: vi.fn(),
     _process_image: vi.fn(),
     _rd_encode: vi.fn(() => 33.25),
+    _get_coeff_stats: vi.fn(() => 0),
     _get_rd_bit_estimate: vi.fn(() => 12345),
     _get_view_ptr: vi.fn(() => 256),
     _set_view_tint: vi.fn(),

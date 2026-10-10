@@ -20,7 +20,7 @@
             {#if wavelet}
             <!-- Wavelets transform the whole image at once, so there are no 8×8 blocks to inspect. -->
             <button id="subbands_btn" class="tool-btn"
-                class:active={appState.currentViewMode === ViewMode.Subbands}
+                class:active={appState.currentViewMode === ViewMode.Subbands} aria-pressed={appState.currentViewMode === ViewMode.Subbands}
                 onclick={() => appState.currentViewMode = ViewMode.Subbands}
                 disabled={!appState.originalImageData}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -34,7 +34,7 @@
             </button>
             {:else}
             <button id="inspect_mode_btn" class="tool-btn"
-                class:active={appState.isInspectMode}
+                class:active={appState.isInspectMode} aria-pressed={appState.isInspectMode}
                 onclick={onEnterInspector}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="11" cy="11" r="8"></circle>

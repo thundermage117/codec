@@ -14,6 +14,23 @@ export function computeBasisPattern(u: number, v: number): Float64Array {
     return pattern;
 }
 
+/**
+ * Inverse 8×8 DCT in JS: 128 + Σ coeff[k] · basis_k over the coefficients for
+ * which `keep(k)` is true. Index k = row * 8 + col, where row is the vertical
+ * and col the horizontal frequency (the codec's layout). With every
+ * coefficient kept this matches the codec's own reconstruction.
+ */
+export function reconstructBlock(dequantized: ArrayLike<number>, keep: (k: number) => boolean = () => true): Float64Array {
+    const out = new Float64Array(64).fill(128);
+    for (let k = 0; k < 64; k++) {
+        const c = dequantized[k];
+        if (c === 0 || !keep(k)) continue;
+        const pattern = computeBasisPattern(k % 8, Math.floor(k / 8));
+        for (let i = 0; i < 64; i++) out[i] += c * pattern[i];
+    }
+    return out;
+}
+
 export function getFreqLabel(row: number, col: number): string {
     if (row === 0 && col === 0) return 'DC';
     const level = row + col;
@@ -42,19 +59,29 @@ export interface EntropySymbol {
     baseBits: number;
     magBits: number;
     totalBits: number;
+    /** DC only: the block's own quantized DC and the predictor it is coded against. */
+    dcValue?: number;
+    dcPredictor?: number;
 }
 
-export function getEntropySymbols(quantized: Float64Array | number[]): EntropySymbol[] {
+/**
+ * JPEG-style symbol stream for one quantized 8×8 block (zig-zag order).
+ * As in JPEG, the DC coefficient is coded as the difference from the previous
+ * block's quantized DC (`prevDc`, 0 for the first block of a scan).
+ */
+export function getEntropySymbols(quantized: Float64Array | number[], prevDc = 0): EntropySymbol[] {
     const symbols: EntropySymbol[] = [];
 
-    // DC coefficient
-    const dc = Math.round(quantized[0]);
-    if (dc !== 0) {
-        const size = Math.floor(Math.log2(Math.abs(dc))) + 1;
+    // DC coefficient, coded differentially
+    const dcValue = Math.round(quantized[0]);
+    const dcPredictor = Math.round(prevDc);
+    const diff = dcValue - dcPredictor;
+    if (diff !== 0) {
+        const size = Math.floor(Math.log2(Math.abs(diff))) + 1;
         // DC symbols use 2-9 bits for base category in JPEG
-        symbols.push({ type: 'DC', zIndex: 0, size, amplitude: dc, baseBits: 3, magBits: size, totalBits: 3 + size });
+        symbols.push({ type: 'DC', zIndex: 0, size, amplitude: diff, baseBits: 3, magBits: size, totalBits: 3 + size, dcValue, dcPredictor });
     } else {
-        symbols.push({ type: 'DC', zIndex: 0, size: 0, amplitude: 0, baseBits: 2, magBits: 0, totalBits: 2 });
+        symbols.push({ type: 'DC', zIndex: 0, size: 0, amplitude: 0, baseBits: 2, magBits: 0, totalBits: 2, dcValue, dcPredictor });
     }
 
     // AC coefficients (Zig-zag scan)
@@ -90,8 +117,8 @@ export function getEntropySymbols(quantized: Float64Array | number[]): EntropySy
     return symbols;
 }
 
-export function estimateBlockBits(quantized: Float64Array | number[]): number {
-    const symbols = getEntropySymbols(quantized);
+export function estimateBlockBits(quantized: Float64Array | number[], prevDc = 0): number {
+    const symbols = getEntropySymbols(quantized, prevDc);
     return symbols.reduce((acc, sym) => acc + sym.totalBits, 0);
 }
 

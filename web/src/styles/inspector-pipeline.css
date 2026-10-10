@@ -1353,3 +1353,66 @@
     color: var(--text);
     font-weight: 600;
 }
+/* ===== Coefficient experiments (decoder-side edits) ===== */
+.coeff-edit-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 16px;
+    margin: -4px 0 16px;
+    padding: 10px 12px;
+    border: 1px dashed var(--border);
+    border-radius: 10px;
+    font-size: var(--text-base-sm);
+    color: var(--text-muted);
+}
+
+.coeff-edit-bar .tool-btn {
+    width: auto;
+    flex: none;
+    margin: 0;
+    padding: 6px 12px;
+}
+
+.coeff-edit-toggle.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
+}
+
+.coeff-keep {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+}
+
+.coeff-keep input[type="range"] {
+    width: min(140px, 28vw);
+}
+
+.coeff-keep-value {
+    min-width: 2ch;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    color: var(--text);
+    text-align: right;
+}
+
+.coeff-edit-summary {
+    color: var(--text);
+}
+
+.coeff-edit-reset {
+    margin-left: auto;
+}
+
+/* A coefficient the decoder has been told to drop. */
+.grid-cell.cell-dropped {
+    background-color: transparent !important;
+    color: var(--text-muted) !important;
+    text-decoration: line-through;
+    outline: 1px dashed var(--text-muted);
+    outline-offset: -3px;
+    opacity: 0.7;
+}

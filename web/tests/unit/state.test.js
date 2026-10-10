@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { ViewMode, appState } from '../../src/lib/state.svelte.js';
+import { ViewMode, appState, leaveCurrentMode, openBlockInspector } from '../../src/lib/state.svelte.js';
 
 const INITIAL_STATE = {
     originalImageData: null,
@@ -157,5 +157,50 @@ describe('state mutations', () => {
         appState.originalImageData = { data, width: 64, height: 64 };
         expect(appState.originalImageData.width).toBe(64);
         expect(appState.originalImageData.data).toHaveLength(data.length);
+    });
+});
+
+describe('mode navigation', () => {
+    beforeEach(() => {
+        appState.appMode = 'viewer';
+        appState.currentViewMode = ViewMode.RGB;
+        appState.inspectorReturn = null;
+        appState.isInspectMode = false;
+    });
+
+    it('opens the block inspector on a block', () => {
+        openBlockInspector({ x: 4, y: 7 });
+        expect(appState.appMode).toBe('inspector');
+        expect(appState.inspectedBlock).toEqual({ x: 4, y: 7 });
+        expect(appState.isInspectMode).toBe(true);
+    });
+
+    it('leaving the inspector returns to where it was opened from', () => {
+        appState.appMode = 'artifact_inspector';
+        appState.currentViewMode = ViewMode.BlockingMap;
+        openBlockInspector({ x: 1, y: 2 }, { mode: 'artifact_inspector', viewMode: ViewMode.BlockingMap });
+        appState.currentViewMode = ViewMode.Y; // the inspector switches to a channel view
+
+        leaveCurrentMode();
+
+        expect(appState.appMode).toBe('artifact_inspector');
+        expect(appState.currentViewMode).toBe(ViewMode.BlockingMap);
+        expect(appState.inspectorReturn).toBeNull();
+        expect(appState.isInspectMode).toBe(false);
+    });
+
+    it('leaving without a return target goes to the viewer', () => {
+        openBlockInspector({ x: 0, y: 0 });
+        leaveCurrentMode();
+        expect(appState.appMode).toBe('viewer');
+        expect(appState.currentViewMode).toBe(ViewMode.RGB);
+    });
+
+    it('leaving the artifact inspector itself always goes to the viewer', () => {
+        appState.appMode = 'artifact_inspector';
+        appState.inspectorReturn = { mode: 'artifact_inspector', viewMode: ViewMode.Artifacts };
+        leaveCurrentMode();
+        expect(appState.appMode).toBe('viewer');
+        expect(appState.inspectorReturn).toBeNull();
     });
 });

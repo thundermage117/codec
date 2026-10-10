@@ -78,7 +78,7 @@ function drawPatternOnCanvas(canvasId: string, data: Float64Array | number[], mo
     }
 }
 
-function positionPopover(popover: HTMLElement, e: MouseEvent): void {
+function positionPopover(popover: HTMLElement, e: Pick<MouseEvent, 'clientX' | 'clientY'>): void {
     const margin = 16;
     const popW = 260;
     const popH = 240;
@@ -99,7 +99,7 @@ function positionPopover(popover: HTMLElement, e: MouseEvent): void {
     popover.style.top = `${y}px`;
 }
 
-export function showBasisPopover(e: MouseEvent, row: number, col: number): void {
+export function showBasisPopover(e: Pick<MouseEvent, 'clientX' | 'clientY'>, row: number, col: number): void {
     hideTooltip();
     const popover = document.getElementById('basisPopover');
     if (!popover || !cachedGridData.coeffData) return;

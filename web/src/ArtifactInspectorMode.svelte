@@ -1,9 +1,10 @@
 <script lang="ts">
     import { onMount, onDestroy } from 'svelte';
     import { fade } from 'svelte/transition';
-    import { appState, ViewMode } from './lib/state.svelte.js';
+    import { appState, ViewMode, openBlockInspector } from './lib/state.svelte.js';
     import { TRANSFORMS, isWavelet } from './lib/transforms.js';
-    import { processImage, getViewPtr, getStats, free, setArtifactGain } from './lib/wasm-bridge.js';
+    import { processImage, previewImage, getViewPtr, getStats, free, setArtifactGain } from './lib/wasm-bridge.js';
+    import QualityControl from './lib/components/QualityControl.svelte';
     import ImageViewer from './lib/components/ImageViewer.svelte';
 
     let artifactCanvas: HTMLCanvasElement | undefined = $state();
@@ -18,8 +19,6 @@
     let viewType = $state<'artifact' | 'original'>('artifact');
     let blinkPhase = $state<'artifact' | 'original'>('artifact');
 
-    let qualitySliderValue = $state(appState.quality);
-    let isSliderInteracting = false;
 
     const DEFAULT_GAIN = 5.0;
     let gainValue = $state(DEFAULT_GAIN);
@@ -39,12 +38,6 @@
         { id: 'art_cs_444', val: 444, label: '4:4:4' },
         { id: 'art_cs_422', val: 422, label: '4:2:2' },
         { id: 'art_cs_420', val: 420, label: '4:2:0' },
-    ];
-
-    const QUALITY_PRESETS = [
-        { q: 10, label: 'Low',    desc: 'Thumbnails' },
-        { q: 50, label: 'Medium', desc: 'Web / Social' },
-        { q: 90, label: 'High',   desc: 'Print / Archive' },
     ];
 
     // Wavelets have no 8×8 grid, so the blocking map should stay dark — say so.
@@ -104,22 +97,39 @@
     const EDGE_DISTORTION_GAIN = 4.0;
     const BLOCKING_GAIN = 8.0;
 
+    const currentGain = $derived(
+        appState.currentViewMode === ViewMode.EdgeDistortion ? EDGE_DISTORTION_GAIN
+        : appState.currentViewMode === ViewMode.BlockingMap ? BLOCKING_GAIN
+        : gainValue);
+
+    function formatLevels(v: number): string {
+        return v < 10 ? v.toFixed(1) : v.toFixed(0);
+    }
+
     const tooltipReading = $derived.by(() => {
         const mode = appState.currentViewMode;
-        const gain = mode === ViewMode.EdgeDistortion ? EDGE_DISTORTION_GAIN
-                   : mode === ViewMode.BlockingMap ? BLOCKING_GAIN
-                   : gainValue;
+        const gain = currentGain;
         const label = mode === ViewMode.EdgeDistortion ? 'Edge strength Δ'
                     : mode === ViewMode.BlockingMap ? 'Boundary step'
                     : '|Error|';
         const value = tooltip.val / gain;
         // A saturated pixel only tells us the true value is at least 255 / gain.
-        const text = `${tooltip.val >= 255 ? '≥ ' : ''}${value < 10 ? value.toFixed(1) : value.toFixed(0)}`;
+        const text = `${tooltip.val >= 255 ? '≥ ' : ''}${formatLevels(value)}`;
         return { label, text, saturated: tooltip.val >= 255 };
     });
 
+    // DCT codes 8×8 blocks independently, so a spot on the map can be opened in
+    // the block inspector. Wavelets have no blocks to open.
+    const canOpenBlocks = $derived(!isWavelet(appState.transformType));
+    let hoveredBlock = $state<{ x: number; y: number } | null>(null);
+
+    function openHoveredBlock(): void {
+        if (!hoveredBlock || !canOpenBlocks) return;
+        openBlockInspector(hoveredBlock, { mode: 'artifact_inspector', viewMode: appState.currentViewMode });
+    }
+
     function onArtifactMouseMove(e: MouseEvent) {
-        if (!rawArtifactData || !artifactCanvas) { tooltip.visible = false; return; }
+        if (!rawArtifactData || !artifactCanvas) { tooltip.visible = false; hoveredBlock = null; return; }
         const rect = artifactCanvas.getBoundingClientRect();
         const scaleX = artifactCanvas.width / rect.width;
         const scaleY = artifactCanvas.height / rect.height;
@@ -135,6 +145,7 @@
         tooltip.px = px;
         tooltip.py = py;
         tooltip.val = rawArtifactData[py * artifactCanvas.width + px];
+        hoveredBlock = canOpenBlocks && !isZoomMode ? { x: px >> 3, y: py >> 3 } : null;
     }
 
     function onChipMouseEnter(e: MouseEvent, desc: string) {
@@ -232,18 +243,14 @@
         const stats = getStats();
         appState.psnr = { y: stats.psnr.y, cr: stats.psnr.cr, cb: stats.psnr.cb };
         appState.ssim = { y: stats.ssim.y, cr: stats.ssim.cr, cb: stats.ssim.cb };
-        if (!isSliderInteracting) qualitySliderValue = q;
         if (artifactCtx) renderArtifact();
     });
 
-    function onQualityInput(e: Event) {
-        isSliderInteracting = true;
-        qualitySliderValue = Number((e.target as HTMLInputElement).value);
-    }
-
-    function commitQuality() {
-        isSliderInteracting = false;
-        if (appState.quality !== qualitySliderValue) appState.quality = qualitySliderValue;
+    // Live preview while the quality slider is dragged (metrics update on release).
+    function previewQuality(q: number): void {
+        if (!appState.wasmReady || !appState.originalImageData) return;
+        previewImage(q, appState.currentCsMode);
+        if (artifactCtx) renderArtifact();
     }
 
     function onGainInput(e: Event) {
@@ -315,7 +322,10 @@
     }
 
     function onArtCanvasClick(e: MouseEvent) {
-        if (!isZoomMode) return;
+        if (!isZoomMode) {
+            openHoveredBlock();
+            return;
+        }
         const canvas = viewType === 'artifact' ? artifactCanvas : originalCanvas;
         if (!canvas) return;
         if (zoom > 1) {
@@ -354,7 +364,7 @@
             </h2>
             <div class="artifact-chips">
                 {#each artifactModes as mode}
-                <button class="artifact-chip" class:active={appState.currentViewMode === mode.val}
+                <button class="artifact-chip" class:active={appState.currentViewMode === mode.val} aria-pressed={appState.currentViewMode === mode.val}
                     onclick={() => appState.currentViewMode = mode.val}
                     onmouseenter={(e) => onChipMouseEnter(e, mode.desc)}
                     onmouseleave={onChipMouseLeave}>
@@ -374,25 +384,7 @@
                 <details class="sidebar-section sidebar-controls" open>
                     <summary class="sidebar-section-title"><span>Controls</span></summary>
                     <div class="sidebar-section-body">
-                        <div class="control-group">
-                            <label for="artifactQualitySlider">
-                                Quality
-                                <span>{qualitySliderValue}</span>
-                            </label>
-                            <div class="preset-group">
-                                {#each QUALITY_PRESETS as p}
-                                <button class="preset-btn" class:active={appState.quality === p.q}
-                                    onclick={() => { appState.quality = p.q; }}>
-                                    <span class="preset-label">{p.label}</span>
-                                    <span class="preset-desc">{p.desc}</span>
-                                </button>
-                                {/each}
-                            </div>
-                            <input type="range" id="artifactQualitySlider" min="1" max="100" value={qualitySliderValue}
-                                oninput={onQualityInput}
-                                onchange={commitQuality}
-                                onblur={commitQuality}>
-                        </div>
+                        <QualityControl idPrefix="artifactQuality" onPreview={previewQuality} />
                         {#if appState.currentViewMode === ViewMode.Artifacts}
                         <div class="control-group" transition:fade={{duration: 150}}>
                             <label class="gain-label">
@@ -443,7 +435,7 @@
                     </summary>
                     <div class="sidebar-section-body">
                         <div class="tools-grid">
-                            <button class="tool-btn" class:active={isBlinking} onclick={toggleBlink} title="Blink Test">
+                            <button class="tool-btn" class:active={isBlinking} aria-pressed={isBlinking} onclick={toggleBlink} title="Blink Test">
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
                                     stroke-linecap="round" stroke-linejoin="round">
                                     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
@@ -452,7 +444,7 @@
                                 <span>Blink</span>
                             </button>
 
-                            <button class="tool-btn" class:active={showHeatmap} onclick={() => showHeatmap = !showHeatmap} title="Toggle Heat Map">
+                            <button class="tool-btn" class:active={showHeatmap} aria-pressed={showHeatmap} onclick={() => showHeatmap = !showHeatmap} title="Toggle Heat Map">
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                                     stroke-linecap="round" stroke-linejoin="round">
                                     <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
@@ -460,7 +452,7 @@
                                 <span>Heat Map</span>
                             </button>
 
-                            <button class="tool-btn" class:active={showBlockGrid} onclick={() => showBlockGrid = !showBlockGrid} title="8×8 Block Grid">
+                            <button class="tool-btn" class:active={showBlockGrid} aria-pressed={showBlockGrid} onclick={() => showBlockGrid = !showBlockGrid} title="8×8 Block Grid">
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                                     stroke-linecap="round" stroke-linejoin="round">
                                     <rect x="3" y="3" width="7" height="7"/>
@@ -474,12 +466,12 @@
 
                         {#if showHeatmap}
                         <div class="heatmap-scale-container" transition:fade={{duration: 150}}>
-                            <div class="heatmap-scale-label">Error Magnitude</div>
+                            <div class="heatmap-scale-label">{tooltipReading.label} (pixel levels)</div>
                             <div class="heatmap-scale-bar"></div>
                             <div class="heatmap-scale-range">
                                 <span>0</span>
-                                <span>127</span>
-                                <span>255</span>
+                                <span>{formatLevels(127.5 / currentGain)}</span>
+                                <span>≥ {formatLevels(255 / currentGain)}</span>
                             </div>
                         </div>
                         {/if}
@@ -488,7 +480,10 @@
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                                 <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
                             </svg>
-                            <p>Hover map for per-pixel error values. Mode chips have descriptions on hover.</p>
+                            <p>
+                                Hover the map for per-pixel values.
+                                {#if canOpenBlocks}Click to open that 8×8 block in the Block Inspector.{:else}Switch to DCT to open individual 8×8 blocks — wavelets have none.{/if}
+                            </p>
                         </div>
                     </div>
                 </details>
@@ -533,11 +528,11 @@
                 <!-- View Toggle + Zoom Controls (single row) -->
                 <div class="view-toggle-container">
                     <div class="view-toggle">
-                        <button class:active={viewType === 'original'}
+                        <button class:active={viewType === 'original'} aria-pressed={viewType === 'original'}
                             onclick={() => viewType = 'original'}>
                             Original
                         </button>
-                        <button class:active={viewType === 'artifact'}
+                        <button class:active={viewType === 'artifact'} aria-pressed={viewType === 'artifact'}
                             onclick={() => viewType = 'artifact'}>
                             {currentMode.label}
                         </button>
@@ -554,7 +549,7 @@
                             Zoom out
                         </button>
                         {:else}
-                        <button class="zoom-ctrl-btn" class:active={isZoomMode}
+                        <button class="zoom-ctrl-btn" class:active={isZoomMode} aria-pressed={isZoomMode}
                             onclick={toggleArtZoomMode}
                             title={isZoomMode ? 'Exit zoom mode (Esc)' : 'Zoom mode — click image to zoom in'}>
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -574,6 +569,7 @@
                         id="artifact"
                         bind:originalCanvas
                         bind:processedCanvas={artifactCanvas}
+                        processedLabel="{currentMode.label} map: {currentMode.desc}"
                         viewType={viewType === 'artifact' ? 'processed' : 'original'}
                         bind:isZoomMode
                         bind:zoom
@@ -583,7 +579,8 @@
                         zoomHint="Click image to zoom in &nbsp;·&nbsp; Esc to exit"
                         onViewerClick={onArtCanvasClick}
                         onViewerMouseMove={onArtifactMouseMove}
-                        onViewerMouseLeave={() => tooltip.visible = false}
+                        onViewerMouseLeave={() => { tooltip.visible = false; hoveredBlock = null; }}
+                        blockOutline={viewType === 'artifact' ? hoveredBlock : null}
                     />
                 </div>
 
@@ -610,6 +607,9 @@
         <div class="val-percent">
             {appState.currentViewMode === ViewMode.Artifacts ? 'Saturated — lower the gain to measure' : 'Saturated'}
         </div>
+        {/if}
+        {#if hoveredBlock}
+        <div class="val-percent">Click to inspect block ({hoveredBlock.x}, {hoveredBlock.y})</div>
         {/if}
     </div>
     {/if}
@@ -696,6 +696,33 @@
     }
 
     /* ===== View Toggle ===== */
+    @media (max-width: 900px) {
+        /* Chips get their own scrollable row under the title. */
+        .artifact-chips {
+            margin-left: 0;
+            width: 100%;
+            flex-wrap: nowrap;
+            overflow-x: auto;
+        }
+
+        .artifact-chip {
+            flex-shrink: 0;
+        }
+
+        .artifact-content {
+            overflow: visible;
+            min-height: 60vh;
+        }
+
+        .view-toggle-container {
+            flex-wrap: wrap;
+        }
+
+        .art-zoom-controls {
+            position: static;
+        }
+    }
+
     .view-toggle-container {
         display: flex;
         align-items: center;

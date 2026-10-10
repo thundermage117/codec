@@ -27,6 +27,8 @@ const resolveTsExtensions = {
 
 export default defineConfig({
     plugins: [resolveTsExtensions, svelte({ hot: false })],
+    // Use Svelte's client build under jsdom so components can be mounted.
+    resolve: { conditions: ['browser'] },
     test: {
         environment: 'jsdom',
         globals: true,
