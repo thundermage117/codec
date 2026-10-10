@@ -44,8 +44,12 @@ describe('ViewMode', () => {
         expect(ViewMode.Cb).toBe(4);
     });
 
-    it('has exactly 7 entries', () => {
-        expect(Object.keys(ViewMode)).toHaveLength(7);
+    it('has exactly 8 entries', () => {
+        expect(Object.keys(ViewMode)).toHaveLength(8);
+    });
+
+    it('exposes the wavelet Subbands view', () => {
+        expect(ViewMode.Subbands).toBe(7);
     });
 
     it('all values are unique integers', () => {

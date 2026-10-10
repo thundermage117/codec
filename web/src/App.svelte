@@ -4,6 +4,10 @@
     import ViewerMode from './ViewerMode.svelte';
     import InspectorMode from './InspectorMode.svelte';
     import ArtifactInspectorMode from './ArtifactInspectorMode.svelte';
+    import { restoreFromUrl } from './lib/url-state.js';
+
+    // Restore codec settings from a shared link before any mode mounts.
+    restoreFromUrl();
 
     // WASM init
     setupWasm(() => {

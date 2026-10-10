@@ -18,6 +18,11 @@
 
     --toggle-bg: #e2e8f0;
     --toggle-active-bg: #ffffff;
+
+    /* Chart series, one per transform */
+    --series-dct: var(--primary);
+    --series-haar: #d97706;
+    --series-cdf97: #059669;
     --toggle-label: #64748b;
 
     --tooltip-bg: #1e293b;
@@ -74,6 +79,9 @@
 }
 
 [data-theme="dark"] {
+    --series-haar: #fbbf24;
+    --series-cdf97: #34d399;
+
     --primary: #3b82f6;
     --primary-hover: #60a5fa;
     --primary-subtle: rgba(59, 130, 246, 0.1);

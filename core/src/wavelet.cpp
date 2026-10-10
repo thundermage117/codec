@@ -16,6 +16,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 #include "wavelet.h"
+#include "entropy.h"
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -135,33 +136,6 @@ void idwt8x8(const double src[8][8], double dst[8][8]) {
 // -----------------------------------------------------------------------
 
 /*
- * Estimates the number of bits required to encode the DWT coefficients
- * in `data` after quantization. This is a simple entropy-based estimate:
- * - Zero coefficients are very cheap (part of a run).
- * - Non-zero coefficients are estimated based on their magnitude.
- */
-double dwtEstimateBits(const double* data, int width, int height) {
-    double totalBits = 0;
-    size_t count = (size_t)width * height;
-    
-    // Very simple model: 
-    // - Each zero-run is roughly 1-2 bits per zero.
-    // - Each non-zero coeff takes ~log2(abs(val)) + sign + overhead.
-    for (size_t i = 0; i < count; ++i) {
-        double val = std::abs(data[i]);
-        if (val < 0.5) {
-            totalBits += 0.5; // Roughly 0.5 bits per zero on average (JPEG-like)
-        } else {
-            // log2(val) bits + 1 sign bit + 2 bits overhead
-            totalBits += std::log2(val) + 3.0;
-        }
-    }
-    
-    // Add some constant header overhead (roughly 400 bits)
-    return totalBits + 400.0;
-}
-
-/*
  * Forward 1D orthonormal Haar on n elements (arbitrary even n), in-place.
  * Identical math to haar1d_fwd but uses a heap buffer for any length.
  */
@@ -188,6 +162,75 @@ static void haar1d_inv_n(double* data, int n) {
     for (int k = 0; k < n; ++k) data[k] = tmp[k];
 }
 
+// CDF 9/7 lifting coefficients (Daubechies & Sweldens factorisation).
+static const double CDF97_ALPHA = -1.586134342059924;
+static const double CDF97_BETA  = -0.052980118572961;
+static const double CDF97_GAMMA =  0.882911075530934;
+static const double CDF97_DELTA =  0.443506852043971;
+static const double CDF97_K     =  1.230174104914001;
+// Scale low/high bands so the filter has the same √2 DC gain as the
+// orthonormal Haar — keeps quantization steps comparable across wavelets.
+static const double CDF97_LOW_SCALE  = SQRT2 / CDF97_K;
+static const double CDF97_HIGH_SCALE = CDF97_K / SQRT2;
+
+// One lifting step over the odd (parity=1) or even (parity=0) samples:
+// x[i] += c * (x[i-1] + x[i+1]), with whole-sample symmetric extension
+// (x[-1] = x[1], x[n] = x[n-2]). Requires even n >= 2.
+static void cdf97_lift(double* x, int n, int parity, double c) {
+    for (int i = parity; i < n; i += 2) {
+        double left  = x[i > 0 ? i - 1 : 1];
+        double right = x[i < n - 1 ? i + 1 : n - 2];
+        x[i] += c * (left + right);
+    }
+}
+
+/*
+ * Forward 1D CDF 9/7 on n elements (even n), in-place.
+ * Output layout matches haar1d_fwd_n: [low | high].
+ */
+static void cdf97_fwd_n(double* data, int n) {
+    cdf97_lift(data, n, 1, CDF97_ALPHA);
+    cdf97_lift(data, n, 0, CDF97_BETA);
+    cdf97_lift(data, n, 1, CDF97_GAMMA);
+    cdf97_lift(data, n, 0, CDF97_DELTA);
+
+    std::vector<double> tmp(n);
+    const int half = n / 2;
+    for (int k = 0; k < half; ++k) {
+        tmp[k]        = data[2*k]     * CDF97_LOW_SCALE;
+        tmp[k + half] = data[2*k + 1] * CDF97_HIGH_SCALE;
+    }
+    std::copy(tmp.begin(), tmp.end(), data);
+}
+
+/*
+ * Inverse 1D CDF 9/7 on n elements (even n), in-place.
+ */
+static void cdf97_inv_n(double* data, int n) {
+    std::vector<double> tmp(n);
+    const int half = n / 2;
+    for (int k = 0; k < half; ++k) {
+        tmp[2*k]     = data[k]        / CDF97_LOW_SCALE;
+        tmp[2*k + 1] = data[k + half] / CDF97_HIGH_SCALE;
+    }
+    std::copy(tmp.begin(), tmp.end(), data);
+
+    cdf97_lift(data, n, 0, -CDF97_DELTA);
+    cdf97_lift(data, n, 1, -CDF97_GAMMA);
+    cdf97_lift(data, n, 0, -CDF97_BETA);
+    cdf97_lift(data, n, 1, -CDF97_ALPHA);
+}
+
+using Wavelet1D = void (*)(double*, int);
+
+static Wavelet1D forward1D(WaveletType type) {
+    return type == WaveletType::CDF97 ? cdf97_fwd_n : haar1d_fwd_n;
+}
+
+static Wavelet1D inverse1D(WaveletType type) {
+    return type == WaveletType::CDF97 ? cdf97_inv_n : haar1d_inv_n;
+}
+
 int calcDwtLevels(int width, int height) {
     int levels = 0;
     int w = width, h = height;
@@ -199,34 +242,35 @@ int calcDwtLevels(int width, int height) {
     return std::min(levels, 6);
 }
 
-void dwtImage(double* data, int width, int height, int levels) {
+void dwtImage(double* data, int width, int height, int levels, WaveletType type) {
+    const Wavelet1D fwd = forward1D(type);
     std::vector<double> buf;
     int w = width, h = height;
 
     for (int lev = 0; lev < levels; ++lev) {
         if (w < 2 || h < 2) break;
 
-        // Round down to even so Haar pairs are well-defined at this level.
+        // Round down to even so filter pairs are well-defined at this level.
         // Any odd-boundary pixel in the last column/row is left untransformed.
         int wt = w & ~1;
         int ht = h & ~1;
 
-        // Forward Haar on rows: transform wt elements of each of the first ht rows.
+        // Forward 1D transform on rows: transform wt elements of each of the first ht rows.
         buf.resize(wt);
         for (int y = 0; y < ht; ++y) {
             std::copy(data + (size_t)y * width,
                       data + (size_t)y * width + wt,
                       buf.data());
-            haar1d_fwd_n(buf.data(), wt);
+            fwd(buf.data(), wt);
             std::copy(buf.data(), buf.data() + wt,
                       data + (size_t)y * width);
         }
 
-        // Forward Haar on columns: transform ht elements of each of the first wt columns.
+        // Forward 1D transform on columns: transform ht elements of each of the first wt columns.
         buf.resize(ht);
         for (int x = 0; x < wt; ++x) {
             for (int y = 0; y < ht; ++y) buf[y] = data[(size_t)y * width + x];
-            haar1d_fwd_n(buf.data(), ht);
+            fwd(buf.data(), ht);
             for (int y = 0; y < ht; ++y) data[(size_t)y * width + x] = buf[y];
         }
 
@@ -235,8 +279,9 @@ void dwtImage(double* data, int width, int height, int levels) {
     }
 }
 
-void idwtImage(double* data, int width, int height, int levels) {
+void idwtImage(double* data, int width, int height, int levels, WaveletType type) {
     if (levels <= 0) return;
+    const Wavelet1D inv = inverse1D(type);
 
     // Replay the forward pass to record the exact (wt, ht) at each level.
     std::vector<int> fwdW(levels), fwdH(levels);
@@ -263,7 +308,7 @@ void idwtImage(double* data, int width, int height, int levels) {
         buf.resize(th);
         for (int x = 0; x < tw; ++x) {
             for (int y = 0; y < th; ++y) buf[y] = data[(size_t)y * width + x];
-            haar1d_inv_n(buf.data(), th);
+            inv(buf.data(), th);
             for (int y = 0; y < th; ++y) data[(size_t)y * width + x] = buf[y];
         }
 
@@ -273,16 +318,22 @@ void idwtImage(double* data, int width, int height, int levels) {
             std::copy(data + (size_t)y * width,
                       data + (size_t)y * width + tw,
                       buf.data());
-            haar1d_inv_n(buf.data(), tw);
+            inv(buf.data(), tw);
             std::copy(buf.data(), buf.data() + tw,
                       data + (size_t)y * width);
         }
     }
 }
 
-double dwtQuantStep(int x, int y, int width, int height, int levels, double baseStep) {
-    if (levels <= 0) return baseStep;
-    
+// Per-level step multiplier for coarser subbands. The previous scheme halved
+// the step every level, which on an (near-)orthonormal transform spends far
+// more bits on coarse bands than they are worth (uniform steps are MSE-optimal).
+// 0.75 gave the best PSNR-at-equal-bitrate on the bundled test images.
+static const double DWT_LEVEL_STEP_RATIO = 0.75;
+
+int dwtSubbandIndex(int x, int y, int width, int height, int levels) {
+    if (levels <= 0) return 0;
+
     // Safety cap to prevent buffer overflow and integer shift overflow.
     // 16 levels is enough for any image up to 65536x65536.
     if (levels > 16) levels = 16;
@@ -303,18 +354,32 @@ double dwtQuantStep(int x, int y, int width, int height, int levels, double base
     // [0, fwdW[lev]/2) × [0, fwdH[lev]/2).  Scan from coarsest to finest so the
     // smallest (innermost) enclosing block wins.
     for (int lev = levels - 1; lev >= 0; --lev) {
-        int tw = fwdW[lev], th = fwdH[lev];
-        bool inBlock = (x < tw && y < th);
-        bool inLL    = (x < tw / 2 && y < th / 2);
-
-        if (inBlock && !inLL) {
-            // Detail band at forward level `lev`.
-            // lev=0 (finest details) → baseStep (most quantization)
-            // lev=levels-1 (coarsest details) → baseStep / 2^(levels-1) (least among details)
-            return std::max(1.0, baseStep / (double)(1 << lev));
+        const int tw = fwdW[lev], th = fwdH[lev];
+        const bool inBlock = (x < tw && y < th);
+        const bool right   = (x >= tw / 2);
+        const bool bottom  = (y >= th / 2);
+        if (inBlock && (right || bottom)) {
+            const int orientation = (right && bottom) ? 2 : (right ? 0 : 1);
+            return 1 + 3 * lev + orientation;
         }
     }
+    return 0; // LL approximation
+}
 
-    // LL approximation: smallest step, preserving the global structure.
-    return std::max(1.0, baseStep / (double)(1 << levels));
+double dwtQuantStep(int x, int y, int width, int height, int levels, double baseStep) {
+    if (levels <= 0) return baseStep;
+    const int band = dwtSubbandIndex(x, y, width, height, levels);
+    // LL sits one level below the coarsest detail bands.
+    const int lev = (band == 0) ? std::min(levels, 16) : (band - 1) / 3;
+    // lev=0 (finest details) → baseStep (most quantization)
+    // coarser levels → baseStep · ratio^lev (mild perceptual weighting)
+    return std::max(1.0, baseStep * std::pow(DWT_LEVEL_STEP_RATIO, lev));
+}
+
+double dwtEstimateBits(const double* data, int width, int height, int levels) {
+    EntropyEstimator estimator(3 * std::max(0, levels) + 1);
+    for (int y = 0; y < height; ++y)
+        for (int x = 0; x < width; ++x)
+            estimator.add(dwtSubbandIndex(x, y, width, height, levels), data[(size_t)y * width + x]);
+    return estimator.totalBits();
 }

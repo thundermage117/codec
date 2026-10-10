@@ -462,24 +462,12 @@ canvas {
     opacity: 0.75;
 }
 
-.rd-fill {
-    fill: url(#rdFillGrad);
-}
-
 .rd-curve-path {
     fill: none;
     stroke: var(--primary);
     stroke-width: 2.5;
     stroke-linecap: round;
     stroke-linejoin: round;
-}
-
-.rd-curve-path-dwt {
-    stroke: #f59e0b;
-}
-
-.rd-fill-dwt {
-    fill: url(#rdFillGradDwt);
 }
 
 .rd-crosshair {
@@ -511,14 +499,6 @@ canvas {
 
 .rd-point-current:hover {
     transform: scale(1.2);
-}
-
-.rd-point-dwt {
-    stroke: #f59e0b;
-}
-
-.rd-point-current-dwt {
-    fill: #f59e0b;
 }
 
 .rd-point-label {

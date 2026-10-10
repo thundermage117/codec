@@ -8,11 +8,14 @@ An interactive codec laboratory to visualize how transform-based image compressi
 
 - Real-time transform-based compression in the browser
 - C++ codec core compiled to WebAssembly
-- DCT and Wavelet transform comparison
+- DCT vs. wavelet (Haar and CDF 9/7, the JPEG 2000 wavelet) comparison
+- Wavelet subband pyramid view
+- Rate–distortion curves using a per-subband entropy estimate of bits
 - Interactive block inspector
 - Zig-zag and zero-run visualization
 - Artifact analysis maps
 - PSNR-based quality metrics
+- Shareable settings via the URL (`#q=30&t=cdf97&cs=420&img=3`), PNG export, and keyboard shortcuts (`[` / `]` quality, `T` transform)
 
 ## 🛠 Technologies
 
@@ -133,6 +136,8 @@ Run `./build/codec_app --help` to see available options.
 - [x] Multi-level decomposition (subband scaling)
 - [x] DWT-specific artifact analysis in Inspector
 - [x] Multi-transform bitrate estimation & comparison
+- [x] CDF 9/7 wavelet (lifting, symmetric extension)
+- [x] Wavelet subband pyramid visualization
 
 ### Phase 4: Future Work
 

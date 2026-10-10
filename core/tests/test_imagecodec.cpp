@@ -151,7 +151,7 @@ TEST(ImageCodecTest, ProcessSingleBlock) {
 }
 
 TEST(ImageCodecTest, ProcessNonMultipleOf8) {
-    // Dimensions not divisible by 8; partial boundary blocks are copied as-is
+    // Dimensions not divisible by 8; partial boundary blocks are padded and coded
     Image input = createTestImage(13, 11);
     ImageCodec codec(80.0);
     Image output = codec.process(input);
@@ -284,4 +284,141 @@ TEST(ImageCodecTest, InspectBlockHigherQualityLowerQuantTable) {
             highSum += highDebug.quantTable[i][j];
         }
     EXPECT_GT(lowSum, highSum);
+}
+
+// Deterministic noisy image: a hard case for quantization at every position.
+static Image createNoiseImage(int width, int height) {
+    Image img(width, height, 3);
+    unsigned state = 12345u;
+    double* data = img.data();
+    for (size_t i = 0; i < img.size(); ++i) {
+        state = state * 1103515245u + 12345u;
+        data[i] = static_cast<double>((state >> 16) % 256);
+    }
+    return img;
+}
+
+static const ImageCodec::TransformType ALL_TRANSFORMS[] = {
+    ImageCodec::TransformType::DCT,
+    ImageCodec::TransformType::DWT_HAAR,
+    ImageCodec::TransformType::DWT_97,
+};
+
+TEST(ImageCodecTest, PartialEdgeBlocksAreCoded) {
+    // 12×12: the right/bottom 4-pixel strips are partial 8×8 blocks. They used
+    // to be copied through untouched; now heavy quantization must alter them.
+    Image input = createNoiseImage(12, 12);
+    ImageCodec codec(1.0);
+    Image output = codec.process(input);
+
+    int changed = 0;
+    for (int y = 0; y < 12; ++y)
+        for (int x = 8; x < 12; ++x)
+            for (int c = 0; c < 3; ++c)
+                if (std::abs(output.at(x, y, c) - input.at(x, y, c)) > 1.0) ++changed;
+    EXPECT_GT(changed, 0);
+}
+
+TEST(ImageCodecTest, OutputStaysInPixelRangeForAllTransforms) {
+    Image input = createNoiseImage(37, 29);
+    for (auto t : ALL_TRANSFORMS) {
+        ImageCodec codec(1.0, true, ImageCodec::ChromaSubsampling::CS_420, t);
+        Image output = codec.process(input);
+        for (size_t i = 0; i < output.size(); ++i) {
+            ASSERT_GE(output.data()[i], 0.0);
+            ASSERT_LE(output.data()[i], 255.0);
+        }
+    }
+}
+
+TEST(ImageCodecTest, OutOfRangeQualityIsClamped) {
+    Image input = createTestImage(16, 16);
+    ImageCodec q1(1.0);
+    Image ref = q1.process(input);
+
+    for (double q : {0.0, -5.0}) {
+        ImageCodec codec(q);
+        Image output = codec.process(input);
+        for (size_t i = 0; i < output.size(); ++i) {
+            ASSERT_TRUE(std::isfinite(output.data()[i]));
+            ASSERT_DOUBLE_EQ(output.data()[i], ref.data()[i]);
+        }
+    }
+}
+
+TEST(ImageCodecTest, BitEstimateGrowsWithQuality) {
+    Image input = createNoiseImage(64, 64);
+    for (auto t : ALL_TRANSFORMS) {
+        double prev = -1.0;
+        for (double q : {5.0, 25.0, 50.0, 75.0, 95.0}) {
+            ImageCodec codec(q, true, ImageCodec::ChromaSubsampling::CS_444, t);
+            codec.process(input);
+            const double bits = codec.getLastBitEstimate();
+            EXPECT_GT(bits, prev) << "transform " << static_cast<int>(t) << " q" << q;
+            prev = bits;
+        }
+    }
+}
+
+TEST(ImageCodecTest, UniformImageIsNearlyFree) {
+    // A flat image quantizes to a constant per band, which has zero entropy.
+    Image input(32, 32, 3);
+    for (size_t i = 0; i < input.size(); ++i) input.data()[i] = 100.0;
+    for (auto t : ALL_TRANSFORMS) {
+        ImageCodec codec(50.0, true, ImageCodec::ChromaSubsampling::CS_444, t);
+        codec.process(input);
+        EXPECT_NEAR(codec.getLastBitEstimate(), 0.0, 1e-6);
+    }
+}
+
+TEST(ImageCodecTest, Cdf97OutperformsHaarOnSmoothContent) {
+    // Smooth gradients are where Haar's piecewise-constant basis struggles.
+    Image input(64, 64, 3);
+    for (int y = 0; y < 64; ++y)
+        for (int x = 0; x < 64; ++x)
+            for (int c = 0; c < 3; ++c)
+                input.at(x, y, c) = 128.0 + 100.0 * std::sin(x * 0.15 + c) * std::cos(y * 0.1);
+
+    ImageCodec haar(20.0, true, ImageCodec::ChromaSubsampling::CS_444, ImageCodec::TransformType::DWT_HAAR);
+    ImageCodec cdf(20.0, true, ImageCodec::ChromaSubsampling::CS_444, ImageCodec::TransformType::DWT_97);
+    const double psnrHaar = CodecAnalysis::computeMetrics(input, haar.process(input)).psnrY;
+    const double psnrCdf = CodecAnalysis::computeMetrics(input, cdf.process(input)).psnrY;
+    EXPECT_GT(psnrCdf, psnrHaar);
+}
+
+TEST(ImageCodecTest, SubbandMapOnlyForWavelets) {
+    Image channel(40, 24, 1);
+    for (int y = 0; y < 24; ++y)
+        for (int x = 0; x < 40; ++x)
+            channel.at(x, y, 0) = (x * 7 + y * 3) % 256;
+
+    ImageCodec dct(50.0);
+    EXPECT_TRUE(dct.subbandMap(channel).empty());
+
+    ImageCodec cdf(50.0, true, ImageCodec::ChromaSubsampling::CS_444, ImageCodec::TransformType::DWT_97);
+    Image map = cdf.subbandMap(channel);
+    ASSERT_EQ(map.width(), 40);
+    ASSERT_EQ(map.height(), 24);
+    for (size_t i = 0; i < map.size(); ++i) {
+        ASSERT_GE(map.data()[i], 0.0);
+        ASSERT_LE(map.data()[i], 255.0);
+    }
+}
+
+TEST(ImageCodecTest, ChromaUpsamplingIsSmooth) {
+    // A horizontal chroma ramp should survive 4:2:2 without stair-steps:
+    // bilinear upsampling keeps neighbouring output columns distinct.
+    Image input(32, 8, 3);
+    for (int y = 0; y < 8; ++y)
+        for (int x = 0; x < 32; ++x) {
+            input.at(x, y, 0) = 128.0;
+            input.at(x, y, 1) = 128.0;
+            input.at(x, y, 2) = 64.0 + 4.0 * x; // red ramp → Cr ramp
+        }
+    ImageCodec codec(100.0, false, ImageCodec::ChromaSubsampling::CS_422);
+    Image output = codec.process(input);
+    int flatPairs = 0;
+    for (int x = 2; x < 30; x += 2)
+        if (std::abs(output.at(x, 4, 2) - output.at(x + 1, 4, 2)) < 0.5) ++flatPairs;
+    EXPECT_EQ(flatPairs, 0);
 }

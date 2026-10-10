@@ -15,10 +15,14 @@
 struct CodecSession {
     Image originalImage;
     Image originalYCrCb;
+    Image processedBgr;   // cached so view switches don't re-run colour conversion
     Image processedYCrCb;
     Image inspectionChannel;
-    Image inspectionDS;
     double lastBitEstimate = 0.0;
+    double rdBitEstimate = 0.0;
+    int quality = 50;
+    int csMode = 444;
+    int transformMode = 0;
     CodecMetrics metrics;
     bool initialized = false;
     bool useTint = true;
@@ -40,7 +44,8 @@ enum ViewMode {
     Cr = 3,
     Cb = 4,
     EdgeDistortion = 5,
-    BlockingMap = 6
+    BlockingMap = 6,
+    Subbands = 7
 };
 
 static ImageCodec::ChromaSubsampling map_cs_mode(int mode) {
@@ -53,7 +58,21 @@ static ImageCodec::ChromaSubsampling map_cs_mode(int mode) {
 }
 
 static ImageCodec::TransformType map_transform_mode(int mode) {
-    return (mode == 1) ? ImageCodec::TransformType::DWT : ImageCodec::TransformType::DCT;
+    switch (mode) {
+        case 1:  return ImageCodec::TransformType::DWT_HAAR;
+        case 2:  return ImageCodec::TransformType::DWT_97;
+        default: return ImageCodec::TransformType::DCT;
+    }
+}
+
+// Copies one channel (0=Y, 1=Cr, 2=Cb) out of an interleaved YCrCb image.
+static Image extractChannel(const Image& ycrcb, int offset) {
+    Image channel(ycrcb.width(), ycrcb.height(), 1);
+    const double* src = ycrcb.data();
+    double* dst = channel.data();
+    const size_t numPixels = static_cast<size_t>(ycrcb.width()) * ycrcb.height();
+    for (size_t i = 0; i < numPixels; ++i) dst[i] = src[i * 3 + offset];
+    return channel;
 }
 
 extern "C" {
@@ -83,10 +102,32 @@ void process_image(int quality, int cs_mode, int transform_mode) {
     auto cs = map_cs_mode(cs_mode);
     auto transform = map_transform_mode(transform_mode);
     ImageCodec codec(quality, true, cs, transform);
-    Image processedBgr = codec.process(g_session.originalImage);
+    g_session.processedBgr = codec.process(g_session.originalImage);
     g_session.lastBitEstimate = codec.getLastBitEstimate();
-    g_session.metrics = CodecAnalysis::computeMetrics(g_session.originalImage, processedBgr);
-    g_session.processedYCrCb = bgrToYCrCb(processedBgr);
+    g_session.metrics = CodecAnalysis::computeMetrics(g_session.originalImage, g_session.processedBgr);
+    g_session.processedYCrCb = bgrToYCrCb(g_session.processedBgr);
+    g_session.quality = quality;
+    g_session.csMode = cs_mode;
+    g_session.transformMode = transform_mode;
+}
+
+// Lightweight encode for rate–distortion sweeps: returns luma PSNR and records
+// the bit estimate (read via get_rd_bit_estimate) without touching the
+// session's processed image or computing SSIM.
+EMSCRIPTEN_KEEPALIVE
+double rd_encode(int quality, int cs_mode, int transform_mode) {
+    if (!g_session.initialized) return 0.0;
+
+    ImageCodec codec(quality, true, map_cs_mode(cs_mode), map_transform_mode(transform_mode));
+    Image processedBgr = codec.process(g_session.originalImage);
+    g_session.rdBitEstimate = codec.getLastBitEstimate();
+    return CodecAnalysis::computePSNR(extractChannel(g_session.originalYCrCb, 0),
+                                      extractChannel(bgrToYCrCb(processedBgr), 0));
+}
+
+EMSCRIPTEN_KEEPALIVE
+double get_rd_bit_estimate() {
+    return g_session.initialized ? g_session.rdBitEstimate : 0.0;
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -105,32 +146,37 @@ uint8_t* get_view_ptr(int mode) {
 
     switch (static_cast<ViewMode>(mode)) {
         case RGB:
-            viewImage = ycrcbToBgr(g_session.processedYCrCb);
+            viewImage = g_session.processedBgr;
             break;
         case Artifacts:
             viewImage = CodecAnalysis::computeArtifactMap(
                 g_session.originalImage,
-                ycrcbToBgr(g_session.processedYCrCb),
+                g_session.processedBgr,
                 g_artifact_gain
             );
             break;
         case EdgeDistortion:
-            viewImage = CodecAnalysis::computeEdgeDistortionMap(g_session.originalImage, ycrcbToBgr(g_session.processedYCrCb));
+            viewImage = CodecAnalysis::computeEdgeDistortionMap(g_session.originalImage, g_session.processedBgr);
             break;
         case BlockingMap:
-            viewImage = CodecAnalysis::computeBlockingMap(ycrcbToBgr(g_session.processedYCrCb));
+            viewImage = CodecAnalysis::computeBlockingMap(g_session.processedBgr);
             break;
+        case Subbands: {
+            // Wavelet pyramid of the original luma at the current settings.
+            // DCT has no subband pyramid, so fall back to the reconstructed image.
+            ImageCodec codec(g_session.quality, true, map_cs_mode(g_session.csMode),
+                             map_transform_mode(g_session.transformMode));
+            viewImage = codec.isWavelet()
+                ? codec.subbandMap(extractChannel(g_session.originalYCrCb, 0))
+                : g_session.processedBgr;
+            break;
+        }
         case Y:
         case Cr:
         case Cb: {
-            Image channel(width, height, 1);
-            const double* ycrcbData = g_session.processedYCrCb.data();
-            double* channelData = channel.data();
-            int offset = (mode == Y) ? 0 : (mode == Cr ? 1 : 2);
-
-            for (size_t i = 0; i < numPixels; ++i) {
-                channelData[i] = ycrcbData[i * 3 + offset];
-            }
+            const int offset = (mode == Y) ? 0 : (mode == Cr ? 1 : 2);
+            Image channel = extractChannel(g_session.processedYCrCb, offset);
+            const double* channelData = channel.data();
 
             // Convert grayscale channel to 3-channel BGR for display
             Image bgrChannel(width, height, 3);
@@ -287,81 +333,14 @@ double* get_coeff_histogram(int num_bins, double max_val) {
     return out;
 }
 
-// Re-declaring to match the plan's arguments
-// Helper to downsample a channel (simple averaging)
-// Helper to downsample a channel (simple averaging)
-void downsample_channel(const Image& src, Image& dst, ImageCodec::ChromaSubsampling cs) {
-    if (cs == ImageCodec::ChromaSubsampling::CS_444) {
-        // Just copy src to dst if 4:4:4 (shouldn't really happen with logic below, but safe fallback)
-        dst = src; 
-        return;
-    }
-
-    int w = src.width();
-    int h = src.height();
-    int scaleX = (cs == ImageCodec::ChromaSubsampling::CS_444) ? 1 : 2;
-    int scaleY = (cs == ImageCodec::ChromaSubsampling::CS_420) ? 2 : 1;
-
-    int newW = (w + scaleX - 1) / scaleX;
-    int newH = (h + scaleY - 1) / scaleY;
-
-    // Resize dst only if dimensions differ
-    if (dst.width() != newW || dst.height() != newH || dst.channels() != 1) {
-        dst = Image(newW, newH, 1);
-    }
-    
-    // We can't easily reuse the internal vector without a resize method in Image that preserves capacity,
-    // but assignment operator with new Image(w,h) will reallocate.
-    // However, since we defined 'dst' in g_session, we want to avoid reallocation if possible.
-    // The Image class in Image.h doesn't have a 'resize' method that keeps capacity.
-    // Let's assume for now assignment is better than creating a LOCAL Image that dies immediately.
-    // Ideally Image class should have a 'resize' or 'reshape'.
-    // Use the naive assignment for now, it is still better than stack trashing if the compiler optimizes.
-    // user: "Image class uses vector, so we could add a resize method?"
-    // For now, let's just stick to the plan. Even member assignment avoids stack variable destroy/create overhead.
-    
-    for (int y = 0; y < newH; ++y) {
-        for (int x = 0; x < newW; ++x) {
-            double sum = 0.0;
-            int count = 0;
-            int startX = x * scaleX;
-            int startY = y * scaleY;
-            
-            for (int dy = 0; dy < scaleY && (startY + dy) < h; ++dy) {
-                for (int dx = 0; dx < scaleX && (startX + dx) < w; ++dx) {
-                    sum += src.at(startX + dx, startY + dy, 0);
-                    count++;
-                }
-            }
-            dst.at(x, y, 0) = count > 0 ? sum / count : 0.0;
-        }
-    }
-}
-
 EMSCRIPTEN_KEEPALIVE
 double* inspect_block_data(int blockX, int blockY, int channelIndex, int quality, int cs_mode, int transform_mode) {
     if (!g_session.initialized) return nullptr;
 
-    // 1. Extract the specific channel from cached YCrCb
-    const Image& ycrcb = g_session.originalYCrCb;
-    
-    // Reuse session buffer
-    Image& channel = g_session.inspectionChannel;
-    if (channel.width() != ycrcb.width() || channel.height() != ycrcb.height() || channel.channels() != 1) {
-        channel = Image(ycrcb.width(), ycrcb.height(), 1);
-    }
-
-    const double* src = ycrcb.data();
-    double* dst = channel.data();
-    int offset = (channelIndex == 0) ? 0 : (channelIndex == 1 ? 1 : 2); // Y=0, Cr=1, Cb=2
-
-    const size_t numPixels = static_cast<size_t>(ycrcb.width()) * ycrcb.height();
-    
-    // Optimization: Unroll or memcpy if possible? 
-    // Strided copy, can't memcpy. But this simple loop is fast.
-    for(size_t i=0; i < numPixels; ++i) {
-        dst[i] = src[i*3 + offset];
-    }
+    // 1. Extract the specific channel from cached YCrCb (Y=0, Cr=1, Cb=2)
+    const int offset = (channelIndex == 0) ? 0 : (channelIndex == 1 ? 1 : 2);
+    g_session.inspectionChannel = extractChannel(g_session.originalYCrCb, offset);
+    const Image& channel = g_session.inspectionChannel;
 
     bool isChroma = (channelIndex != 0);
     auto cs = map_cs_mode(cs_mode);
@@ -372,10 +351,10 @@ double* inspect_block_data(int blockX, int blockY, int channelIndex, int quality
     int targetBx = blockX;
     int targetBy = blockY;
 
+    Image downsampled;
     if (isChroma && cs != ImageCodec::ChromaSubsampling::CS_444) {
-        // Reuse session buffer for downsampling
-        downsample_channel(channel, g_session.inspectionDS, cs);
-        blockSourcePtr = &g_session.inspectionDS;
+        downsampled = ImageCodec::downsampleChannel(channel, cs);
+        blockSourcePtr = &downsampled;
         
         // Map 8x8 block coords in original space to 8x8 block coords in downsampled space
         // 4:2:0 -> 2x2 original blocks = 1 chroma block

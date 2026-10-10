@@ -1,7 +1,9 @@
 <script lang="ts">
-    import { onDestroy, onMount } from 'svelte';
+    import { onDestroy, onMount, untrack } from 'svelte';
     import { appState, ViewMode, type ViewModeValue } from './lib/state.svelte.js';
-    import { processImage, getViewPtr, getStats, free, setViewTint, getLastBitEstimate } from './lib/wasm-bridge.js';
+    import { processImage, rdEncode, getViewPtr, getStats, free, setViewTint, getLastBitEstimate } from './lib/wasm-bridge.js';
+    import { TRANSFORMS, Transform, isWavelet, nextTransform, transformInfo } from './lib/transforms.js';
+    import { parseUrlState, writeUrlState } from './lib/url-state.js';
     import { handleFileSelect, loadImageFromUrl } from './lib/image-manager.js';
     import { formatBytes } from './lib/format.js';
     import ImageViewer from './lib/components/ImageViewer.svelte';
@@ -16,8 +18,7 @@
     let originalCanvas: HTMLCanvasElement | undefined = $state();
     let processedCanvas: HTMLCanvasElement | undefined = $state();
     let dropZoneVisible = $state(!appState.originalImageData);
-    let rdPointsDct = $state<RdPoint[]>([]);
-    let rdPointsDwt = $state<RdPoint[]>([]);
+    let rdSeries = $state<Record<number, RdPoint[]>>({});
     let rdLoading = $state(false);
     let rdError = $state('');
     let rdJobId = 0;
@@ -79,7 +80,7 @@
 
     onMount(() => {
         // Ensure we're in a view mode supported by the viewer UI
-        const viewerModes: ViewModeValue[] = [ViewMode.RGB, ViewMode.Artifacts, ViewMode.Y, ViewMode.Cr, ViewMode.Cb];
+        const viewerModes: ViewModeValue[] = [ViewMode.RGB, ViewMode.Artifacts, ViewMode.Y, ViewMode.Cr, ViewMode.Cb, ViewMode.Subbands];
         if (!viewerModes.includes(appState.currentViewMode)) {
             appState.currentViewMode = ViewMode.RGB;
         }
@@ -245,25 +246,21 @@
         if (!file || !file.type.startsWith('image/')) return;
         if (!originalCanvas || !processedCanvas) return;
         handleFileSelect(file, originalCanvas, processedCanvas, () => {
-            activeTestImageIndex = null;
-            appState.quality = 50;
-            processImage(50, appState.currentCsMode);
-            appState.comparisonPercent = 50;
+            appState.activeTestImage = null;
+            processImage(appState.quality, appState.currentCsMode);
+            if (viewerToggle === 'comparison') appState.comparisonPercent = 50;
             render();
             updateFileSizeEstimate();
             dropZoneVisible = false;
         });
     }
 
-    let activeTestImageIndex = $state<number | null>(null);
-
     function loadTestImage(index: number) {
         if (!appState.wasmReady || !originalCanvas || !processedCanvas) return;
         loadImageFromUrl(`/test-images/${index}.png`, originalCanvas, processedCanvas, () => {
-            activeTestImageIndex = index;
-            appState.quality = 50;
-            processImage(50, appState.currentCsMode);
-            appState.comparisonPercent = 50;
+            appState.activeTestImage = index;
+            processImage(appState.quality, appState.currentCsMode);
+            if (viewerToggle === 'comparison') appState.comparisonPercent = 50;
             render();
             updateFileSizeEstimate();
             dropZoneVisible = false;
@@ -349,14 +346,14 @@
             appState.inspectedBlock = { ...appState.highlightBlock };
             appState.appMode = 'inspector';
             appState.isInspectMode = true;
-            appState.transformType = 0;
+            appState.transformType = Transform.DCT;
         }
     }
 
     function enterInspectorMode() {
         appState.appMode = 'inspector';
         appState.isInspectMode = true;
-        appState.transformType = 0;
+        appState.transformType = Transform.DCT;
     }
 
     function onViewerMouseLeave() {
@@ -400,54 +397,37 @@
         rdLoading = true;
         rdError = '';
 
-        const pointsDct: RdPoint[] = [];
-        const pointsDwt: RdPoint[] = [];
+        const series: Record<number, RdPoint[]> = {};
+        const pixels = appState.imgWidth * appState.imgHeight;
 
         try {
-            // Process DCT (0) and DWT (1)
-            for (const tType of [0, 1]) {
-                for (let i = 0; i < RD_QUALITIES.length; i++) {
+            for (const t of TRANSFORMS) {
+                const points: RdPoint[] = [];
+                for (const quality of RD_QUALITIES) {
                     if (jobId !== rdJobId) return;
 
-                    const quality = RD_QUALITIES[i];
-                    processImage(quality, appState.currentCsMode, tType);
-                    const stats = getStats();
-                    const bits = getLastBitEstimate();
-                    const estimatedBytes = bits > 0 ? Math.max(64, Math.round(bits / 8)) : null;
-                    if (estimatedBytes) {
-                        const pt = {
-                            quality,
-                            psnr: stats.psnr.y,
-                            estimatedBytes,
-                            bitrate: (estimatedBytes * 8) / (appState.imgWidth * appState.imgHeight)
-                        };
-                        if (tType === 0) pointsDct.push(pt);
-                        else pointsDwt.push(pt);
+                    const { psnrY, bits } = rdEncode(quality, appState.currentCsMode, t.value);
+                    if (bits > 0) {
+                        const estimatedBytes = Math.max(64, Math.round(bits / 8));
+                        points.push({ quality, psnr: psnrY, estimatedBytes, bitrate: (estimatedBytes * 8) / pixels });
                     }
 
                     // Yield after every encode so the event loop can process slider/UI events
                     await new Promise(resolve => setTimeout(resolve, 0));
                 }
+                series[t.value] = points.sort((a, b) => a.bitrate - b.bitrate);
             }
 
-            if (jobId === rdJobId) {
-                rdPointsDct = pointsDct.sort((a, b) => a.bitrate - b.bitrate);
-                rdPointsDwt = pointsDwt.sort((a, b) => a.bitrate - b.bitrate);
-            }
+            if (jobId === rdJobId) rdSeries = series;
         } catch (error) {
             console.error('RD curve generation error:', error);
             if (jobId === rdJobId) {
                 rdError = 'Unable to generate RD curve.';
-                rdPointsDct = [];
-                rdPointsDwt = [];
+                rdSeries = {};
             }
         } finally {
-            if (jobId === rdJobId) {
-                processImage(appState.quality, appState.currentCsMode);
-                render();
-                updateFileSizeEstimate();
-                rdLoading = false;
-            }
+            // rdEncode never touches the displayed image, so nothing to restore.
+            if (jobId === rdJobId) rdLoading = false;
         }
     }
 
@@ -481,20 +461,105 @@
         const _image = appState.originalImageData;
         clearRdScheduling();
         rdJobId++;
-        rdPointsDct = [];
-        rdPointsDwt = [];
+        rdSeries = {};
         rdLoading = false;
         rdError = '';
     });
 
     // ===== Keyboard shortcuts =====
 
+    function isTypingTarget(target: EventTarget | null): boolean {
+        if (!(target instanceof HTMLElement)) return false;
+        if (target.isContentEditable) return true;
+        if (target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return true;
+        // Range sliders and radios don't consume [, ] or T, so shortcuts stay live there.
+        return target instanceof HTMLInputElement && !['range', 'radio', 'checkbox', 'button'].includes(target.type);
+    }
+
     function onDocumentKeyDown(e: KeyboardEvent) {
         if (e.key === 'Escape') {
             if (zoom > 1) { zoom = 1; }
             if (isZoomMode) { isZoomMode = false; }
+            return;
+        }
+
+        if (e.ctrlKey || e.metaKey || e.altKey || isTypingTarget(e.target)) return;
+        if (!appState.wasmReady || !appState.originalImageData) return;
+
+        if (e.key === '[' || e.key === ']') {
+            e.preventDefault();
+            const step = e.key === ']' ? 5 : -5;
+            appState.quality = Math.max(1, Math.min(100, appState.quality + step));
+        } else if (e.key === 't' || e.key === 'T') {
+            e.preventDefault();
+            appState.transformType = nextTransform(appState.transformType);
         }
     }
+
+    // ===== Download =====
+
+    function downloadProcessed(): void {
+        if (!processedCanvas || !appState.originalImageData) return;
+        const t = transformInfo(appState.transformType).slug;
+        const filename = `codec-q${appState.quality}-${t}-${appState.currentCsMode}.png`;
+        processedCanvas.toBlob((blob) => {
+            if (!blob) return;
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 0);
+        }, 'image/png');
+    }
+
+    // ===== Wavelet-only views =====
+
+    // The subband pyramid doesn't exist for DCT; fall back to RGB when switching away.
+    $effect(() => {
+        if (!isWavelet(appState.transformType) && appState.currentViewMode === ViewMode.Subbands) {
+            appState.currentViewMode = ViewMode.RGB;
+        }
+    });
+
+    // The pyramid isn't pixel-aligned with the image, so a comparison split
+    // would just hide half of it: show it full-frame, and restore the split after.
+    let previousToggle: typeof viewerToggle | null = null;
+    $effect(() => {
+        const showingSubbands = appState.currentViewMode === ViewMode.Subbands;
+        untrack(() => {
+            if (showingSubbands && previousToggle === null) {
+                previousToggle = viewerToggle;
+                viewerToggle = 'processed';
+            } else if (!showingSubbands && previousToggle !== null) {
+                viewerToggle = previousToggle;
+                previousToggle = null;
+            }
+        });
+    });
+
+    // ===== Shareable URL state =====
+
+    // Load the test image named in the URL (if any) once WASM is ready.
+    let pendingUrlImage = parseUrlState(location.hash).testImage ?? null;
+    $effect(() => {
+        if (pendingUrlImage === null || !appState.wasmReady || !originalCanvas || !processedCanvas) return;
+        if (!appState.originalImageData) loadTestImage(pendingUrlImage);
+        pendingUrlImage = null;
+    });
+
+    // Mirror codec settings into the URL hash (debounced) so they can be shared.
+    $effect(() => {
+        const state = {
+            quality: appState.quality,
+            transformType: appState.transformType,
+            csMode: appState.currentCsMode,
+            viewMode: appState.currentViewMode,
+            testImage: appState.activeTestImage ?? undefined
+        };
+        const timer = setTimeout(() => writeUrlState(state), 300);
+        return () => clearTimeout(timer);
+    });
 
 </script>
 
@@ -579,7 +644,7 @@
                     isInspectMode={appState.isInspectMode}
                     bind:highlightBlock={appState.highlightBlock}
                     showInspectorBanner={true}
-                    showQuickstart={true}
+                    showQuickstart={!isWavelet(appState.transformType)}
                     zoomHint="Click image to zoom in &nbsp;·&nbsp; drag to use comparison slider &nbsp;·&nbsp; Esc to exit"
                     onViewerMouseDown={onViewerMouseDown}
                     onViewerClick={onViewerClick}
@@ -589,7 +654,7 @@
             </div>
         </div>
 
-        <RdChart {rdPointsDct} {rdPointsDwt} {rdLoading} {rdError}
+        <RdChart series={rdSeries} {rdLoading} {rdError}
             sampleCount={RD_QUALITIES.length}
             onGenerate={() => void rebuildRdCurve()} />
 
@@ -600,7 +665,7 @@
             <details class="viewer-section" open>
                 <summary class="viewer-section-title">Basic</summary>
                 <div class="viewer-section-body">
-                    <ImageSourcePanel bind:dropZoneVisible {activeTestImageIndex}
+                    <ImageSourcePanel bind:dropZoneVisible activeTestImageIndex={appState.activeTestImage}
                         onFile={loadFile} onTestImage={loadTestImage} />
                     <CodecControls />
                 </div>
@@ -608,7 +673,7 @@
 
             <MetricsPanel />
 
-            <ToolsPanel onEnterInspector={enterInspectorMode} />
+            <ToolsPanel onEnterInspector={enterInspectorMode} onDownload={downloadProcessed} />
         </div>
 
     </div>

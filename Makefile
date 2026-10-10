@@ -1,9 +1,23 @@
 # --- CONFIGURATION ---
 WEB_COMPILER = emcc
+# C functions exported to JavaScript (keep in sync with web/src/types/wasm.d.ts)
+WEB_EXPORTS = _init_session _process_image _rd_encode _get_rd_bit_estimate \
+              _get_view_ptr _set_view_tint _set_artifact_gain \
+              _get_psnr_y _get_psnr_cr _get_psnr_cb \
+              _get_ssim_y _get_ssim_cr _get_ssim_cb \
+              _get_last_bit_estimate _inspect_block_data _get_coeff_histogram \
+              _init_me_session _run_motion_estimation _get_mv_count \
+              _get_me_residual_ptr _get_search_steps _get_search_step_count \
+              _malloc _free
+comma := ,
+empty :=
+space := $(empty) $(empty)
+WEB_EXPORTS_JSON = [$(subst $(space),$(comma),$(foreach f,$(WEB_EXPORTS),"$(f)"))]
+
 WEB_FLAGS = -Icore/inc -O3 \
             -s WASM=1 \
             -s ALLOW_MEMORY_GROWTH=1 \
-            -s EXPORTED_FUNCTIONS='["_init_session", "_process_image", "_get_view_ptr", "_set_view_tint", "_get_psnr_y", "_get_psnr_cr", "_get_psnr_cb", "_get_ssim_y", "_get_ssim_cr", "_get_ssim_cb", "_get_last_bit_estimate", "_inspect_block_data", "_get_coeff_histogram", "_init_me_session", "_run_motion_estimation", "_get_mv_count", "_get_me_residual_ptr", "_get_search_steps", "_get_search_step_count", "_malloc", "_free"]' \
+            -s EXPORTED_FUNCTIONS='$(WEB_EXPORTS_JSON)' \
             -s EXPORTED_RUNTIME_METHODS='["cwrap", "ccall", "HEAPU8"]'
 
 # Source: Core C++ + Web Glue C++ (in src folder)
@@ -44,11 +58,16 @@ web-dev: web
 # 🖥️ NATIVE WORKFLOW
 # ------------------------------------
 
+# CMake options are cached in build/, so every target states them explicitly;
+# otherwise `make coverage` would leave coverage instrumentation on for the
+# next `make test`.
+PLAIN_FLAGS = -DENABLE_COVERAGE=OFF -DENABLE_SANITIZERS=OFF
+
 # 3. Native Dev Loop
 dev:
 	@echo "🔥 Building Native App..."
 	@mkdir -p build
-	@cd build && cmake .. && make -j$(NPROCS)
+	@cd build && cmake .. $(PLAIN_FLAGS) && make -j$(NPROCS)
 	@echo "🚀 Running Native App..."
 	@cd build && ./$(NATIVE_APP_NAME)
 
@@ -56,27 +75,40 @@ dev:
 test:
 	@echo "🧪 Running Tests..."
 	@mkdir -p build
-	@cd build && cmake .. && make -j$(NPROCS)
+	@cd build && cmake .. $(PLAIN_FLAGS) && make -j$(NPROCS)
 	@cd build && ctest --output-on-failure
 
 # 5. Coverage
 coverage:
 	@echo "📊 Generating Coverage..."
 	@mkdir -p build
-	@find build -name "*.gcda" -delete 
-	@cd build && cmake .. -DENABLE_COVERAGE=ON && make -j$(NPROCS)
+	@find build -name "*.gcda" -delete
+	@cd build && cmake .. -DENABLE_COVERAGE=ON -DENABLE_SANITIZERS=OFF && make -j$(NPROCS)
 	@cd build && ctest --output-on-failure
 	@echo "📈 Generating Sonar-compatible XML report..."
 	# In gcovr 8.6, we use the search path at the end instead of --build-root
 	gcovr --sonarqube -o coverage.xml -r . --filter core/src/ -e build/ --gcov-ignore-parse-errors=all build
 
-# 6. Sanitize (ASan + UBSan)
+# 6. Sanitize (ASan + UBSan) in its own build directory
+#
+# Some toolchains ship a broken ASan runtime (Apple clang 17 on macOS 26
+# deadlocks inside __asan::InitializeShadowMemory before main). A tiny probe
+# binary is run under a 10 s watchdog first; if ASan can't start, fall back to
+# UBSan only rather than hanging. CI runs the full ASan + UBSan set on Linux.
+SANITIZE_DIR = build-sanitize
+
 sanitize:
 	@echo "🛡️ Running with Sanitizers..."
-	@mkdir -p build
-	@if [ -d build/CMakeCache.txt ]; then rm build/CMakeCache.txt; fi
-	@cd build && cmake .. -DENABLE_SANITIZERS=ON && make -j$(NPROCS)
-	@cd build && ctest --output-on-failure
+	@mkdir -p $(SANITIZE_DIR)
+	@printf 'int main(){return 0;}\n' > $(SANITIZE_DIR)/asan_probe.cpp
+	@SANITIZERS=address,undefined; \
+	if ! $(CXX) -fsanitize=address $(SANITIZE_DIR)/asan_probe.cpp -o $(SANITIZE_DIR)/asan_probe 2>/dev/null || \
+	   ! perl -e 'alarm 10; exec @ARGV' $(SANITIZE_DIR)/asan_probe; then \
+		echo "⚠️  AddressSanitizer is unavailable with this toolchain; running UndefinedBehaviorSanitizer only."; \
+		SANITIZERS=undefined; \
+	fi; \
+	cd $(SANITIZE_DIR) && cmake .. -DENABLE_SANITIZERS=ON -DSANITIZERS=$$SANITIZERS -DENABLE_COVERAGE=OFF && make -j$(NPROCS) && \
+	UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 ctest --output-on-failure
 
 # ------------------------------------
 # 🌐 JS / WEB TESTS (Vitest)

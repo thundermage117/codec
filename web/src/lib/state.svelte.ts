@@ -1,3 +1,5 @@
+import { Transform, type TransformValue } from './transforms.js';
+
 export const ViewMode = {
     RGB: 0,
     Artifacts: 1,
@@ -5,7 +7,8 @@ export const ViewMode = {
     Cr: 3,
     Cb: 4,
     EdgeDistortion: 5,
-    BlockingMap: 6
+    BlockingMap: 6,
+    Subbands: 7
 } as const;
 
 export type ViewModeValue = typeof ViewMode[keyof typeof ViewMode];
@@ -45,8 +48,11 @@ class AppState {
     // Shared quality (synced between viewer and inspector sliders)
     quality = $state(50);
 
-    // Transform type: 0 = DCT, 1 = DWT (Haar wavelet)
-    transformType = $state(0);
+    // Transform type: see Transform in transforms.ts (DCT, Haar, CDF 9/7)
+    transformType = $state<TransformValue>(Transform.DCT);
+
+    // Index of the bundled test image currently loaded (null for uploads)
+    activeTestImage = $state<number | null>(null);
 
     // Render stats
     psnr = $state({ y: 0, cr: 0, cb: 0 });

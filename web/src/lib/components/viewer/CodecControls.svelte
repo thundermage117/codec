@@ -1,5 +1,18 @@
 <script lang="ts">
     import { appState, ViewMode } from '../../state.svelte.js';
+    import { TRANSFORMS, isWavelet } from '../../transforms.js';
+
+    const VIEW_MODES = [
+        { id: 'view_rgb', val: ViewMode.RGB, label: 'RGB' },
+        { id: 'view_artifacts', val: ViewMode.Artifacts, label: 'Error' },
+        { id: 'view_y', val: ViewMode.Y, label: 'Y' },
+        { id: 'view_cr', val: ViewMode.Cr, label: 'Cr' },
+        { id: 'view_cb', val: ViewMode.Cb, label: 'Cb' }
+    ];
+    const SUBBAND_MODE = { id: 'view_subbands', val: ViewMode.Subbands, label: 'Subbands' };
+
+    // The subband pyramid only exists for wavelet transforms.
+    const viewModes = $derived(isWavelet(appState.transformType) ? [...VIEW_MODES, SUBBAND_MODE] : VIEW_MODES);
 
     // Local slider value so dragging doesn't re-encode on every input event;
     // the committed value is written to appState on change/blur.
@@ -51,19 +64,20 @@
 <div class="control-group">
     <div class="group-label">View Mode</div>
     <div class="toggle-group">
-        {#each [
-            { id: 'view_rgb', val: ViewMode.RGB, label: 'RGB' },
-            { id: 'view_artifacts', val: ViewMode.Artifacts, label: 'Error' },
-            { id: 'view_y', val: ViewMode.Y, label: 'Y' },
-            { id: 'view_cr', val: ViewMode.Cr, label: 'Cr' },
-            { id: 'view_cb', val: ViewMode.Cb, label: 'Cb' }
-        ] as mode}
+        {#each viewModes as mode}
         <input type="radio" id={mode.id} name="view_mode"
             checked={appState.currentViewMode === mode.val}
             onchange={() => appState.currentViewMode = mode.val}>
         <label for={mode.id}>{mode.label}</label>
         {/each}
     </div>
+    {#if appState.currentViewMode === ViewMode.Subbands}
+    <p class="control-hint">
+        Wavelet pyramid of the luma channel: the top-left thumbnail is the LL
+        approximation; each ring of quadrants holds horizontal, vertical and
+        diagonal detail at one scale. Black areas were quantized to zero.
+    </p>
+    {/if}
     {#if appState.currentViewMode === ViewMode.Cr || appState.currentViewMode === ViewMode.Cb}
     <div style="display: flex; align-items: center; gap: 6px;">
         <div class="toggle-group tint-toggle-group" style="flex: 1;">
@@ -110,14 +124,11 @@
 <div class="control-group">
     <div class="group-label">Transform</div>
     <div class="toggle-group">
-        {#each [{ id: 'v_transform_dct', val: 0, label: 'DCT' }, { id: 'v_transform_dwt', val: 1, label: 'DWT' }] as t}
-        <input type="radio" id={t.id} name="v_transform_type"
-            checked={appState.transformType === t.val}
-            onchange={() => appState.transformType = t.val}>
-        <label for={t.id} style="display: flex; align-items: center; justify-content: center; gap: 4px;">
-            {t.label} 
-            {#if t.val === 1}<span class="beta-badge" style="margin: 0;">BETA</span>{/if}
-        </label>
+        {#each TRANSFORMS as t}
+        <input type="radio" id="v_transform_{t.slug}" name="v_transform_type"
+            checked={appState.transformType === t.value}
+            onchange={() => appState.transformType = t.value}>
+        <label for="v_transform_{t.slug}" title={t.fullName}>{t.label}</label>
         {/each}
     </div>
 </div>

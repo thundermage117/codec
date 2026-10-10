@@ -20,6 +20,7 @@
 #include "wavelet.h"
 #include "colorspace.h"
 #include "CodecAnalysis.h"
+#include "entropy.h"
 
 #include <cmath>
 #include <vector>
@@ -47,9 +48,30 @@ const int BASE_CHROMA[8][8] = {
     {99, 99, 99, 99, 99, 99, 99, 99}
 };
 
+// Quantization step for the finest wavelet detail band at quality 50. Chosen so
+// that at equal quality the wavelet paths land near DCT's PSNR.
+static const double DWT_BASE_STEP = 32.0;
+
+// Chroma wavelet bands are quantized more coarsely than luma, mirroring the
+// ratio between the JPEG chroma and luma tables used by the DCT path.
+static const double DWT_CHROMA_STEP_SCALE = 1.5;
+
+/*
+* Maps a quality factor in [1, 100] to the standard IJG quantization scale
+* (1.0 at quality 50, smaller for higher quality).
+*/
+static double qualityScale(double quality) {
+    const double scale = (quality < 50.0) ? 5000.0 / quality
+                                          : 200.0 - 2.0 * quality;
+    return scale / 100.0;
+}
+
+static double clampPixel(double v) {
+    return std::max(0.0, std::min(255.0, v));
+}
 
 ImageCodec::ImageCodec(double quality, bool enableQuantization, ChromaSubsampling cs, TransformType transform)
-    : m_quality(quality),
+    : m_quality(std::max(1.0, std::min(100.0, quality))),
       m_enableQuantization(enableQuantization),
       m_chromaSubsampling(cs),
       m_transformType(transform)
@@ -65,14 +87,7 @@ ImageCodec::ImageCodec(double quality, bool enableQuantization, ChromaSubsamplin
 */
 void ImageCodec::generateQuantizationTables()
 {
-    double scale;
-
-    if (m_quality < 50.0)
-        scale = 5000.0 / m_quality;
-    else
-        scale = 200.0 - 2.0 * m_quality;
-
-    scale /= 100.0;
+    const double scale = qualityScale(m_quality);
 
     for (int i = 0; i < 8; ++i) {
         for (int j = 0; j < 8; ++j) {
@@ -87,177 +102,234 @@ void ImageCodec::generateQuantizationTables()
 }
 
 /*
- * Estimates bit count for a block of quantized DCT coefficients.
- */
-static double estimateBlockBits(const double block[8][8]) {
-    double bits = 0;
-    for (int i = 0; i < 8; ++i) {
-        for (int j = 0; j < 8; ++j) {
-            double val = std::abs(block[i][j]);
-            if (val < 0.5) bits += 0.5;
-            else bits += std::log2(val) + 3.0;
-        }
-    }
-    return bits;
-}
-
-/*
  * Processes a single channel using the block-DCT pipeline (JPEG-style).
  * Each 8×8 block is forward-transformed, quantized with the supplied table,
- * dequantized, and inverse-transformed independently.
+ * dequantized, and inverse-transformed independently. Partial blocks at the
+ * right/bottom edges are padded by edge replication (as JPEG encoders do),
+ * coded like any other block, and cropped on write-back.
  */
 Image ImageCodec::processChannel(const Image& channel,
                                  const double quantTable[8][8])
 {
-    Image reconstructed(channel.width(),
-                        channel.height(),
-                        1);
+    const int width = channel.width();
+    const int height = channel.height();
+    Image reconstructed(width, height, 1);
 
-    for (int y = 0; y < channel.height(); y += 8) {
-        for (int x = 0; x < channel.width(); x += 8) {
+    const double* channelData = channel.data();
+    double* reconData = reconstructed.data();
+    EntropyEstimator entropy(64); // one band per DCT frequency position
 
-            int blockWidth = std::min(8, channel.width() - x);
-            int blockHeight = std::min(8, channel.height() - y);
-            if (blockWidth < 8 || blockHeight < 8) {
-                // Copy boundary blocks without processing.
-                const double* channelData = channel.data();
-                double* reconData = reconstructed.data();
-                const int channelWidth = channel.width();
-                for (int i = 0; i < blockHeight; ++i) {
-                    const double* src_row = &channelData[(y + i) * channelWidth + x];
-                    double* dst_row = &reconData[(y + i) * channelWidth + x];
-                    std::copy(src_row, src_row + blockWidth, dst_row);
-                }
-                continue;
-            }
-
+    for (int y = 0; y < height; y += 8) {
+        for (int x = 0; x < width; x += 8) {
             double block[8][8];
             double dctBlock[8][8];
             double reconBlock[8][8];
-            const double* channelData = channel.data();
-            const int channelWidth = channel.width();
 
-            for (int i = 0; i < 8; ++i)
-                for (int j = 0; j < 8; ++j)
-                    block[i][j] = channelData[(y + i) * channelWidth + (x + j)] - 128.0;
+            for (int i = 0; i < 8; ++i) {
+                const int srcY = std::min(y + i, height - 1);
+                for (int j = 0; j < 8; ++j) {
+                    const int srcX = std::min(x + j, width - 1);
+                    block[i][j] = channelData[srcY * width + srcX] - 128.0;
+                }
+            }
 
             dct8x8(block, dctBlock);
 
             if (m_enableQuantization) {
                 for (int i = 0; i < 8; ++i)
                     for (int j = 0; j < 8; ++j) {
-                        double coeff = dctBlock[i][j] / quantTable[i][j];
-                        dctBlock[i][j] = std::round(coeff) * quantTable[i][j];
+                        const double index = std::round(dctBlock[i][j] / quantTable[i][j]);
+                        entropy.add(i * 8 + j, index);
+                        dctBlock[i][j] = index * quantTable[i][j];
                     }
-                m_lastBitEstimate += estimateBlockBits(dctBlock);
             }
 
             idct8x8(dctBlock, reconBlock);
 
-            double* reconData = reconstructed.data();
-            const int reconWidth = reconstructed.width();
-            for (int i = 0; i < 8; ++i)
-                for (int j = 0; j < 8; ++j)
-                    reconData[(y + i) * reconWidth + (x + j)] =
-                        reconBlock[i][j] + 128.0;
+            const int blockHeight = std::min(8, height - y);
+            const int blockWidth = std::min(8, width - x);
+            for (int i = 0; i < blockHeight; ++i)
+                for (int j = 0; j < blockWidth; ++j)
+                    reconData[(y + i) * width + (x + j)] = clampPixel(reconBlock[i][j] + 128.0);
         }
     }
 
+    if (m_enableQuantization)
+        m_lastBitEstimate += entropy.totalBits();
     return reconstructed;
 }
 
-
 /*
- * Processes a single channel using the full-image Haar DWT pipeline.
- * Unlike the block DCT, the wavelet transform operates on the entire channel
- * at once, eliminating 8×8 blocking artifacts.  Quantization steps are
- * perceptually scaled per subband: coarser (low-frequency) subbands receive
- * smaller steps (higher fidelity); finer (high-frequency) subbands receive
- * larger steps (more compression).
+ * Pads a channel to a multiple of 2^levels by edge replication, applies the
+ * DC level shift, and runs the full-image forward DWT with the configured
+ * wavelet. `coeffs` receives the paddedW×paddedH coefficient buffer.
  */
-Image ImageCodec::processChannelDWT(const Image& channel)
+void ImageCodec::transformChannelDWT(const Image& channel, std::vector<double>& coeffs,
+                                      int& paddedW, int& paddedH, int& levels) const
 {
     const int W_orig = channel.width();
     const int H_orig = channel.height();
-    const int levels = calcDwtLevels(W_orig, H_orig);
+    levels = calcDwtLevels(W_orig, H_orig);
 
-    // Padding to ensure every level can be halved evenly without leaving "original" edges.
-    int stride = (1 << levels);
-    int W = (W_orig + stride - 1) & ~(stride - 1);
-    int H = (H_orig + stride - 1) & ~(stride - 1);
+    // Padding ensures every level can be halved evenly without leaving "original" edges.
+    const int stride = (1 << levels);
+    paddedW = (W_orig + stride - 1) & ~(stride - 1);
+    paddedH = (H_orig + stride - 1) & ~(stride - 1);
 
-    // Quality → base quantization step for the finest detail subband.
-    double qualScale;
-    if (m_quality < 50.0)
-        qualScale = 5000.0 / m_quality;
-    else
-        qualScale = 200.0 - 2.0 * m_quality;
-    qualScale /= 100.0;
-    const double baseStep = 32.0 * qualScale; 
-
-    // Copy to a flat working buffer with DC level shift and edge mirroring.
-    std::vector<double> buf(static_cast<size_t>(W) * H, 0.0);
+    coeffs.assign(static_cast<size_t>(paddedW) * paddedH, 0.0);
     const double* src = channel.data();
-    for (int y = 0; y < H; ++y) {
-        int srcY = std::min(y, H_orig - 1);
-        for (int x = 0; x < W; ++x) {
-            int srcX = std::min(x, W_orig - 1);
-            buf[(size_t)y * W + x] = src[(size_t)srcY * W_orig + srcX] - 128.0;
+    for (int y = 0; y < paddedH; ++y) {
+        const int srcY = std::min(y, H_orig - 1);
+        for (int x = 0; x < paddedW; ++x) {
+            const int srcX = std::min(x, W_orig - 1);
+            coeffs[(size_t)y * paddedW + x] = src[(size_t)srcY * W_orig + srcX] - 128.0;
         }
     }
 
-    // Full-image forward DWT.
-    dwtImage(buf.data(), W, H, levels);
+    const WaveletType wavelet = (m_transformType == TransformType::DWT_97)
+                                ? WaveletType::CDF97 : WaveletType::Haar;
+    dwtImage(coeffs.data(), paddedW, paddedH, levels, wavelet);
+}
 
-    // Subband-adaptive quantization.
+/*
+ * Processes a single channel using the full-image DWT pipeline.
+ * Unlike the block DCT, the wavelet transform operates on the entire channel
+ * at once, eliminating 8×8 blocking artifacts. Quantization steps are
+ * perceptually scaled per subband (see dwtQuantStep).
+ */
+Image ImageCodec::processChannelDWT(const Image& channel, bool isChroma)
+{
+    const int W_orig = channel.width();
+    const int H_orig = channel.height();
+
+    std::vector<double> buf;
+    int W = 0, H = 0, levels = 0;
+    transformChannelDWT(channel, buf, W, H, levels);
+
+    // Subband-adaptive quantization; bits are estimated on the integer indices.
     if (m_enableQuantization) {
+        EntropyEstimator entropy(3 * levels + 1);
+        const double baseStep = DWT_BASE_STEP * qualityScale(m_quality)
+                              * (isChroma ? DWT_CHROMA_STEP_SCALE : 1.0);
         for (int y = 0; y < H; ++y) {
             for (int x = 0; x < W; ++x) {
-                double step = dwtQuantStep(x, y, W, H, levels, baseStep);
+                const double step = dwtQuantStep(x, y, W, H, levels, baseStep);
                 double& c = buf[(size_t)y * W + x];
-                c = std::round(c / step) * step;
+                const double index = std::round(c / step);
+                entropy.add(dwtSubbandIndex(x, y, W, H, levels), index);
+                c = index * step;
             }
         }
+        m_lastBitEstimate += entropy.totalBits();
     }
 
-    // Accumulate bit estimate.
-    m_lastBitEstimate += dwtEstimateBits(buf.data(), W, H);
-
-    // Full-image inverse DWT.
-    idwtImage(buf.data(), W, H, levels);
+    const WaveletType wavelet = (m_transformType == TransformType::DWT_97)
+                                ? WaveletType::CDF97 : WaveletType::Haar;
+    idwtImage(buf.data(), W, H, levels, wavelet);
 
     // Write back with reverse level shift and pixel-value clamping, cropping back to original size.
     Image result(W_orig, H_orig, 1);
     double* dst = result.data();
-    for (int y = 0; y < H_orig; ++y) {
-        for (int x = 0; x < W_orig; ++x) {
-            dst[(size_t)y * W_orig + x] = std::max(0.0, std::min(255.0, buf[(size_t)y * W + x] + 128.0));
+    for (int y = 0; y < H_orig; ++y)
+        for (int x = 0; x < W_orig; ++x)
+            dst[(size_t)y * W_orig + x] = clampPixel(buf[(size_t)y * W + x] + 128.0);
+
+    return result;
+}
+
+Image ImageCodec::subbandMap(const Image& channel) const
+{
+    if (!isWavelet()) return Image();
+
+    const int W_orig = channel.width();
+    const int H_orig = channel.height();
+
+    std::vector<double> buf;
+    int W = 0, H = 0, levels = 0;
+    transformChannelDWT(channel, buf, W, H, levels);
+
+    // Mark which coefficients survive quantization at the current quality.
+    std::vector<bool> survives(buf.size(), true);
+    if (m_enableQuantization) {
+        const double baseStep = DWT_BASE_STEP * qualityScale(m_quality);
+        for (int y = 0; y < H; ++y)
+            for (int x = 0; x < W; ++x) {
+                const double step = dwtQuantStep(x, y, W, H, levels, baseStep);
+                survives[(size_t)y * W + x] = std::round(buf[(size_t)y * W + x] / step) != 0.0;
+            }
+    }
+
+    // LL is shown linearly (it is a thumbnail of the image); detail bands are
+    // log-scaled magnitudes so faint high-frequency energy stays visible.
+    const int llW = W >> levels;
+    const int llH = H >> levels;
+    double llMin = 1e300, llMax = -1e300, detailMax = 0.0;
+    for (int y = 0; y < H; ++y)
+        for (int x = 0; x < W; ++x) {
+            const double c = buf[(size_t)y * W + x];
+            if (x < llW && y < llH) {
+                llMin = std::min(llMin, c);
+                llMax = std::max(llMax, c);
+            } else {
+                detailMax = std::max(detailMax, std::abs(c));
+            }
+        }
+    const double llRange = std::max(1e-9, llMax - llMin);
+    const double logDetailMax = std::log1p(std::max(1e-9, detailMax));
+
+    // Coefficients quantized to zero are drawn dimly (so band structure stays
+    // readable); surviving ones are drawn brightly.
+    const double ZEROED_MAX = 70.0;
+    const double SURVIVOR_MIN = 110.0;
+
+    // Resample the padded pyramid onto the channel's own grid.
+    Image map(W_orig, H_orig, 1);
+    for (int oy = 0; oy < H_orig; ++oy) {
+        const int y = static_cast<int>(static_cast<long long>(oy) * H / H_orig);
+        for (int ox = 0; ox < W_orig; ++ox) {
+            const int x = static_cast<int>(static_cast<long long>(ox) * W / W_orig);
+            const size_t i = (size_t)y * W + x;
+            const double c = buf[i];
+            if (x < llW && y < llH) {
+                map.at(ox, oy, 0) = 255.0 * (c - llMin) / llRange;
+            } else {
+                const double v = std::log1p(std::abs(c)) / logDetailMax;
+                map.at(ox, oy, 0) = survives[i] ? SURVIVOR_MIN + (255.0 - SURVIVOR_MIN) * v
+                                                : ZEROED_MAX * v;
+            }
         }
     }
 
-    return result;
+    // Outline each level's quadrants.
+    for (int k = 1; k <= levels; ++k) {
+        const int lineX = static_cast<int>(static_cast<long long>(W >> k) * W_orig / W);
+        const int lineY = static_cast<int>(static_cast<long long>(H >> k) * H_orig / H);
+        const int extentX = static_cast<int>(static_cast<long long>(W >> (k - 1)) * W_orig / W);
+        const int extentY = static_cast<int>(static_cast<long long>(H >> (k - 1)) * H_orig / H);
+        for (int y = 0; y < std::min(extentY, H_orig); ++y)
+            if (lineX < W_orig) map.at(lineX, y, 0) = 255.0;
+        for (int x = 0; x < std::min(extentX, W_orig); ++x)
+            if (lineY < H_orig) map.at(x, lineY, 0) = 255.0;
+    }
+
+    return map;
 }
 
 /*
 * Downsamples a single channel (Cr or Cb) based on the specified chroma subsampling mode.
 * Uses simple averaging for downsampling.
 */
-Image ImageCodec::downsampleChannel(const Image& channel, ChromaSubsampling cs) const {
+Image ImageCodec::downsampleChannel(const Image& channel, ChromaSubsampling cs) {
     if (cs == ChromaSubsampling::CS_444) {
         return channel; // No subsampling
     }
 
-    int originalWidth = channel.width();
-    int originalHeight = channel.height();
-    int newWidth = originalWidth;
-    int newHeight = originalHeight;
-
-    if (cs == ChromaSubsampling::CS_422 || cs == ChromaSubsampling::CS_420) {
-        newWidth = (originalWidth + 1) / 2; // Ceiling division
-    }
-    if (cs == ChromaSubsampling::CS_420) {
-        newHeight = (originalHeight + 1) / 2; // Ceiling division
-    }
+    const int originalWidth = channel.width();
+    const int originalHeight = channel.height();
+    const int scaleX = 2; // 4:2:2 and 4:2:0 both halve the width
+    const int scaleY = (cs == ChromaSubsampling::CS_420) ? 2 : 1;
+    const int newWidth = (originalWidth + scaleX - 1) / scaleX;
+    const int newHeight = (originalHeight + scaleY - 1) / scaleY;
 
     Image downsampled(newWidth, newHeight, 1);
 
@@ -265,34 +337,25 @@ Image ImageCodec::downsampleChannel(const Image& channel, ChromaSubsampling cs) 
         for (int x = 0; x < newWidth; ++x) {
             double sum = 0.0;
             int count = 0;
+            const int startX = x * scaleX;
+            const int startY = y * scaleY;
 
-            // Calculate the top-left corner of the 2x2 or 2x1 block in the original image
-            int startX = x * (cs == ChromaSubsampling::CS_444 ? 1 : 2);
-            int startY = y * (cs == ChromaSubsampling::CS_420 ? 2 : 1);
-
-            // Calculate the bottom-right corner (exclusive) of the block
-            int endX = startX + (cs == ChromaSubsampling::CS_444 ? 1 : 2);
-            int endY = startY + (cs == ChromaSubsampling::CS_420 ? 2 : 1);
-
-            for (int sy = startY; sy < endY && sy < originalHeight; ++sy) {
-                for (int sx = startX; sx < endX && sx < originalWidth; ++sx) {
+            for (int sy = startY; sy < startY + scaleY && sy < originalHeight; ++sy) {
+                for (int sx = startX; sx < startX + scaleX && sx < originalWidth; ++sx) {
                     sum += channel.at(sx, sy, 0);
                     count++;
                 }
             }
-            if (count > 0) {
-                downsampled.at(x, y, 0) = sum / count;
-            } else {
-                // Fallback for edge cases where no pixels are covered (should ideally not happen with correct dimensions)
-                downsampled.at(x, y, 0) = channel.at(std::min(startX, originalWidth - 1), std::min(startY, originalHeight - 1), 0);
-            }
+            downsampled.at(x, y, 0) = sum / count; // count >= 1: start coords are always in range
         }
     }
     return downsampled;
 }
 
 /*
-* Upsamples a single channel (Cr or Cb) back to target dimensions using nearest-neighbor interpolation.
+* Upsamples a single channel (Cr or Cb) back to target dimensions using bilinear
+* interpolation. Each subsampled value sits at the centre of the 2×1 / 2×2 box
+* it was averaged from, so target pixel x maps to source coordinate x/2 - 0.25.
 */
 Image ImageCodec::upsampleChannel(const Image& channel, int targetWidth, int targetHeight, ChromaSubsampling cs) const {
     if (cs == ChromaSubsampling::CS_444) {
@@ -300,26 +363,31 @@ Image ImageCodec::upsampleChannel(const Image& channel, int targetWidth, int tar
     }
 
     Image upsampled(targetWidth, targetHeight, 1);
-    int currentWidth = channel.width();
-    int currentHeight = channel.height();
+    const int currentWidth = channel.width();
+    const int currentHeight = channel.height();
+    const bool halveY = (cs == ChromaSubsampling::CS_420);
+
+    // Returns the two source taps and the weight of the second one.
+    auto taps = [](int t, bool halved, int srcSize, int& i0, int& i1, double& w) {
+        if (!halved) { i0 = i1 = std::min(t, srcSize - 1); w = 0.0; return; }
+        const double s = std::max(0.0, t / 2.0 - 0.25);
+        i0 = std::min(static_cast<int>(s), srcSize - 1);
+        i1 = std::min(i0 + 1, srcSize - 1);
+        w = s - static_cast<int>(s);
+    };
 
     for (int y = 0; y < targetHeight; ++y) {
+        int y0, y1;
+        double wy;
+        taps(y, halveY, currentHeight, y0, y1, wy);
         for (int x = 0; x < targetWidth; ++x) {
-            int srcX = x;
-            int srcY = y;
+            int x0, x1;
+            double wx;
+            taps(x, true, currentWidth, x0, x1, wx);
 
-            if (cs == ChromaSubsampling::CS_422 || cs == ChromaSubsampling::CS_420) {
-                srcX /= 2;
-            }
-            if (cs == ChromaSubsampling::CS_420) {
-                srcY /= 2;
-            }
-            
-            // Clamp to valid source coordinates
-            srcX = std::min(srcX, currentWidth - 1);
-            srcY = std::min(srcY, currentHeight - 1);
-
-            upsampled.at(x, y, 0) = channel.at(srcX, srcY, 0);
+            const double top    = channel.at(x0, y0, 0) * (1.0 - wx) + channel.at(x1, y0, 0) * wx;
+            const double bottom = channel.at(x0, y1, 0) * (1.0 - wx) + channel.at(x1, y1, 0) * wx;
+            upsampled.at(x, y, 0) = top * (1.0 - wy) + bottom * wy;
         }
     }
     return upsampled;
@@ -350,35 +418,24 @@ Image ImageCodec::process(const Image& bgrImage)
         cbData[i] = *ycrcbData++;
     }
 
+    auto codeChannel = [this](const Image& ch, bool isChroma) {
+        if (isWavelet()) return processChannelDWT(ch, isChroma);
+        return processChannel(ch, isChroma ? m_chromaQuantTable : m_lumaQuantTable);
+    };
+
     // Process Y channel (always at full resolution)
-    Image reconY = (m_transformType == TransformType::DWT)
-                   ? processChannelDWT(Y_orig)
-                   : processChannel(Y_orig, m_lumaQuantTable);
+    Image reconY = codeChannel(Y_orig, false);
 
     Image reconCr_final;
     Image reconCb_final;
 
     if (m_chromaSubsampling == ChromaSubsampling::CS_444) {
-        reconCr_final = (m_transformType == TransformType::DWT)
-                        ? processChannelDWT(Cr_orig)
-                        : processChannel(Cr_orig, m_chromaQuantTable);
-        reconCb_final = (m_transformType == TransformType::DWT)
-                        ? processChannelDWT(Cb_orig)
-                        : processChannel(Cb_orig, m_chromaQuantTable);
+        reconCr_final = codeChannel(Cr_orig, true);
+        reconCb_final = codeChannel(Cb_orig, true);
     } else {
-        // Downsample Cr and Cb
-        Image downsampledCr = downsampleChannel(Cr_orig, m_chromaSubsampling);
-        Image downsampledCb = downsampleChannel(Cb_orig, m_chromaSubsampling);
-
-        // Process subsampled Cr and Cb
-        Image reconCr_sub = (m_transformType == TransformType::DWT)
-                            ? processChannelDWT(downsampledCr)
-                            : processChannel(downsampledCr, m_chromaQuantTable);
-        Image reconCb_sub = (m_transformType == TransformType::DWT)
-                            ? processChannelDWT(downsampledCb)
-                            : processChannel(downsampledCb, m_chromaQuantTable);
-
-        // Upsample Cr and Cb back to original dimensions
+        // Downsample, code, and upsample Cr and Cb back to original dimensions
+        Image reconCr_sub = codeChannel(downsampleChannel(Cr_orig, m_chromaSubsampling), true);
+        Image reconCb_sub = codeChannel(downsampleChannel(Cb_orig, m_chromaSubsampling), true);
         reconCr_final = upsampleChannel(reconCr_sub, bgrImage.width(), bgrImage.height(), m_chromaSubsampling);
         reconCb_final = upsampleChannel(reconCb_sub, bgrImage.width(), bgrImage.height(), m_chromaSubsampling);
     }
@@ -387,12 +444,12 @@ Image ImageCodec::process(const Image& bgrImage)
     Image merged(bgrImage.width(),
                  bgrImage.height(),
                  3);
-    
+
     double* mergedData = merged.data();
     const double* reconYData = reconY.data();
     const double* reconCrData = reconCr_final.data();
     const double* reconCbData = reconCb_final.data();
-    
+
     for (size_t i = 0; i < numPixels; ++i) {
         *mergedData++ = reconYData[i];
         *mergedData++ = reconCrData[i];
@@ -404,7 +461,7 @@ Image ImageCodec::process(const Image& bgrImage)
 
 ImageCodec::BlockDebugData ImageCodec::inspectBlock(const Image& channel, int blockX, int blockY, bool isChroma) {
     // Full-image DWT has no 8×8 block structure; return zeroed data.
-    if (m_transformType == TransformType::DWT) {
+    if (isWavelet()) {
         BlockDebugData empty = {};
         return empty;
     }
@@ -423,10 +480,10 @@ ImageCodec::BlockDebugData ImageCodec::inspectBlock(const Image& channel, int bl
     // Ensure we don't go out of bounds
     int startX = blockX * 8;
     int startY = blockY * 8;
-    
+
     // Fill with zeros first
-    for(int i=0; i<8; ++i) 
-        for(int j=0; j<8; ++j) 
+    for(int i=0; i<8; ++i)
+        for(int j=0; j<8; ++j)
             data.original[i][j] = 0.0;
 
     const double* channelData = channel.data();
@@ -449,10 +506,7 @@ ImageCodec::BlockDebugData ImageCodec::inspectBlock(const Image& channel, int bl
         for(int j=0; j<8; ++j)
             blockCentered[i][j] = data.original[i][j] - 128.0;
 
-    if (m_transformType == TransformType::DWT)
-        dwt8x8(blockCentered, data.coefficients);
-    else
-        dct8x8(blockCentered, data.coefficients);
+    dct8x8(blockCentered, data.coefficients);
 
     // 4. Quantization
     if (m_enableQuantization) {
@@ -480,10 +534,7 @@ ImageCodec::BlockDebugData ImageCodec::inspectBlock(const Image& channel, int bl
     }
 
     double reconBlock[8][8];
-    if (m_transformType == TransformType::DWT)
-        idwt8x8(dequantized, reconBlock);
-    else
-        idct8x8(dequantized, reconBlock);
+    idct8x8(dequantized, reconBlock);
 
     for(int i=0; i<8; ++i)
         for(int j=0; j<8; ++j)
