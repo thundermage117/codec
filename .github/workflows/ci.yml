@@ -42,11 +42,20 @@ jobs:
           npm ci
           npm run test:coverage
 
+      # Code-quality reporting only: a failed scan (e.g. an expired
+      # SONAR_TOKEN) must not block build-web and deploy. The tests above
+      # still gate them.
       - name: SonarCloud Scan
+        id: sonar
+        continue-on-error: true
         uses: SonarSource/sonarqube-scan-action@a31c9398be7ace6bbfaf30c0bd5d415f843d45e9
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      - name: Warn if the SonarCloud scan failed
+        if: steps.sonar.outcome == 'failure'
+        run: echo "::warning title=SonarCloud scan failed::The scan did not run (check the SONAR_TOKEN secret; HTTP 403 means it was rejected). Build and deploy continue."
 
   sanitize-native:
     # ASan + UBSan over the C++ test suite. Runs on Linux, where the ASan
